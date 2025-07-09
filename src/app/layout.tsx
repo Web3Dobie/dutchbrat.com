@@ -1,4 +1,4 @@
-import './globals.css' // ✅ correct
+import './globals.css';
 
 export const metadata = {
   title: 'DutchBrat',

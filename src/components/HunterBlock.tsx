@@ -23,7 +23,7 @@ export default function HunterBlock() {
                     rel="noopener noreferrer"
                     className="inline-block text-emerald-400 font-semibold hover:underline"
                 >
-                    → Follow @Web3Dobie on X 🐾
+                    → Follow @Web3_Dobie on X 🐾
                 </a>
                 </div>
         </section>
