@@ -1,3 +1,5 @@
+import './globals.css' // ✅ correct
+
 export const metadata = {
   title: 'DutchBrat',
   description: 'Hedge fund brain meets Web3',
