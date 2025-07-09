@@ -1,0 +1,32 @@
+name: Deploy Next.js to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: dutchbrat-website  # ← Your Web App name (match the one in Azure portal)
+          slot-name: production
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
+          package: .
