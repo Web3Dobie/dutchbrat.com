@@ -5,7 +5,7 @@ export default function HunterBlock() {
     return (
         <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
             <Image
-                src="/images/hunter_smiling.png"
+                src="/images/hunter_with_ball.png"
                 alt="Hunter the Web3Dobie"
                 width={220}
                 height={220}
