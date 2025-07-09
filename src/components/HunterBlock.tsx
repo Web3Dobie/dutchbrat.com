@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import React from 'react' // ✅ This is required for some setups using JSX (optional in Next 13+, but safe to include)
 
 export default function HunterBlock() {
     return (
@@ -10,21 +11,21 @@ export default function HunterBlock() {
                 height={220}
                 className="rounded-xl border-4 border-emerald-500 shadow-lg"
             />
-            <div>
-                <h2 className="text-3xl font-semibold mb-3">Meet Hunter 🐾</h2>
-                <p className="text-lg max-w-xl">
+            <div className="text-lg max-w-xl">
+                <p className="mb-4">
                     Hunter is my trusted Web3 Doberman — part analyst, part watchdog. He helps sniff out alpha,
                     barks at scams, and keeps this site running with daily insights on X, commentary, and briefings.
                     Follow his instincts. They’re usually right.
-                    <a
-                        href="https://x.com/Web3Dobie"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-emerald-400 hover:underline"
-                    >
-                        @Web3Dobie
                 </p>
-            </div>
+                <a
+                    href="https://x.com/Web3Dobie"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-emerald-400 font-semibold hover:underline"
+                >
+                    → Follow @Web3Dobie on X 🐾
+                </a>
+                </div>
         </section>
     )
 }
