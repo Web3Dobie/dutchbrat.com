@@ -1,13 +1,13 @@
 import Image from 'next/image';
 import React from 'react';
-import hunterWithBall from '../../public/images/hunter_with_ball.jpg'; // ✅ correct import
+import DutchBrat from '../../public/images/dutchbrat.jpg'; // ✅ correct import
 
 export default function HeroIntro() {
     return (
         <section className="mt-10 flex flex-col md:flex-row items-center gap-8">
             <Image
-                src={hunterWithBall} // ✅ use the imported image
-                alt="Hunter with ball"
+                src={DutchBrat} // ✅ use the imported image
+                alt="DutchBrat"
                 width={200}
                 height={200}
                 className="rounded-full border-4 border-purple-600 shadow-lg"
