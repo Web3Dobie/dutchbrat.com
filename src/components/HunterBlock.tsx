@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import React from 'react' // ✅ This is required for some setups using JSX (optional in Next 13+, but safe to include)
-import HunterSmiling from '../../public/images/hunter_smiling.jpg'
+import HunterSmiling from '../../public/images/hunter_smiling.png'
 
 export default function HunterBlock() {
     return (
