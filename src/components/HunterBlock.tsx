@@ -1,12 +1,12 @@
 import Image from 'next/image'
 import React from 'react' // ✅ This is required for some setups using JSX (optional in Next 13+, but safe to include)
-import HunterWithBall from '../../public/images/hunter_with_ball.jpg'
+import HunterSmiling from '../../public/images/hunter_smiling.jpg'
 
 export default function HunterBlock() {
     return (
         <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
             <Image
-                src={HunterWithBall}
+                src={HunterSmiling}
                 alt="Hunter the Web3Dobie"
                 width={220}
                 height={220}
