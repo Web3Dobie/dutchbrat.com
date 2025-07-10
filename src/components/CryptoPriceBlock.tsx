@@ -18,13 +18,17 @@ export default function CryptoPriceBlock() {
                 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin,xrp&vs_currencies=usd&include_24hr_change=true'
             )
             const data = await res.json()
-            setPrices(data)
-        }
+            console.log("Fetched prices:", data)
+            // If xrp missing, add dummy for test
+            if (!data.xrp) {
+                data.xrp = { usd: 0.56, usd_24h_change: -0.12 }
+                setPrices(data)
+            }
 
-        fetchPrices()
-        const interval = setInterval(fetchPrices, 300_000) // Refresh every 5 min
-        return () => clearInterval(interval)
-    }, [])
+            fetchPrices()
+            const interval = setInterval(fetchPrices, 300_000) // Refresh every 5 min
+            return () => clearInterval(interval)
+        }, [])
 
     return (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-wrap justify-center gap-4 mb-10">
