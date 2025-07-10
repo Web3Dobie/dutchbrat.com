@@ -16,11 +16,11 @@ export default function Navbar() {
             <h1 className="text-xl font-bold text-white">DutchBrat</h1>
             <div className="flex items-center gap-4 text-gray-200 text-sm">
                 <Link href="/">Home</Link>
-                <a href="#briefings">Briefings</a>
-                <a href="#articles">Articles</a>
-                <a href="https://x.com/Web3_Dobie" target="_blank">X</a>
-                <a href="https://web3dobie.substack.com" target="_blank">Newsletter</a>
-                <a href="https://github.com/Web3Dobie/dutchbrat.com" target="_blank">GitHub</a>
+                <Link href="/briefings">Briefings</Link>
+                <Link href="/articles">Articles</Link>
+                <a href="https://x.com/Web3_Dobie" target="_blank" rel="noopener noreferrer">Hunter-X</a>
+                <a href="https://web3dobie.substack.com" target="_blank" rel="noopener noreferrer">Newsletter</a>
+                <a href="https://github.com/Web3Dobie/X-AI-Agent" target="_blank" rel="noopener noreferrer">GitHub</a>
                 <button onClick={() => setDarkMode(!darkMode)} className="ml-2">
                     {darkMode ? '☀️' : '🌙'}
                 </button>

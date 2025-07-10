@@ -1,8 +1,33 @@
+'use client'
+
 import Image from 'next/image'
-import React from 'react' // ✅ This is required for some setups using JSX (optional in Next 13+, but safe to include)
+import React, { useEffect, useState } from 'react'
 import HunterSmiling from '../../public/images/hunter_smiling.png'
 
+type Article = {
+    title: string
+    summary: string
+    image: string
+    file: string
+}
+
 export default function HunterBlock() {
+    const [article, setArticle] = useState<Article | null>(null)
+
+    useEffect(() => {
+        const fetchArticle = async () => {
+            try {
+                const res = await fetch('https://w3d-articles-server-gfdbe9aqfbd2gceu.swedencentral-01.azurewebsites.net/api/latest')
+                const data = await res.json()
+                setArticle(data)
+            } catch (err) {
+                console.error('Failed to fetch latest article:', err)
+            }
+        }
+
+        fetchArticle()
+    }, [])
+
     return (
         <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
             <Image
@@ -26,8 +51,17 @@ export default function HunterBlock() {
                 >
                     → Follow @Web3_Dobie on X 🐾
                 </a>
+
+                {article && (
+                    <div className="mt-6 p-4 border border-gray-700 rounded-xl bg-gray-900">
+                        <p className="text-sm text-gray-400 mb-2">Latest Article</p>
+                        <a href={article.file} className="text-xl font-semibold text-white hover:underline">
+                            {article.title}
+                        </a>
+                        <p className="mt-1 text-gray-300">{article.summary}</p>
+                    </div>
+                )}
             </div>
         </section>
     )
 }
-
