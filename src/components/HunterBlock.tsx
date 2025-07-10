@@ -44,7 +44,7 @@ export default function HunterBlock() {
                     Follow his instincts. They’re usually right.
                 </p>
                 <a
-                    href="https://x.com/Web3Dobie"
+                    href="https://x.com/@Web3_Dobie"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block text-emerald-400 font-semibold hover:underline"
