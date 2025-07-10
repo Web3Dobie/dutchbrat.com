@@ -9,7 +9,7 @@ export const metadata = {
 export default function ArticlesPage() {
   return (
     <section>
-      <h1 className="text-2xl font-bold mb-4">Latest Articles</h1>
+      <h1 className="text-2xl font-bold mb-4">Hunter's Articles</h1>
       <iframe
         src="https://blue-mud-0e41d5403.2.azurestaticapps.net"
         className="w-full h-[85vh] rounded-xl border border-gray-800"
