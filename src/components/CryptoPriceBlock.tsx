@@ -19,16 +19,20 @@ export default function CryptoPriceBlock() {
             )
             const data = await res.json()
             console.log("Fetched prices:", data)
-            // If xrp missing, add dummy for test
+
+            // Dummy fallback for testing if XRP is missing
             if (!data.xrp) {
                 data.xrp = { usd: 0.56, usd_24h_change: -0.12 }
-                setPrices(data)
             }
 
-            fetchPrices()
-            const interval = setInterval(fetchPrices, 300_000) // Refresh every 5 min
-            return () => clearInterval(interval)
-        }, [])
+            setPrices(data)
+        }
+
+        fetchPrices()
+        const interval = setInterval(fetchPrices, 300_000) // Refresh every 5 min
+
+        return () => clearInterval(interval)
+    }, [])
 
     return (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-wrap justify-center gap-4 mb-10">
@@ -37,8 +41,7 @@ export default function CryptoPriceBlock() {
                     <p className="uppercase text-sm text-gray-400">{key}</p>
                     <p className="text-xl font-bold">${value.usd.toLocaleString()}</p>
                     <p
-                        className={`text-sm ${value.usd_24h_change >= 0 ? 'text-green-400' : 'text-red-400'
-                            }`}
+                        className={`text-sm ${value.usd_24h_change >= 0 ? 'text-green-400' : 'text-red-400'}`}
                     >
                         {value.usd_24h_change.toFixed(2)}%
                     </p>
