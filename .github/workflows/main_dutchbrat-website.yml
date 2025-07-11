@@ -32,7 +32,7 @@ jobs:
       - name: Prepare and zip release
         run: |
           mkdir release
-          cp -r * .[^.]* release/  # includes dotfiles like .env and .next
+          rsync -av --exclude=release ./ release/
           cd release
           zip -r ../release.zip ./*
 
