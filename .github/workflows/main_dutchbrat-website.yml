@@ -26,11 +26,13 @@ jobs:
       - name: Build Next.js and compile TypeScript
         run: npm run build
 
-      - name: Prune dev dependencies
-        run: npm prune --production
-
-      - name: Zip artifact for deployment (include node_modules)
-        run: zip -r release.zip . -x ".git/*"
+      - name: Prepare deployment package
+        run: |
+          mkdir deploy
+          cp -r dist .next public package.json next.config.js deploy/
+          cp -r node_modules deploy/
+          cd deploy
+          zip -r ../release.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -58,4 +60,3 @@ jobs:
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
           package: .
-
