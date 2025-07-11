@@ -7,7 +7,12 @@ const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-const articleRoutes = require('./routes/articles');
+try {
+    const articleRoutes = require('./routes/articles');
+    server.use('/api/articles', articleRoutes);
+} catch (err) {
+    console.error("💥 Failed to load /api/articles:", err);
+}
 
 app.prepare().then(() => {
     const server = express();
