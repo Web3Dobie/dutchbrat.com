@@ -13,11 +13,13 @@ declare global {
 
 type Article = {
     id: string
-    title: string
+    headline: string
     summary: string
-    image?: string
     file: string
     date: string
+    link: string
+    tags: string
+    status: string
     category?: string
 }
 
@@ -36,7 +38,7 @@ export default function ArticlesClient() {
             <Script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" strategy="beforeInteractive" />
             <h1 className="text-3xl font-bold mb-4 flex items-center gap-4">
                 <img
-                    src="/images/hunter_round.png"
+                    src="/images/hunter_reading.png"
                     alt="Hunter"
                     className="w-12 h-12 rounded-full border border-gray-500 shadow"
                 />
@@ -67,6 +69,8 @@ function groupAndRenderArticles(articles: Article[]) {
     const markdownTarget = document.getElementById('markdown-content')!
     const backBtn = document.getElementById('back-button')!
 
+    container.innerHTML = ''; // clear old content
+
     const grouped: Record<string, Record<string, Article[]>> = {}
 
     articles.forEach((article) => {
@@ -96,7 +100,7 @@ function groupAndRenderArticles(articles: Article[]) {
 
                 card.innerHTML = `
           <div class="flex justify-between items-center">
-            <h4 class="text-lg font-semibold">${article.title}</h4>
+            <h4 class="text-lg font-semibold">${article.headline}</h4>
             ${article.category
                         ? `<span class="px-3 py-1 text-xs rounded-full bg-blue-700 text-white">${article.category}</span>`
                         : ''
