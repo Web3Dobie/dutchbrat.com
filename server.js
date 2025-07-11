@@ -1,18 +1,28 @@
-const { createServer } = require('http');
-const { parse } = require('url');
+const express = require('express');
 const next = require('next');
+const { parse } = require('url');
 
 const port = parseInt(process.env.PORT, 10) || 3000;
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
+const articleRoutes = require('./routes/articles');
+
 app.prepare().then(() => {
-    createServer((req, res) => {
+    const server = express();
+
+    // Custom API routes
+    server.use('/api/articles', articleRoutes);
+
+    // Let Next.js handle everything else
+    server.all('*', (req, res) => {
         const parsedUrl = parse(req.url, true);
-        handle(req, res, parsedUrl);
-    }).listen(port, (err) => {
+        return handle(req, res, parsedUrl);
+    });
+
+    server.listen(port, (err) => {
         if (err) throw err;
-        console.log(`> Ready on http://localhost:${port}`);
+        console.log(`✅ Server ready on http://localhost:${port}`);
     });
 });
