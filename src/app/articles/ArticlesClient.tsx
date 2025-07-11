@@ -3,6 +3,14 @@
 import { useEffect } from 'react'
 import Script from 'next/script'
 
+declare global {
+    interface Window {
+        marked: {
+            parse: (md: string) => string
+        }
+    }
+}
+
 export default function ArticlesClient() {
     useEffect(() => {
         if (typeof window !== 'undefined' && window.marked) {
