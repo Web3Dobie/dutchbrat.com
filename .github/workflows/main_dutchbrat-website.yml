@@ -44,16 +44,21 @@ jobs:
 
       - name: Prepare deployment package
         run: |
-          mkdir -p deploy/frontend
+          mkdir -p deploy
           mkdir -p deploy/server
-          cp -r frontend/.next frontend/public frontend/package.json frontend/next.config.js frontend/app deploy/frontend/
+
+          # FLATTEN: Copy frontend build output & source directly to deploy root
+          cp -r frontend/.next frontend/public frontend/package.json frontend/next.config.js frontend/app deploy/
+
+          # Backend as before
           cp -r server/dist deploy/server/
           cp server/package.json deploy/server/
+
+          # Debug: show what's in deploy/
+          ls -lhR deploy
+
           cd deploy
           zip -r ../release.zip .
-
-      - name: List frontend deploy contents
-        run: ls -lhR deploy/frontend
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
