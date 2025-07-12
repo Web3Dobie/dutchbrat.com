@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic';
 
-const ArticlesClient = dynamic(() => import('./ArticlesClient'), { ssr: false });
+const ArticlesClient = dynamic(() => import('./ArticlesClient.tsx'), { ssr: false });
 
 export const metadata = {
   title: 'Articles | Hunter the Web3Dobie',

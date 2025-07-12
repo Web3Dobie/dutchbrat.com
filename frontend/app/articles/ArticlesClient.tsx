@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import Script from 'next/script'
 
+console.log("ArticlesClient file has been loaded by Next.js (should see this in browser console)");
+
 declare global {
     interface Window {
         marked: {
