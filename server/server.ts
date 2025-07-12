@@ -6,13 +6,14 @@ import articleRoutes from './routes/articles';
 
 const port = parseInt(process.env.PORT || '3000', 10);
 const dev = process.env.NODE_ENV !== 'production';
-const app = next({ dev });
-const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+const nextApp = next({ dev, dir: '../frontend' });
+const handle = nextApp.getRequestHandler();
+
+nextApp.prepare().then(() => {
     const server = express();
 
-    // Custom API route
+    // Mount custom API routes
     server.use('/api/articles', articleRoutes);
 
     // Let Next.js handle everything else
@@ -21,9 +22,9 @@ app.prepare().then(() => {
         return handle(req, res, parsedUrl);
     });
 
-    server.listen(port, (err?: Error) => {
-        if (err) throw err;
-        console.log(`✅ Server ready on http://localhost:${port}`);
+    server.listen(port, () => {
+        console.log(`✅ Server running on http://localhost:${port}`);
     });
 });
+
 
