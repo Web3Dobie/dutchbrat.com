@@ -48,6 +48,7 @@ jobs:
           cp -r frontend/.next frontend/public frontend/package.json frontend/next.config.js deploy/frontend/
 
           # Copy backend assets
+          cp package.json deploy/
           cp -r server/dist deploy/server/
           cp -r server/routes deploy/server/
           cp server/package.json deploy/server/
