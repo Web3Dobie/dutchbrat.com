@@ -1,9 +1,10 @@
-// app/articles/page.tsx
 import dynamic from 'next/dynamic';
+
+export const dynamic = 'force-dynamic';
 
 const ArticlesClient = dynamic(() => import('./ArticlesClient'), {
   ssr: false,
-  loading: () => <div>🟡 Loading ArticlesClient…</div>
+  loading: () => <div>🟡 Loading ArticlesClient…</div>,
 });
 
 export default function ArticlesPage() {
