@@ -1,6 +1,6 @@
-import HeroIntro from '@/components/HeroIntro'
-import HunterBlock from '@/components/HunterBlock'
-import CryptoPriceBlock from '@/components/CryptoPriceBlock'
+import HeroIntro from './components/HeroIntro'
+import HunterBlock from './components/HunterBlock'
+import CryptoPriceBlock from './components/CryptoPriceBlock'
 
 export default function Home() {
     return (
