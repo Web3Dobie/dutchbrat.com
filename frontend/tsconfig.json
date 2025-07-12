@@ -18,10 +18,10 @@
     "jsx": "preserve",
     "incremental": true,
     "noEmit": false,
-    "baseUrl": ".",
+    "baseUrl": "./src",
     "paths": {
       "@/*": [
-        "src/*"
+        "*"
       ]
     },
     "plugins": [
