@@ -1,8 +1,8 @@
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 
 export const dynamic = 'force-dynamic';
 
-const ArticlesClient = dynamic(() => import('./ArticlesClient'), {
+const ArticlesClient = nextDynamic(() => import('./ArticlesClient'), {
   ssr: false,
   loading: () => <div>🟡 Loading ArticlesClient…</div>,
 });
@@ -15,3 +15,4 @@ export default function ArticlesPage() {
     </div>
   );
 }
+
