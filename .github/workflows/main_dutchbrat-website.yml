@@ -20,10 +20,6 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Clean previous build
-        working-directory: frontend
-        run: rm -rf .next
-
       # Build Frontend
       - name: Install frontend dependencies
         working-directory: frontend
@@ -42,19 +38,24 @@ jobs:
         working-directory: server
         run: npm run build
 
+      # Prepare deployment package (flattened structure for Azure)
       - name: Prepare deployment package
         run: |
           mkdir -p deploy
           mkdir -p deploy/server
 
-          # FLATTEN: Copy frontend build output & source directly to deploy root
-          cp -r frontend/.next frontend/public frontend/package.json frontend/next.config.js frontend/app deploy/
+          # FLATTEN frontend build and source to deploy root
+          cp -r frontend/.next deploy/
+          cp -r frontend/public deploy/
+          cp -r frontend/app deploy/
 
-          # Backend as before
+          # Backend: build output as subdir
           cp -r server/dist deploy/server/
-          cp server/package.json deploy/server/
 
-          # Debug: show what's in deploy/
+          # Backend package.json only at root!
+          cp server/package.json deploy/package.json
+
+          # Debug: show what's in deploy/ before zipping
           ls -lhR deploy
 
           cd deploy
