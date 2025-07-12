@@ -2,7 +2,7 @@ import nextDynamic from 'next/dynamic';
 
 export const dynamic = 'force-dynamic';
 
-const ArticlesClient = nextDynamic(() => import('./ArticlesClient'), {
+const ArticlesClient = nextDynamic(() => import('./ArticlesClient2'), {
   ssr: false,
   loading: () => <div>🟡 Loading ArticlesClient…</div>,
 });
