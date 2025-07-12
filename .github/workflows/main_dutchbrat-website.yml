@@ -25,7 +25,7 @@ jobs:
         working-directory: frontend
         run: npm install
 
-      - name: Build Next.js frontend
+      - name: Build frontend (Next.js)
         working-directory: frontend
         run: npm run build
 
@@ -34,17 +34,25 @@ jobs:
         working-directory: server
         run: npm install
 
-      - name: Build TypeScript backend
+      - name: Build backend (TypeScript)
         working-directory: server
         run: npm run build
 
+      # Prepare deployment package
       - name: Prepare deployment package
         run: |
-          mkdir deploy
-          cp -r frontend/.next frontend/public frontend/next.config.js frontend/package.json frontend/staticwebapp.config.json deploy/
-          cp -r server/dist server/package.json deploy/
+          mkdir -p deploy/frontend
+          mkdir -p deploy/server
+
+          # Copy frontend assets
+          cp -r frontend/.next frontend/public frontend/package.json frontend/next.config.js deploy/frontend/
+
+          # Copy backend assets
+          cp -r server/dist deploy/server/
           cp -r server/routes deploy/server/
+          cp server/package.json deploy/server/
           cp -r server/node_modules deploy/server_node_modules
+
           cd deploy
           zip -r ../release.zip .
 
