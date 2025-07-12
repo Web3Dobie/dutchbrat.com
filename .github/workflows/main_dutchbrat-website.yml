@@ -20,17 +20,31 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Install dependencies
+      # Build Frontend
+      - name: Install frontend dependencies
+        working-directory: frontend
         run: npm install
 
-      - name: Build Next.js and compile TypeScript
+      - name: Build Next.js frontend
+        working-directory: frontend
+        run: npm run build
+
+      # Build Backend
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm install
+
+      - name: Build TypeScript backend
+        working-directory: server
         run: npm run build
 
       - name: Prepare deployment package
         run: |
           mkdir deploy
-          cp -r .next dist public app src package.json tsconfig.json next.config.js deploy/
-          cp -r node_modules deploy/
+          cp -r frontend/.next frontend/public frontend/next.config.js frontend/package.json frontend/staticwebapp.config.json deploy/
+          cp -r server/dist server/package.json deploy/
+          cp -r server/routes deploy/server/
+          cp -r server/node_modules deploy/server_node_modules
           cd deploy
           zip -r ../release.zip .
 
