@@ -42,18 +42,20 @@ jobs:
         working-directory: server
         run: npm run build
 
-      # Prepare deployment package (only runtime assets)
       - name: Prepare deployment package
         run: |
           mkdir -p deploy/frontend
           mkdir -p deploy/server
 
-          # Frontend: Only built/static/config files
+          # Copy frontend runtime assets and source
           cp -r frontend/.next frontend/public frontend/package.json frontend/next.config.js frontend/app deploy/frontend/
 
-          # Backend: Only build output & runtime config
+          # Copy backend build output & config
           cp -r server/dist deploy/server/
           cp server/package.json deploy/server/
+
+          List out everything in deploy/frontend to debug!
+          ls -lhR deploy/frontend
 
           cd deploy
           zip -r ../release.zip .
