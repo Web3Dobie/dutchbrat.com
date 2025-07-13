@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import next from 'next';
 import { parse } from 'url';
 import articleRoutes from './routes/articles';
+import latestTweetRouter from './routes/latestTweet';
 
 const port = parseInt(process.env.PORT || '3000', 10);
 const dev = process.env.NODE_ENV !== 'production';
@@ -15,6 +16,7 @@ nextApp.prepare().then(() => {
 
     // Mount custom API routes
     server.use('/api/articles', articleRoutes);
+    server.use('/api/latest-tweet', latestTweetRouter);
 
     // Let Next.js handle everything else
     server.all('*', (req: Request, res: Response) => {
