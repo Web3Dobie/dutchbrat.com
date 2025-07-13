@@ -125,7 +125,7 @@ export default function ArticlesClient() {
                 <img
                     src="/images/hunter_reading.png"
                     alt="Hunter"
-                    className="w-10 h-10 rounded-full border-4 border-blue-700 shadow-xl mb-6"
+                    className="w-16 h-16 object-cover rounded-full border-4 border-blue-700 shadow-xl mb-6"
                 />
                 <h1 className="text-5xl font-extrabold text-center tracking-tight">
                     Hunter&apos;s Articles
