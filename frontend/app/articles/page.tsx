@@ -1,11 +1,5 @@
-import nextDynamic from 'next/dynamic';
-
-export const dynamic = 'force-dynamic';
-
-const ArticlesClient = nextDynamic(() => import('./ArticlesClient'), {
-  ssr: false,
-  loading: () => <div>🟡 Loading ArticlesClient…</div>,
-});
+// REMOVE dynamic import
+import ArticlesClient from './ArticlesClient';
 
 export default function ArticlesPage() {
   return (
@@ -15,3 +9,4 @@ export default function ArticlesPage() {
     </div>
   );
 }
+
