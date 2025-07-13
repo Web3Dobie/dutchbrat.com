@@ -10,11 +10,11 @@ type Prices = {
 }
 
 const SYMBOLS = [
-    { id: 'bitcoin', label: 'BTC', pair: 'BTCUSDT', icon: 'btc' },
-    { id: 'ethereum', label: 'ETH', pair: 'ETHUSDT', icon: 'eth' },
-    { id: 'solana', label: 'SOL', pair: 'SOLUSDT', icon: 'sol' },
-    { id: 'dogecoin', label: 'DOGE', pair: 'DOGEUSDT', icon: 'doge' },
-    { id: 'xrp', label: 'XRP', pair: 'XRPUSDT', icon: 'xrp' },
+    { id: 'bitcoin', label: 'BTC', pair: 'BTCUSDT', icon: '1' },
+    { id: 'ethereum', label: 'ETH', pair: 'ETHUSDT', icon: '279' },
+    { id: 'solana', label: 'SOL', pair: 'SOLUSDT', icon: '4128' },
+    { id: 'dogecoin', label: 'DOGE', pair: 'DOGEUSDT', icon: '5' },
+    { id: 'xrp', label: 'XRP', pair: 'XRPUSDT', icon: '44' },
 ];
 
 export default function CryptoPriceBlock() {
@@ -61,7 +61,7 @@ export default function CryptoPriceBlock() {
                         <div className="flex items-center justify-center gap-1">
                             <span className="uppercase text-sm text-gray-400">{label}</span>
                             <img
-                                src={`https://cryptoicon-api.vercel.app/api/icon/${icon}`}
+                                src={`https://assets.coingecko.com/coins/images/${icon}/thumb.png`}
                                 alt={label}
                                 className="inline-block w-5 h-5 ml-1"
                                 style={{ verticalAlign: 'middle' }}
