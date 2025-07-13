@@ -26,6 +26,7 @@ type Article = {
 }
 
 export default function ArticlesClient() {
+    // MAIN FETCH EFFECT (just once)
     useEffect(() => {
         function tryFetch() {
             if (typeof window !== 'undefined' && window.marked) {
@@ -38,6 +39,13 @@ export default function ArticlesClient() {
             }
         }
         tryFetch();
+    }, []);
+
+    // DEBUGGING EFFECT (just once)
+    useEffect(() => {
+        setTimeout(() => {
+            console.log('window.marked is', typeof window !== 'undefined' ? window.marked : 'undefined');
+        }, 2000);
     }, []);
 
     return (
@@ -67,7 +75,7 @@ export default function ArticlesClient() {
                 <div id="markdown-content"></div>
             </div>
         </section>
-    )
+    );
 }
 
 function groupAndRenderArticles(articles: Article[]) {
