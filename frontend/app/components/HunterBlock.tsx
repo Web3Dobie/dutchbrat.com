@@ -19,16 +19,17 @@ export default function HunterBlock() {
     useEffect(() => {
         const fetchArticle = async () => {
             try {
-                const res = await fetch('https://w3d-articles-server-gfdbe9aqfbd2gceu.swedencentral-01.azurewebsites.net/api/latest')
-                const data = await res.json()
-                setArticle(data)
+                const res = await fetch('https://w3d-articles-server-gfdbe9aqfbd2gceu.swedencentral-01.azurewebsites.net/api/latest');
+                const data = await res.json();
+                console.log('Latest article from API:', data); // 👈 ADD THIS LINE
+                setArticle(data);
             } catch (err) {
-                console.error('Failed to fetch latest article:', err)
+                console.error('Failed to fetch latest article:', err);
             }
-        }
+        };
 
-        fetchArticle()
-    }, [])
+        fetchArticle();
+    }, []);
 
     return (
         <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
