@@ -125,7 +125,8 @@ export default function ArticlesClient() {
                 <img
                     src="/images/hunter_reading.png"
                     alt="Hunter"
-                    className="w-16 h-16 object-cover rounded-full border-4 border-blue-700 shadow-xl mb-6"
+                    className="object-cover rounded-full border-4 border-blue-700 shadow-xl mb-6"
+                    style={{ width: '4rem', height: '4rem' }}
                 />
                 <h1 className="text-5xl font-extrabold text-center tracking-tight">
                     Hunter&apos;s Articles
