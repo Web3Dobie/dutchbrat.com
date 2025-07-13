@@ -121,20 +121,20 @@ export default function ArticlesClient() {
     return (
         <section className="max-w-5xl mx-auto px-4 py-8">
             {/* Centered header */}
-            <div className="flex flex-col items-center mb-8">
+            <div className="flex flex-col items-center mb-12">
                 <img
                     src="/images/hunter_reading.png"
                     alt="Hunter"
                     className="object-cover rounded-full border-4 border-blue-700 shadow-xl mb-6"
-                    style={{ width: '8rem', height: '8rem' }}
+                    style={{ width: '16rem', height: '16rem' }}
                 />
-                <h1 className="text-5xl font-extrabold text-center tracking-tight">
+                <h1 className="text-10x2 font-extrabold text-center tracking-tight">
                     Hunter&apos;s Articles
                 </h1>
             </div>
 
             {/* CATEGORY SELECT BOX */}
-            <div className="mb-6 flex justify-center">
+            <div className="mb-6">
                 <label htmlFor="category-select" className="mr-2 font-semibold">
                     Category:
                 </label>
