@@ -19,6 +19,7 @@ async function getUserId(username: string) {
 }
 
 router.get('/', async (req, res) => {
+    console.log('>>> /api/latest-tweet called');
     try {
         // You can hardcode userId if you want, or fetch each time:
         const userId = await getUserId(USERNAME);
