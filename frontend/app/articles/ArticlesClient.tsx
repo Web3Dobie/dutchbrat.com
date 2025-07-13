@@ -125,7 +125,7 @@ export default function ArticlesClient() {
                 <img
                     src="/images/hunter_reading.png"
                     alt="Hunter"
-                    className="w-40 h-40 rounded-full border-4 border-blue-700 shadow-xl mb-6"
+                    className="w-24 h-24 rounded-full border-4 border-blue-700 shadow-xl mb-6"
                 />
                 <h1 className="text-5xl font-extrabold text-center tracking-tight">
                     Hunter&apos;s Articles
@@ -139,7 +139,7 @@ export default function ArticlesClient() {
                 </label>
                 <select
                     id="category-select"
-                    className="px-3 py-1 rounded border border-gray-600 bg-gray-800 text-white"
+                    className="px-3 py-2 rounded border-2 border-blue-700 bg-gray-900 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
                 >
