@@ -1,14 +1,16 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 import React, { useEffect, useState } from 'react'
 import HunterSmiling from '../../public/images/hunter_smiling.png'
 
 type Article = {
-    title: string
-    summary: string
-    image: string
-    file: string
+    id: string;         // Add this!
+    title: string;
+    summary: string;
+    image: string;
+    file: string;
 }
 
 export default function HunterBlock() {
@@ -55,9 +57,13 @@ export default function HunterBlock() {
                 {article && (
                     <div className="mt-6 p-4 border border-gray-700 rounded-xl bg-gray-900">
                         <p className="text-sm text-gray-400 mb-2">Latest Article</p>
-                        <a href={article.file} className="text-xl font-semibold text-white hover:underline">
+                        {/* Use Next.js Link to /articles?articleId=... */}
+                        <Link
+                            href={`/articles?articleId=${article.id}`}
+                            className="text-xl font-semibold text-white hover:underline"
+                        >
                             {article.title}
-                        </a>
+                        </Link>
                         <p className="mt-1 text-gray-300">{article.summary}</p>
                     </div>
                 )}

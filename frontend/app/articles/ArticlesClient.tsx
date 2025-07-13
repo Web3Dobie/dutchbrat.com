@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from 'react';
 
+// Helper to get query param from URL (Next.js 13/14 compatible)
+function getArticleIdFromQuery(): string | null {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('articleId');
+}
+
 declare global {
     interface Window {
         marked: {
@@ -62,6 +69,22 @@ export default function ArticlesClient() {
         }
         tryFetch();
     }, []);
+
+    // --- NEW: Auto-open article if ?articleId=... in query string
+    useEffect(() => {
+        const articleId = getArticleIdFromQuery();
+        if (
+            articleId &&
+            articles.length > 0 &&
+            !openArticles[articleId]
+        ) {
+            const article = articles.find(a => a.id === articleId);
+            if (article) {
+                handleToggleArticle(article);
+            }
+        }
+        // eslint-disable-next-line
+    }, [articles]); // Only run after articles are loaded
 
     // Filtering/grouping logic
     const filteredArticles =
