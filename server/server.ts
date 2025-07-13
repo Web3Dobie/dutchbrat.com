@@ -5,6 +5,24 @@ import { parse } from 'url';
 import articleRoutes from './routes/articles';
 import latestTweetRouter from './routes/latestTweet';
 
+const fs = require('fs');
+console.log('CWD:', process.cwd());
+console.log('__dirname:', __dirname);
+
+try {
+    const files = fs.readdirSync(__dirname + '/routes');
+    console.log('FILES IN ROUTES:', files);
+} catch (err) {
+    console.log('COULD NOT LIST ROUTES:', err);
+}
+
+try {
+    require('./routes/latestTweet');
+    console.log('LATESTTWEET REQUIRED!');
+} catch (err) {
+    console.log('FAILED TO REQUIRE LATESTTWEET:', err);
+}
+
 const port = parseInt(process.env.PORT || '3000', 10);
 const dev = process.env.NODE_ENV !== 'production';
 
