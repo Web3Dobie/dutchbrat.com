@@ -28,10 +28,9 @@ export default function ArticlesClient() {
     const [selectedCategory, setSelectedCategory] = useState<string>('All');
     const [expandedYears, setExpandedYears] = useState<Record<string, boolean>>({});
     const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
-    // NEW: Store each article's markdown html
-    const [articleContents, setArticleContents] = useState<Record<string, string>>({});
+    const [openArticles, setOpenArticles] = useState<Record<string, string | null>>({});
 
-    // Manually load marked.min.js if needed
+    // Load marked.js if needed
     useEffect(() => {
         if (!window.marked) {
             const script = document.createElement('script');
@@ -43,7 +42,7 @@ export default function ArticlesClient() {
         }
     }, []);
 
-    // Wait for marked, then fetch articles and all markdown
+    // Fetch articles after marked.js loads
     useEffect(() => {
         function tryFetch() {
             if (typeof window !== 'undefined' && window.marked) {
@@ -51,22 +50,10 @@ export default function ArticlesClient() {
                     .then((res) => res.json())
                     .then((data: Article[]) => {
                         setArticles(data);
-                        // Gather unique categories, force type to string[]
                         const unique = Array.from(
                             new Set(data.map(a => a.category).filter((cat): cat is string => !!cat))
                         );
                         setCategories(unique);
-                        // Fetch all markdown and store as html
-                        data.forEach(article => {
-                            fetch(article.file)
-                                .then(res => res.text())
-                                .then(md => {
-                                    setArticleContents(prev => ({
-                                        ...prev,
-                                        [article.id]: window.marked.parse(md)
-                                    }));
-                                });
-                        });
                     })
                     .catch((err) => console.error('Failed to load articles:', err));
             } else {
@@ -76,13 +63,12 @@ export default function ArticlesClient() {
         tryFetch();
     }, []);
 
-    // Filter articles by selected category (or show all)
+    // Filtering/grouping logic
     const filteredArticles =
         selectedCategory === 'All'
             ? articles
             : articles.filter((a) => a.category === selectedCategory);
 
-    // Group articles by year and month for display
     const grouped: Record<string, Record<string, Article[]>> = {};
     filteredArticles.forEach((article) => {
         const date = new Date(article.date);
@@ -102,9 +88,54 @@ export default function ArticlesClient() {
         setExpandedMonths(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
+    // Click/toggle article open (fetch on first open)
+    const handleToggleArticle = (article: Article) => {
+        if (openArticles[article.id] !== undefined) {
+            // Close if open
+            setOpenArticles(prev => {
+                const newState = { ...prev };
+                delete newState[article.id];
+                return newState;
+            });
+            return;
+        }
+        // Fetch if URL is public
+        if (
+            article.file &&
+            (article.file.startsWith('http') || article.file.startsWith('/'))
+        ) {
+            fetch(article.file)
+                .then(res => {
+                    if (!res.ok) throw new Error('Failed to fetch');
+                    return res.text();
+                })
+                .then(md => {
+                    setOpenArticles(prev => ({
+                        ...prev,
+                        [article.id]: window.marked.parse(md)
+                    }));
+                })
+                .catch(() => {
+                    setOpenArticles(prev => ({
+                        ...prev,
+                        [article.id]: '<div class="text-red-500">Could not load article.</div>'
+                    }));
+                });
+            setOpenArticles(prev => ({
+                ...prev,
+                [article.id]: ''
+            }));
+        } else {
+            setOpenArticles(prev => ({
+                ...prev,
+                [article.id]: '<div class="text-red-500">Article file path invalid or private.</div>'
+            }));
+        }
+    };
+
     return (
         <section className="max-w-5xl mx-auto px-4 py-8">
-            {/* Centered header */}
+            {/* Header */}
             <div className="flex flex-col items-center mb-12">
                 <img
                     src="/images/hunter_reading.png"
@@ -117,7 +148,7 @@ export default function ArticlesClient() {
                 </h1>
             </div>
 
-            {/* CATEGORY SELECT BOX */}
+            {/* Category Select */}
             <div className="mb-6">
                 <label htmlFor="category-select" className="mr-2 font-semibold">
                     Category:
@@ -137,7 +168,7 @@ export default function ArticlesClient() {
                 </select>
             </div>
 
-            {/* ARTICLES LIST */}
+            {/* Articles List */}
             <div id="articles-list" className="space-y-8">
                 {Object.keys(grouped)
                     .sort((a, b) => parseInt(b) - parseInt(a))
@@ -165,29 +196,46 @@ export default function ArticlesClient() {
                                                 {month}
                                             </button>
                                             {expandedMonths[monthKey] &&
-                                                grouped[year][month].map((article) => (
-                                                    <div
-                                                        key={article.id}
-                                                        className="rounded-xl border border-gray-700 p-5 mb-4 bg-black/10 backdrop-blur-md hover:border-blue-500 transition"
-                                                    >
-                                                        <div className="flex justify-between items-center">
-                                                            <h4 className="text-lg font-semibold">{article.headline}</h4>
-                                                            {article.category ? (
-                                                                <span className="px-3 py-1 text-xs rounded-full bg-blue-700 text-white">
-                                                                    {article.category}
-                                                                </span>
-                                                            ) : null}
+                                                grouped[year][month].map((article) => {
+                                                    const isOpen = openArticles[article.id] !== undefined;
+                                                    return (
+                                                        <div
+                                                            key={article.id}
+                                                            className={
+                                                                "rounded-xl border p-5 mb-4 bg-black/10 backdrop-blur-md hover:border-blue-500 transition cursor-pointer " +
+                                                                (isOpen
+                                                                    ? "border-blue-500"
+                                                                    : "border-gray-700")
+                                                            }
+                                                            onClick={() => handleToggleArticle(article)}
+                                                        >
+                                                            <div className="flex justify-between items-center">
+                                                                <h4 className="text-lg font-semibold">{article.headline}</h4>
+                                                                {article.category ? (
+                                                                    <span className="px-3 py-1 text-xs rounded-full bg-blue-700 text-white">
+                                                                        {article.category}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                            <p className="text-sm text-gray-400">
+                                                                {new Date(article.date).toLocaleDateString()}
+                                                            </p>
+                                                            <p className="mt-2 text-gray-200">{article.summary}</p>
+                                                            {/* Markdown (if open) */}
+                                                            {isOpen && (
+                                                                <div
+                                                                    className="prose prose-invert mt-6"
+                                                                    dangerouslySetInnerHTML={{
+                                                                        __html:
+                                                                            openArticles[article.id] === ""
+                                                                                ? "<div>Loading...</div>"
+                                                                                : openArticles[article.id] || ""
+                                                                    }}
+                                                                />
+                                                            )}
                                                         </div>
-                                                        <p className="text-sm text-gray-400">
-                                                            {new Date(article.date).toLocaleDateString()}
-                                                        </p>
-                                                        <p className="mt-2 text-gray-200">{article.summary}</p>
-                                                        {/* INLINE MARKDOWN RENDER */}
-                                                        <div className="prose prose-invert mt-6"
-                                                            dangerouslySetInnerHTML={{ __html: articleContents[article.id] || '<div>Loading...</div>' }}
-                                                        />
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                         </div>
                                     );
                                 })}
