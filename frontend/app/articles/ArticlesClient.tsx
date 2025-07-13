@@ -73,18 +73,24 @@ export default function ArticlesClient() {
     // --- NEW: Auto-open article if ?articleId=... in query string
     useEffect(() => {
         const articleId = getArticleIdFromQuery();
-        if (
-            articleId &&
-            articles.length > 0 &&
-            !openArticles[articleId]
-        ) {
+        if (articleId && articles.length > 0) {
             const article = articles.find(a => a.id === articleId);
             if (article) {
-                handleToggleArticle(article);
+                // Open year/month tree
+                const date = new Date(article.date);
+                const year = date.getFullYear().toString();
+                const month = date.toLocaleString('default', { month: 'long' });
+                setExpandedYears(prev => ({ ...prev, [year]: true }));
+                setExpandedMonths(prev => ({ ...prev, [`${year}-${month}`]: true }));
+
+                // Open the article card
+                if (!openArticles[articleId]) {
+                    handleToggleArticle(article);
+                }
             }
         }
         // eslint-disable-next-line
-    }, [articles]); // Only run after articles are loaded
+    }, [articles]);
 
     // Filtering/grouping logic
     const filteredArticles =
