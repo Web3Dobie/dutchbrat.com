@@ -28,6 +28,8 @@ export default function ArticlesClient() {
     const [selectedCategory, setSelectedCategory] = useState<string>('All');
     const [expandedYears, setExpandedYears] = useState<Record<string, boolean>>({});
     const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
+    // NEW: Store each article's markdown html
+    const [articleContents, setArticleContents] = useState<Record<string, string>>({});
 
     // Manually load marked.min.js if needed
     useEffect(() => {
@@ -41,7 +43,7 @@ export default function ArticlesClient() {
         }
     }, []);
 
-    // Wait for marked, then fetch articles
+    // Wait for marked, then fetch articles and all markdown
     useEffect(() => {
         function tryFetch() {
             if (typeof window !== 'undefined' && window.marked) {
@@ -54,6 +56,17 @@ export default function ArticlesClient() {
                             new Set(data.map(a => a.category).filter((cat): cat is string => !!cat))
                         );
                         setCategories(unique);
+                        // Fetch all markdown and store as html
+                        data.forEach(article => {
+                            fetch(article.file)
+                                .then(res => res.text())
+                                .then(md => {
+                                    setArticleContents(prev => ({
+                                        ...prev,
+                                        [article.id]: window.marked.parse(md)
+                                    }));
+                                });
+                        });
                     })
                     .catch((err) => console.error('Failed to load articles:', err));
             } else {
@@ -62,35 +75,6 @@ export default function ArticlesClient() {
         }
         tryFetch();
     }, []);
-
-    // Handle viewing full article
-    function handleShowArticle(article: Article) {
-        fetch(article.file)
-            .then((res) => res.text())
-            .then((md) => {
-                const viewer = document.getElementById('article-viewer');
-                const markdownTarget = document.getElementById('markdown-content');
-                const container = document.getElementById('articles-list');
-                if (viewer && markdownTarget && container) {
-                    markdownTarget.innerHTML = window.marked.parse(md);
-                    viewer.classList.remove('hidden');
-                    container.style.display = 'none';
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-            });
-    }
-
-    function handleBack() {
-        const viewer = document.getElementById('article-viewer');
-        const markdownTarget = document.getElementById('markdown-content');
-        const container = document.getElementById('articles-list');
-        if (viewer && markdownTarget && container) {
-            viewer.classList.add('hidden');
-            container.style.display = 'block';
-            markdownTarget.innerHTML = '';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    }
 
     // Filter articles by selected category (or show all)
     const filteredArticles =
@@ -184,8 +168,7 @@ export default function ArticlesClient() {
                                                 grouped[year][month].map((article) => (
                                                     <div
                                                         key={article.id}
-                                                        className="rounded-xl border border-gray-700 p-5 mb-4 bg-black/10 backdrop-blur-md hover:border-blue-500 transition cursor-pointer"
-                                                        onClick={() => handleShowArticle(article)}
+                                                        className="rounded-xl border border-gray-700 p-5 mb-4 bg-black/10 backdrop-blur-md hover:border-blue-500 transition"
                                                     >
                                                         <div className="flex justify-between items-center">
                                                             <h4 className="text-lg font-semibold">{article.headline}</h4>
@@ -199,7 +182,10 @@ export default function ArticlesClient() {
                                                             {new Date(article.date).toLocaleDateString()}
                                                         </p>
                                                         <p className="mt-2 text-gray-200">{article.summary}</p>
-                                                        <p className="text-blue-400 underline mt-3 inline-block">Read full article</p>
+                                                        {/* INLINE MARKDOWN RENDER */}
+                                                        <div className="prose prose-invert mt-6"
+                                                            dangerouslySetInnerHTML={{ __html: articleContents[article.id] || '<div>Loading...</div>' }}
+                                                        />
                                                     </div>
                                                 ))}
                                         </div>
@@ -207,21 +193,6 @@ export default function ArticlesClient() {
                                 })}
                         </div>
                     ))}
-            </div>
-
-            {/* MARKDOWN VIEWER */}
-            <div
-                id="article-viewer"
-                className="prose prose-invert max-w-none mt-10 hidden border border-gray-700 p-6 rounded-xl bg-black/20 backdrop-blur"
-            >
-                <button
-                    id="back-button"
-                    className="mb-6 px-4 py-2 rounded-full border border-gray-600 text-sm text-white hover:bg-gray-800"
-                    onClick={handleBack}
-                >
-                    ← Back to all articles
-                </button>
-                <div id="markdown-content"></div>
             </div>
         </section>
     );
