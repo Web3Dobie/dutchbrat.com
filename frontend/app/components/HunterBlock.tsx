@@ -11,24 +11,23 @@ type Article = {
     summary: string;
     image: string;
     file: string;
+    date: string;
 }
 
 export default function HunterBlock() {
     const [article, setArticle] = useState<Article | null>(null)
 
     useEffect(() => {
-        const fetchArticle = async () => {
-            try {
-                const res = await fetch('https://w3d-articles-server-gfdbe9aqfbd2gceu.swedencentral-01.azurewebsites.net/api/latest');
-                const data = await res.json();
-                console.log('Latest article from API:', data); // 👈 ADD THIS LINE
-                setArticle(data);
-            } catch (err) {
-                console.error('Failed to fetch latest article:', err);
-            }
+        const fetchArticles = async () => {
+            const res = await fetch('/api/articles');
+            const all: Article[] = await res.json(); // 👈 Type annotation here!
+            // Now TS knows all, a, and b are Article
+            const sorted = all
+                .filter(a => !!a.date)
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            setArticle(sorted[0]);
         };
-
-        fetchArticle();
+        fetchArticles();
     }, []);
 
     return (
