@@ -71,6 +71,7 @@ export default function ArticlesClient() {
 }
 
 function groupAndRenderArticles(articles: Article[]) {
+    console.log('groupAndRenderArticles called:', articles);
     const container = document.getElementById('articles-list')!
     const viewer = document.getElementById('article-viewer')!
     const markdownTarget = document.getElementById('markdown-content')!
