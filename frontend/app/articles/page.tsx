@@ -1,5 +1,5 @@
-// REMOVE dynamic import
-import ArticlesClient from './ArticlesClient';
+import dynamic from 'next/dynamic';
+const ArticlesClient = dynamic(() => import('./ArticlesClient'), { ssr: false });
 
 export default function ArticlesPage() {
   return (
@@ -9,4 +9,3 @@ export default function ArticlesPage() {
     </div>
   );
 }
-
