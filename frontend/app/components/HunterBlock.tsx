@@ -7,7 +7,7 @@ import HunterSmiling from '../../public/images/hunter_smiling.png'
 
 type Article = {
     id: string;         // Add this!
-    title: string;
+    headline: string;
     summary: string;
     image: string;
     file: string;
@@ -20,15 +20,16 @@ export default function HunterBlock() {
     useEffect(() => {
         const fetchArticles = async () => {
             const res = await fetch('/api/articles');
-            const all: Article[] = await res.json(); // 👈 Type annotation here!
-            // Now TS knows all, a, and b are Article
-            const sorted = all
-                .filter(a => !!a.date)
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const all: Article[] = await res.json();
+            // No filter, just sort
+            const sorted = all.sort((a, b) =>
+                new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
+            );
             setArticle(sorted[0]);
         };
         fetchArticles();
     }, []);
+
 
     return (
         <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
@@ -62,7 +63,7 @@ export default function HunterBlock() {
                             href={`/articles?articleId=${article.id}`}
                             className="text-xl font-semibold text-white hover:underline"
                         >
-                            {article.title}
+                            {article.headline}
                         </Link>
                         <p className="mt-1 text-gray-300">{article.summary}</p>
                     </div>
