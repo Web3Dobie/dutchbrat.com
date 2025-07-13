@@ -27,13 +27,18 @@ type Article = {
 
 export default function ArticlesClient() {
     useEffect(() => {
-        if (typeof window !== 'undefined' && window.marked) {
-            fetch('/api/articles')
-                .then((res) => res.json())
-                .then(groupAndRenderArticles)
-                .catch((err) => console.error('Failed to load articles:', err))
+        function tryFetch() {
+            if (typeof window !== 'undefined' && window.marked) {
+                fetch('/api/articles')
+                    .then((res) => res.json())
+                    .then(groupAndRenderArticles)
+                    .catch((err) => console.error('Failed to load articles:', err));
+            } else {
+                setTimeout(tryFetch, 100); // Retry every 100ms until marked is ready
+            }
         }
-    }, [])
+        tryFetch();
+    }, []);
 
     return (
         <section className="max-w-5xl mx-auto px-4 py-8">
