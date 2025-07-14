@@ -16,6 +16,20 @@ const nextDir = dev
   ? path.resolve(__dirname, '../frontend')
   : process.cwd();
 
+  // Add this debug code right after determining nextDir
+console.log('🔍 Debug info:');
+console.log('- dev:', dev);
+console.log('- __dirname:', __dirname);
+console.log('- process.cwd():', process.cwd());
+console.log('- nextDir:', nextDir);
+console.log('- Contents of nextDir:');
+try {
+  const contents = fs.readdirSync(nextDir);
+  console.log('  ', contents);
+} catch (err) {
+  console.error('  Error reading nextDir:', err);
+}
+
 (async () => {
   try {
     // Dynamically import Next.js to ensure callable default

@@ -47,7 +47,7 @@ jobs:
           cp -r frontend/.next deploy/
           cp -r frontend/app deploy/
           cp -r frontend/public deploy/
-          
+
           # Copy compiled server into deploy/dist
           mkdir -p deploy/dist
           cp -r server/dist/* deploy/dist/
@@ -65,6 +65,19 @@ jobs:
           name: node-app
           path: deploy
 
+      - name: Debug deploy contents
+        run: |
+          echo "=== Deploy folder contents ==="
+          ls -la deploy/
+          echo "=== Looking for app directory ==="
+          ls -la deploy/app/ 2>/dev/null || echo "No app directory found"
+          echo "=== Looking for .next directory ==="
+          ls -la deploy/.next/ 2>/dev/null || echo "No .next directory found"
+          echo "=== Server dist contents ==="
+          ls -la deploy/dist/ 2>/dev/null || echo "No dist directory found"
+          echo "=== Package.json contents ==="
+          cat deploy/package.json 2>/dev/null || echo "No package.json found"
+  
   deploy:
     needs: build
     runs-on: ubuntu-latest
