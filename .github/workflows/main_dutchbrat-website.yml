@@ -57,10 +57,26 @@ jobs:
           # Backend: build output as subdir
           cp -r server/dist deploy/server/
 
-          # Backend package.json only at root!
-          cp server/package.json deploy/package.json
+          # Start with frontend package.json
+          cp frontend/package.json deploy/package.json
 
-      # 🟢 Install production dependencies in deploy (so node_modules is zipped in)
+      # Merge backend dependencies into deploy/package.json (node one-liner)
+      - name: Merge frontend and backend dependencies
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          const frontendPkg = JSON.parse(fs.readFileSync('frontend/package.json', 'utf8'));
+          const backendPkg = JSON.parse(fs.readFileSync('server/package.json', 'utf8'));
+          frontendPkg.dependencies = Object.assign(
+            {},
+            frontendPkg.dependencies || {},
+            backendPkg.dependencies || {}
+          );
+          fs.writeFileSync('deploy/package.json', JSON.stringify(frontendPkg, null, 2));
+          EOF
+
+      # Install production dependencies (frontend+backend) in deploy
       - name: Install production dependencies in deploy
         working-directory: deploy
         run: npm install --omit=dev
