@@ -61,6 +61,9 @@ jobs:
           cp server/package.json deploy/package.json
           if [ -f server/package-lock.json ]; then cp server/package-lock.json deploy/package-lock.json; fi
 
+          # PATCH start script to match deployed file layout!
+          sed -i 's|"start": *"node dist/server.js"|"start": "node server/dist/server.js"|' deploy/package.json
+      
       - name: "Debug: list deploy dir"
         run: ls -lhR deploy
 
