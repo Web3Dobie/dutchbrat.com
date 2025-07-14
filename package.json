@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix server && npm run build --prefix server",
-    "start": "node server/dist/server.js"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@notionhq/client": "^4.0.1",

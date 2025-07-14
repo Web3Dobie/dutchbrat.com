@@ -45,14 +45,14 @@ jobs:
           # Copy Next.js build + app + public
           cp -r frontend/.next frontend/app frontend/public deploy/
 
-          # Copy custom server build + package.json
-          cp -r server/dist deploy/server
-          cp server/package.json server/package-lock.json deploy/
+          # Copy compiled server into deploy/dist
+          mkdir -p deploy/dist
+          cp -r server/dist/* deploy/dist/
 
-          # Copy root package.json (start script) for npm ci
+          # Copy root package.json so npm start can run
           cp package.json package-lock.json deploy/ || true
 
-          # Debug listing
+          # Debug
           ls -R deploy
 
       # 4️⃣ Upload artifact
