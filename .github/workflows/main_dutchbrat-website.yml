@@ -55,10 +55,14 @@ jobs:
           # Copy root package.json so npm start can run
           cp package.json deploy/
 
-          # Debug: list contents
-          ls -R deploy
+          # Install production dependencies in deploy folder
+          cd deploy
+          npm install --omit=dev
 
-      # 4️⃣ Upload artifact
+          # Debug: list contents
+          ls -R .
+
+      # 4️⃣ Upload artifact (now includes node_modules)
       - name: Upload deploy folder
         uses: actions/upload-artifact@v4
         with:
@@ -77,6 +81,8 @@ jobs:
           ls -la deploy/dist/ 2>/dev/null || echo "No dist directory found"
           echo "=== Package.json contents ==="
           cat deploy/package.json 2>/dev/null || echo "No package.json found"
+          echo "=== Node modules check ==="
+          ls -la deploy/node_modules/ 2>/dev/null | head -10 || echo "No node_modules found"
   
   deploy:
     needs: build
@@ -87,14 +93,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-          path: deploy
+          path: .
 
       - name: Debug downloaded contents
-        run: ls -R deploy
-
-      - name: Install production dependencies
-        working-directory: deploy
-        run: npm install --omit=dev
+        run: |
+          echo "=== Downloaded contents ==="
+          ls -la
+          echo "=== Node modules check ==="
+          ls node_modules/ 2>/dev/null | head -10 || echo "No node_modules found"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -102,4 +108,4 @@ jobs:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: deploy
+          package: .
