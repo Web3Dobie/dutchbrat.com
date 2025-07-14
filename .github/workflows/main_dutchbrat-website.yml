@@ -49,26 +49,31 @@ jobs:
           mkdir -p deploy
           mkdir -p deploy/server
 
-          # FLATTEN frontend build and source to deploy root
+          # Copy Next.js output and all source files
           cp -r frontend/.next deploy/
-          cp -r frontend/public deploy/
           cp -r frontend/app deploy/
+          cp -r frontend/public deploy/
 
           # Backend: build output as subdir
           cp -r server/dist deploy/server/
 
-          # Copy server package.json and lockfile to deploy root
+          # Copy configs if present
+          [ -f frontend/next.config.js ] && cp frontend/next.config.js deploy/ || true
+          [ -f frontend/tsconfig.json ] && cp frontend/tsconfig.json deploy/ || true
+          [ -f frontend/postcss.config.js ] && cp frontend/postcss.config.js deploy/ || true
+          [ -f frontend/tailwind.config.js ] && cp frontend/tailwind.config.js deploy/ || true
+
+          # Copy package.json/lock from backend/server
           cp server/package.json deploy/package.json
           if [ -f server/package-lock.json ]; then cp server/package-lock.json deploy/package-lock.json; fi
 
-          # PATCH start script to match deployed file layout!
-          sed -i 's|"start": *"node dist/server.js"|"start": "node server/dist/server.js"|' deploy/package.json
-      
-      - name: "Debug: list deploy dir"
-        run: ls -lhR deploy
+          # Copy .env if needed (optional)
+          [ -f server/.env.production ] && cp server/.env.production deploy/server/.env.production || true
+          [ -f server/.env ] && cp server/.env deploy/server/.env || true
 
-      - name: Zip deployment package
-        run: |
+          # Debug: list deploy dir
+          ls -lhR deploy
+
           cd deploy
           zip -r ../release.zip .
 
