@@ -57,8 +57,9 @@ jobs:
           # Backend: build output as subdir
           cp -r server/dist deploy/server/
 
-          # Use only the UNIFIED package.json at the root
-          cp package.json deploy/package.json
+          # Copy root package.json and package-lock.json if present
+          cp server/package.json deploy/package.json
+          if [ -f server/package-lock.json ]; then cp server/package-lock.json deploy/package-lock.json; fi
 
           # Debug: show what's in deploy/ before zipping
           ls -lhR deploy
@@ -85,10 +86,16 @@ jobs:
       - name: Unzip artifact
         run: unzip release.zip
 
+      - name: Install production dependencies
+        run: npm ci --omit=dev
+        working-directory: .
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: ./release.zip
+          package: ./
+
+          # Force deployment
