@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -16,13 +17,13 @@ jobs:
         run: |
           rm -rf frontend/.next deploy
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v3
-        with: 
+        with:
           node-version: '20.x'
 
       # 1️⃣ Build Frontend
-      - name: Install frontend deps
+      - name: Install frontend dependencies
         working-directory: frontend
         run: npm install
       - name: Build frontend
@@ -30,7 +31,7 @@ jobs:
         run: npm run build
 
       # 2️⃣ Build Backend
-      - name: Install server deps
+      - name: Install server dependencies
         working-directory: server
         run: npm install
       - name: Build server
@@ -42,17 +43,17 @@ jobs:
         run: |
           mkdir -p deploy
 
-          # Copy Next.js build + app + public
+          # Copy Next.js build output, app/, and public/
           cp -r frontend/.next frontend/app frontend/public deploy/
 
-          # Copy compiled server into deploy/dist
+          # Copy compiled server output into deploy/dist
           mkdir -p deploy/dist
           cp -r server/dist/* deploy/dist/
 
-          # Copy root package.json so npm start can run
-          cp package.json package-lock.json deploy/ || true
+          # Copy root package.json so npm install can run
+          cp package.json deploy/
 
-          # Debug
+          # Debug: list contents
           ls -R deploy
 
       # 4️⃣ Upload artifact
@@ -65,6 +66,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Download deploy artifact
         uses: actions/download-artifact@v4
@@ -72,12 +74,12 @@ jobs:
           name: node-app
           path: deploy
 
-      - name: Debug contents
+      - name: Debug downloaded contents
         run: ls -R deploy
 
-      - name: Install production deps
+      - name: Install production dependencies
         working-directory: deploy
-        run: npm ci --omit=dev
+        run: npm install --omit=dev
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
