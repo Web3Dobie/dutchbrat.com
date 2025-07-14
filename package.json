@@ -2,10 +2,11 @@
   "name": "dutchbrat-app",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix server && npm run build --prefix server",
     "start": "node dist/server.js"
-  },
+    },
   "dependencies": {
     "@notionhq/client": "^4.0.1",
     "dotenv": "^17.2.0",

@@ -44,8 +44,10 @@ jobs:
           mkdir -p deploy
 
           # Copy Next.js output, app/ and public/
-          cp -r frontend/.next frontend/app frontend/public deploy/
-
+          cp -r frontend/.next deploy/
+          cp -r frontend/app deploy/
+          cp -r frontend/public deploy/
+          
           # Copy compiled server into deploy/dist
           mkdir -p deploy/dist
           cp -r server/dist/* deploy/dist/
