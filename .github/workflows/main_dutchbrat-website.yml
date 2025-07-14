@@ -55,7 +55,7 @@ jobs:
           cp -r frontend/public deploy/
 
           # Backend: build output as subdir
-          cp -r server/dist deploy/server/
+          cp -r server/dist deploy/
 
           # Copy configs if present
           [ -f frontend/next.config.js ] && cp frontend/next.config.js deploy/ || true
