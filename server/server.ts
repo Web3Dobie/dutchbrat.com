@@ -1,49 +1,66 @@
 // server.ts
-import express, { Request, Response } from 'express';
-import next from 'next';
-import { parse } from 'url';
-import articleRoutes from './routes/articles.js';       // Note the .js extension for ESM compiled files
-import latestTweetRouter from './routes/latestTweet.js'; // Note the .js extension for ESM compiled files
-
-// If you need to list files in 'routes' dir (optional, for debug)
+import express from 'express';
+import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import path from 'path';
+import { parse } from 'url';
 
+// Resolve ES module __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-console.log('CWD:', process.cwd());
-console.log('__dirname:', __dirname);
-
-try {
-    const files = fs.readdirSync(path.join(__dirname, 'routes'));
-    console.log('FILES IN ROUTES:', files);
-} catch (err) {
-    console.log('COULD NOT LIST ROUTES:', err);
-}
-
-const port = parseInt(process.env.PORT || '3000', 10);
+// Determine environment
 const dev = process.env.NODE_ENV !== 'production';
+// Next.js directory: source folder in dev, root in production
+const nextDir = dev
+  ? path.resolve(__dirname, '../frontend')
+  : process.cwd();
 
-const createNext = next as unknown as (...args: any[]) => any;
-const nextApp = createNext({ dev, dir: '../frontend' });
-const handle = nextApp.getRequestHandler();
+(async () => {
+  try {
+    // Dynamically import Next.js to ensure callable default
+    const NextModule = await import('next');
+    const NextApp = (NextModule as any).default || NextModule;
+    const nextApp = NextApp({ dev, dir: nextDir });
+    const handle = nextApp.getRequestHandler();
 
-nextApp.prepare().then(() => {
-    const server = express();
+    // Prepare Next.js app
+    await nextApp.prepare();
+
+    const app = express();
+
+    // Debug: list compiled route files
+    try {
+      const routesPath = path.join(__dirname, 'routes');
+      const files = fs.readdirSync(routesPath);
+      console.log('Loaded route files:', files);
+    } catch (err) {
+      console.warn('Could not list routes directory:', err);
+    }
 
     // Mount custom API routes
-    server.use('/api/articles', articleRoutes);
-    server.use('/api/latest-tweet', latestTweetRouter);
+    {
+      const { default: articleRoutes } = await import('./routes/articles.js');
+      app.use('/api/articles', articleRoutes);
+    }
+    {
+      const { default: latestTweetRouter } = await import('./routes/latestTweet.js');
+      app.use('/api/latest-tweet', latestTweetRouter);
+    }
 
-    // Let Next.js handle everything else
-    server.all('*', (req: Request, res: Response) => {
-        const parsedUrl = parse(req.url, true);
-        return handle(req, res, parsedUrl);
+    // Handle all other requests with Next.js
+    app.all('*', (req, res) => {
+      const parsedUrl = parse(req.url, true);
+      return handle(req, res, parsedUrl);
     });
 
-    server.listen(port, () => {
-        console.log(`✅ Server running on http://localhost:${port}`);
+    // Start Express server
+    const port = parseInt(process.env.PORT || '3000', 10);
+    app.listen(port, () => {
+      console.log(`✅ Server running on http://localhost:${port} (dev=${dev})`);
     });
-});
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+})();
