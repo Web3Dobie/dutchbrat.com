@@ -2,10 +2,11 @@
     "name": "dutchbrat-server",
     "version": "1.0.0",
     "private": true,
+    "type": "module",
     "scripts": {
         "dev": "ts-node server.ts",
         "build": "tsc --project tsconfig.server.json",
-        "start": "node server/dist/server.js"
+        "start": "node dist/server.js"
     },
     "dependencies": {
         "@notionhq/client": "^4.0.1",

@@ -3,17 +3,33 @@ import fetch from 'node-fetch';
 
 const router = express.Router();
 
-// Replace with your actual values
-const BEARER_TOKEN = process.env.X_BEARER_TOKEN!;
-const USERNAME = 'Web3_Dobie'; // e.g. 'web3dobie'
+// --- Interfaces for Type Safety ---
+interface TwitterUserResponse {
+    data: {
+        id: string;
+        name: string;
+        username: string;
+    };
+}
+interface Tweet {
+    id: string;
+    text: string;
+    created_at: string;
+}
+interface TweetsResponse {
+    data: Tweet[];
+}
 
-// Helper to get Twitter user ID (needed only once or can be hardcoded)
+const BEARER_TOKEN = process.env.X_BEARER_TOKEN!;
+const USERNAME = 'Web3_Dobie';
+
+// Helper to get Twitter user ID
 async function getUserId(username: string) {
     const resp = await fetch(
         `https://api.twitter.com/2/users/by/username/${username}`,
         { headers: { Authorization: `Bearer ${BEARER_TOKEN}` } }
     );
-    const data = await resp.json();
+    const data = await resp.json() as TwitterUserResponse;
     if (!data || !data.data) throw new Error("User not found");
     return data.data.id;
 }
@@ -21,14 +37,13 @@ async function getUserId(username: string) {
 router.get('/', async (req, res) => {
     console.log('>>> /api/latest-tweet called');
     try {
-        // You can hardcode userId if you want, or fetch each time:
         const userId = await getUserId(USERNAME);
 
         const tweetResp = await fetch(
             `https://api.twitter.com/2/users/${userId}/tweets?max_results=5&tweet.fields=created_at`,
             { headers: { Authorization: `Bearer ${BEARER_TOKEN}` } }
         );
-        const tweetData = await tweetResp.json();
+        const tweetData = await tweetResp.json() as TweetsResponse;
         if (!tweetData?.data || !tweetData.data.length)
             return res.status(404).json({ error: "No tweets found" });
 
@@ -45,5 +60,3 @@ router.get('/', async (req, res) => {
 });
 
 export default router;
-
-// Force deployment

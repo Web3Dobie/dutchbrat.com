@@ -2,31 +2,32 @@
 import express, { Request, Response } from 'express';
 import next from 'next';
 import { parse } from 'url';
-import articleRoutes from './routes/articles';
-import latestTweetRouter from './routes/latestTweet';
+import articleRoutes from './routes/articles.js';       // Note the .js extension for ESM compiled files
+import latestTweetRouter from './routes/latestTweet.js'; // Note the .js extension for ESM compiled files
 
-const fs = require('fs');
+// If you need to list files in 'routes' dir (optional, for debug)
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 console.log('CWD:', process.cwd());
 console.log('__dirname:', __dirname);
 
 try {
-    const files = fs.readdirSync(__dirname + '/routes');
+    const files = fs.readdirSync(path.join(__dirname, 'routes'));
     console.log('FILES IN ROUTES:', files);
 } catch (err) {
     console.log('COULD NOT LIST ROUTES:', err);
 }
 
-try {
-    require('./routes/latestTweet');
-    console.log('LATESTTWEET REQUIRED!');
-} catch (err) {
-    console.log('FAILED TO REQUIRE LATESTTWEET:', err);
-}
-
 const port = parseInt(process.env.PORT || '3000', 10);
 const dev = process.env.NODE_ENV !== 'production';
 
-const nextApp = next({ dev, dir: '../frontend' });
+const createNext = next as unknown as (...args: any[]) => any;
+const nextApp = createNext({ dev, dir: '../frontend' });
 const handle = nextApp.getRequestHandler();
 
 nextApp.prepare().then(() => {
@@ -46,5 +47,3 @@ nextApp.prepare().then(() => {
         console.log(`✅ Server running on http://localhost:${port}`);
     });
 });
-
-
