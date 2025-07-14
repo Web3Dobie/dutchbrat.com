@@ -57,37 +57,14 @@ jobs:
           # Backend: build output as subdir
           cp -r server/dist deploy/server/
 
-          # Start with frontend package.json
-          cp frontend/package.json deploy/package.json
+          # Use only the UNIFIED package.json at the root
+          cp package.json deploy/package.json
 
-      # Merge backend dependencies into deploy/package.json (node one-liner)
-      - name: Merge frontend and backend dependencies
-        run: |
-          node <<'EOF'
-          const fs = require('fs');
-          const path = require('path');
-          const frontendPkg = JSON.parse(fs.readFileSync('frontend/package.json', 'utf8'));
-          const backendPkg = JSON.parse(fs.readFileSync('server/package.json', 'utf8'));
-          frontendPkg.dependencies = Object.assign(
-            {},
-            frontendPkg.dependencies || {},
-            backendPkg.dependencies || {}
-          );
-          fs.writeFileSync('deploy/package.json', JSON.stringify(frontendPkg, null, 2));
-          EOF
+          # Debug: show what's in deploy/ before zipping
+          ls -lhR deploy
 
-      # Install production dependencies (frontend+backend) in deploy
-      - name: Install production dependencies in deploy
-        working-directory: deploy
-        run: npm install --omit=dev
-
-      # Debug: show what's in deploy/ before zipping
-      - name: List deploy folder
-        run: ls -lhR deploy
-
-      - name: Zip deployment package
-        working-directory: deploy
-        run: zip -r ../release.zip .
+          cd deploy
+          zip -r ../release.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
