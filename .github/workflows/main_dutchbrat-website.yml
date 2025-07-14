@@ -57,13 +57,15 @@ jobs:
           # Backend: build output as subdir
           cp -r server/dist deploy/server/
 
-          # Copy root package.json and package-lock.json if present
+          # Copy server package.json and lockfile to deploy root
           cp server/package.json deploy/package.json
           if [ -f server/package-lock.json ]; then cp server/package-lock.json deploy/package-lock.json; fi
 
-          # Debug: show what's in deploy/ before zipping
-          ls -lhR deploy
+      - name: "Debug: list deploy dir"
+        run: ls -lhR deploy
 
+      - name: Zip deployment package
+        run: |
           cd deploy
           zip -r ../release.zip .
 
@@ -97,5 +99,3 @@ jobs:
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
           package: ./
-
-          # Force deployment
