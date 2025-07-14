@@ -1,4 +1,4 @@
-name: Deploy to Azure Web App - dutchbrat-website
+name: Build & deploy Node.js app to Azure Web App - dutchbrat-website
 
 on:
   push:
@@ -6,11 +6,78 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Clean
+        run: |
+          rm -rf frontend/.next deploy
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with: 
+          node-version: '20.x'
+
+      # 1️⃣ Build Frontend
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm install
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # 2️⃣ Build Backend
+      - name: Install server deps
+        working-directory: server
+        run: npm install
+      - name: Build server
+        working-directory: server
+        run: npm run build
+
+      # 3️⃣ Package deploy folder
+      - name: Prepare deploy folder
+        run: |
+          mkdir -p deploy
+
+          # Copy Next.js build + app + public
+          cp -r frontend/.next frontend/app frontend/public deploy/
+
+          # Copy custom server build + package.json
+          cp -r server/dist deploy/server
+          cp server/package.json server/package-lock.json deploy/
+
+          # Copy root package.json (start script) for npm ci
+          cp package.json package-lock.json deploy/ || true
+
+          # Debug listing
+          ls -R deploy
+
+      # 4️⃣ Upload artifact
+      - name: Upload deploy folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-app
+          path: deploy
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download deploy artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: node-app
+          path: deploy
+
+      - name: Debug contents
+        run: ls -R deploy
+
+      - name: Install production deps
+        working-directory: deploy
+        run: npm ci --omit=dev
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -18,4 +85,4 @@ jobs:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: .
+          package: deploy
