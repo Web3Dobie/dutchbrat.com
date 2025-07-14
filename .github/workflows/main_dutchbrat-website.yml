@@ -60,11 +60,18 @@ jobs:
           # Backend package.json only at root!
           cp server/package.json deploy/package.json
 
-          # Debug: show what's in deploy/ before zipping
-          ls -lhR deploy
+      # 🟢 Install production dependencies in deploy (so node_modules is zipped in)
+      - name: Install production dependencies in deploy
+        working-directory: deploy
+        run: npm install --omit=dev
 
-          cd deploy
-          zip -r ../release.zip .
+      # Debug: show what's in deploy/ before zipping
+      - name: List deploy folder
+        run: ls -lhR deploy
+
+      - name: Zip deployment package
+        working-directory: deploy
+        run: zip -r ../release.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
