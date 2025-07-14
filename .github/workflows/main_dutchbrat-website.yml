@@ -43,7 +43,6 @@ jobs:
         working-directory: server
         run: npm run build
 
-      # Prepare deployment package
       - name: Prepare deployment package
         run: |
           mkdir -p deploy
@@ -52,7 +51,11 @@ jobs:
           cp -r frontend/.next deploy/
           cp -r frontend/app deploy/
           cp -r frontend/public deploy/
-          cp frontend/next.config.js deploy/ || true
+
+          # Rename next.config.js → next.config.cjs so Node will treat it as CommonJS
+          if [ -f frontend/next.config.js ]; then
+            cp frontend/next.config.js deploy/next.config.cjs
+          fi
 
           # Copy your custom server build
           cp -r server/dist deploy/
@@ -66,12 +69,6 @@ jobs:
           # Zip it up
           cd deploy
           zip -r ../release.zip .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: release.zip
 
   deploy:
     needs: build
