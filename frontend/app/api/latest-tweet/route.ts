@@ -34,7 +34,7 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
 
     // 2) Fetch latest tweet
     const tweetRes = await fetch(
-      `https://api.twitter.com/2/users/${id}/tweets?max_results=1`,
+      `https://api.twitter.com/2/users/${id}/tweets?max_results=5`,
       { headers: { Authorization: `Bearer ${BEARER}` } }
     );
     if (!tweetRes.ok) {
