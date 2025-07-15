@@ -24,85 +24,25 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Create startup script
+      - name: Install and build
         working-directory: frontend
         run: |
-          cat > startup.sh << 'EOF'
-          #!/bin/bash
-          echo "Starting Next.js application..."
-          
-          # Install all dependencies including devDependencies
-          echo "Installing dependencies..."
-          npm ci --production=false
-          
-          # Build the application
-          echo "Building application..."
+          npm ci
           npm run build
-          
-          # Start the application
-          echo "Starting the application..."
-          npm start
-          EOF
-          
-          chmod +x startup.sh
 
-      - name: Package for Azure with startup script
+      - name: Zip deployment package
         working-directory: frontend
-        run: |
-          # Create a more robust package for App Router structure
-          echo "Creating deployment package..."
-          
-          # Start with essential files that must exist
-          zip -r ../deploy-package.zip package.json startup.sh
-          
-          # Add package-lock.json if it exists
-          [ -f package-lock.json ] && zip -r ../deploy-package.zip package-lock.json
-          
-          # Add the app directory (App Router)
-          [ -d "app" ] && zip -r ../deploy-package.zip app
-          
-          # Add other common directories if they exist
-          [ -d "pages" ] && zip -r ../deploy-package.zip pages
-          [ -d "src" ] && zip -r ../deploy-package.zip src
-          [ -d "components" ] && zip -r ../deploy-package.zip components
-          [ -d "lib" ] && zip -r ../deploy-package.zip lib
-          [ -d "styles" ] && zip -r ../deploy-package.zip styles
-          [ -d "public" ] && zip -r ../deploy-package.zip public
-          
-          # Add config files that exist
-          [ -f next.config.js ] && zip -r ../deploy-package.zip next.config.js
-          [ -f tailwind.config.ts ] && zip -r ../deploy-package.zip tailwind.config.ts
-          [ -f tailwind.config.js ] && zip -r ../deploy-package.zip tailwind.config.js
-          [ -f postcss.config.js ] && zip -r ../deploy-package.zip postcss.config.js
-          [ -f tsconfig.json ] && zip -r ../deploy-package.zip tsconfig.json
-          [ -f next-env.d.ts ] && zip -r ../deploy-package.zip next-env.d.ts
-          
-          echo "Package created successfully"
+        run: zip -r ../deploy.zip . -x "*.git*" "node_modules/.cache/*"
 
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Configure Azure App Settings
-        run: |
-          az webapp config appsettings set \
-            --resource-group Web3Dobie \
-            --name dutchbrat-website \
-            --settings \
-              NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}" \
-              NOTION_DB_ID="${{ secrets.NOTION_DB_ID }}" \
-              TWITTER_BEARER_TOKEN="${{ secrets.TWITTER_BEARER_TOKEN }}" \
-              TWITTER_USERNAME="${{ secrets.TWITTER_USERNAME }}"
-
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
-        env:
-          SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: './deploy-package.zip'
-
-# force deploy
+          package: './deploy.zip'
