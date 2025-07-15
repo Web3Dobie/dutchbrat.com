@@ -4,8 +4,5 @@
         {
             "path": "./frontend"
         },
-        {
-            "path": "./server/tsconfig.server.json"
-        }
     ]
 }

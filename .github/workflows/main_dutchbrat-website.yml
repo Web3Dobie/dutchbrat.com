@@ -1,4 +1,4 @@
-name: Build & deploy Node.js app to Azure Web App - dutchbrat-website
+name: Deploy Next.js App to Azure Web App
 
 on:
   push:
@@ -6,101 +6,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Clean
-        run: |
-          rm -rf frontend/.next deploy
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20.x'
-
-      # 1️⃣ Build Frontend
-      - name: Install frontend deps
-        working-directory: frontend
-        run: npm install
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      # 2️⃣ Build Backend
-      - name: Install server deps
-        working-directory: server
-        run: npm install
-      - name: Build server
-        working-directory: server
-        run: npm run build
-
-      # 3️⃣ Package deploy folder
-      - name: Prepare deploy folder
-        run: |
-          mkdir -p deploy
-
-          # Copy Next.js output, app/ and public/
-          cp -r frontend/.next deploy/
-          cp -r frontend/app deploy/
-          cp -r frontend/public deploy/
-
-          # Copy compiled server into deploy/dist
-          mkdir -p deploy/dist
-          cp -r server/dist/* deploy/dist/
-
-          # Copy root package.json so npm start can run
-          cp package.json deploy/
-
-          # Install production dependencies in deploy folder
-          cd deploy
-          npm install --omit=dev
-
-          # Debug: list contents
-          ls -R .
-
-      # 4️⃣ Upload artifact (now includes node_modules)
-      - name: Upload deploy folder
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: deploy
-
-      - name: Debug deploy contents
-        run: |
-          echo "=== Deploy folder contents ==="
-          ls -la deploy/
-          echo "=== Looking for app directory ==="
-          ls -la deploy/app/ 2>/dev/null || echo "No app directory found"
-          echo "=== Looking for .next directory ==="
-          ls -la deploy/.next/ 2>/dev/null || echo "No .next directory found"
-          echo "=== Server dist contents ==="
-          ls -la deploy/dist/ 2>/dev/null || echo "No dist directory found"
-          echo "=== Package.json contents ==="
-          cat deploy/package.json 2>/dev/null || echo "No package.json found"
-          echo "=== Node modules check ==="
-          ls -la deploy/node_modules/ 2>/dev/null | head -10 || echo "No node_modules found"
-  
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download deploy artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
-          path: .
-
-      - name: Debug downloaded contents
-        run: |
-          echo "=== Downloaded contents ==="
-          ls -la
-          echo "=== Node modules check ==="
-          ls node_modules/ 2>/dev/null | head -10 || echo "No node_modules found"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -108,6 +22,4 @@ jobs:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: .
-
-# Force deployment
+          package: ./frontend

@@ -1,16 +1,7 @@
-'use client';
+'use client'
 
-import dynamic from 'next/dynamic';
-const ArticlesClient = dynamic(() => import('./ArticlesClient'), {
-  ssr: false,
-  loading: () => <div>🟡 Loading ArticlesClient…</div>
-});
-ArticlesClient.displayName = "ArticlesClientDynamic";
+import ArticlesClient from './ArticlesClient'
 
 export default function ArticlesPage() {
-  return (
-    <div>
-      <ArticlesClient />
-    </div>
-  );
+  return <ArticlesClient />
 }

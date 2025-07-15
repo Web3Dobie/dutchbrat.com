@@ -36,7 +36,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts"
-  ],
+, "app/api/articles/route.ts.", "app/api/latest-tweet/route.tss"  ],
   "exclude": [
     "node_modules"
   ]
