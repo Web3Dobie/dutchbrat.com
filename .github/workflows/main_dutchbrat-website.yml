@@ -8,15 +8,15 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     env:
-      # build‐time secrets for prerender
       NOTION_API_KEY:       ${{ secrets.NOTION_API_KEY }}
       NOTION_DB_ID:         ${{ secrets.NOTION_DB_ID }}
       TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
       TWITTER_USERNAME:     ${{ secrets.TWITTER_USERNAME }}
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -24,17 +24,17 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Install dependencies & build
+      - name: Install & Build Frontend
         working-directory: frontend
         run: |
           npm ci
           npm run build
 
-      - name: Package everything for Azure
-        # bundle .next, public, node_modules, plus config files
+      - name: Package for Azure
+        # produce a ZIP of everything Azure needs
         working-directory: frontend
         run: |
-          tar -czf ../deploy-package.tgz \
+          zip -r ../deploy-package.zip \
             .next \
             public \
             node_modules \
@@ -48,8 +48,10 @@ jobs:
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
+        env:
+          SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: './deploy-package.tgz'
+          package: './deploy-package.zip'
