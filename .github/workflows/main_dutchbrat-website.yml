@@ -1,5 +1,4 @@
 name: Deploy Next.js App to Azure Web App
-
 on:
   push:
     branches: [ main ]
@@ -16,11 +15,22 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Deploy to Azure Web App (only frontend)
+      # 1) install & build *inside* your frontend folder
+      - name: Install & Build Frontend
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npm run build
+
+      # 2) deploy the already‐built folder, and tell Azure NOT to rebuild
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
-          package: ./frontend
+          package: './frontend'
+        env:
+          SCM_DO_BUILD_DURING_DEPLOYMENT: false
+
 
