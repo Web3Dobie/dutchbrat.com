@@ -98,7 +98,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         env:
-          SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
+          SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
