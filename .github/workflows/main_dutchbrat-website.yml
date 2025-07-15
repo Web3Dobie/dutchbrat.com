@@ -24,47 +24,45 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Install & Build Frontend
+      - name: Create startup script
         working-directory: frontend
         run: |
-          npm ci
-          npm run build
-
-      - name: Create web.config for Azure
-        working-directory: frontend
-        run: |
-          cat > web.config << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <system.webServer>
-              <handlers>
-                <add name="iisnode" path="server.js" verb="*" modules="iisnode"/>
-              </handlers>
-              <rewrite>
-                <rules>
-                  <rule name="NodeInspector" patternSyntax="ECMAScript" stopProcessing="true">
-                    <match url="^server.js\/debug[\/]?" />
-                  </rule>
-                  <rule name="StaticContent">
-                    <conditions>
-                      <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="True"/>
-                    </conditions>
-                    <action type="Rewrite" url="server.js"/>
-                  </rule>
-                </rules>
-              </rewrite>
-            </system.webServer>
-          </configuration>
-          EOF
-
-      - name: Package for Azure
-        working-directory: frontend
-        run: |
-          # Build the list of files to include
-          files_to_zip=".next public node_modules package.json web.config"
+          cat > startup.sh << 'EOF'
+          #!/bin/bash
+          echo "Starting Next.js application..."
           
-          # Only include next.config.js if it exists
+          # Install dependencies if node_modules is missing
+          if [ ! -d "node_modules" ]; then
+            echo "Installing dependencies..."
+            npm ci
+          fi
+          
+          # Build the application if .next is missing
+          if [ ! -d ".next" ]; then
+            echo "Building application..."
+            npm run build
+          fi
+          
+          # Start the application
+          echo "Starting the application..."
+          npm start
+          EOF
+          
+          chmod +x startup.sh
+
+      - name: Package for Azure with startup script
+        working-directory: frontend
+        run: |
+          # Package source files and let Azure build
+          files_to_zip="pages components lib styles public package.json package-lock.json startup.sh"
+          
+          # Include optional files if they exist
           [ -f next.config.js ] && files_to_zip="$files_to_zip next.config.js"
+          [ -f tailwind.config.js ] && files_to_zip="$files_to_zip tailwind.config.js"
+          [ -f postcss.config.js ] && files_to_zip="$files_to_zip postcss.config.js"
+          [ -f tsconfig.json ] && files_to_zip="$files_to_zip tsconfig.json"
+          [ -d "app" ] && files_to_zip="$files_to_zip app"
+          [ -d "src" ] && files_to_zip="$files_to_zip src"
           
           # Create the deployment package
           zip -r ../deploy-package.zip $files_to_zip
@@ -77,7 +75,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         env:
-          SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
+          SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
