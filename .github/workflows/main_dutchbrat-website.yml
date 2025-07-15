@@ -87,7 +87,7 @@ jobs:
       - name: Configure Azure App Settings
         run: |
           az webapp config appsettings set \
-            --resource-group $(az webapp show --name dutchbrat-website --query resourceGroup -o tsv) \
+            --resource-group Web3Dobie \
             --name dutchbrat-website \
             --settings \
               NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}" \
