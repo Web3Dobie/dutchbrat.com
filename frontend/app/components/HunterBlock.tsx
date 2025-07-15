@@ -18,7 +18,20 @@ type Tweet = {
   id: string
   text: string
   created_at: string
-  url: string
+  public_metrics: {
+    like_count: number
+    retweet_count: number
+    reply_count: number
+  }
+}
+
+type TwitterResponse = {
+  user: {
+    id: string
+    username: string
+    name: string
+  }
+  tweets: Tweet[]
 }
 
 export default function HunterBlock() {
@@ -40,7 +53,7 @@ export default function HunterBlock() {
         )
         setArticle(sorted[0] || null)
       } catch (err: any) {
-        console.error(err)
+        console.error('Articles error:', err)
         setError('Could not load the latest article.')
       } finally {
         setLoading(l => ({ ...l, article: false }))
@@ -51,10 +64,13 @@ export default function HunterBlock() {
       try {
         const res = await fetch('/api/latest-tweet')
         if (!res.ok) throw new Error(`Tweet fetch failed: ${res.status}`)
-        const data: Tweet = await res.json()
-        setTweet(data)
+        const data: TwitterResponse = await res.json()
+        
+        // Get the latest tweet from the response
+        const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
+        setTweet(latestTweet)
       } catch (err: any) {
-        console.error(err)
+        console.error('Twitter error:', err)
         setError('Could not load the latest tweet.')
       } finally {
         setLoading(l => ({ ...l, tweet: false }))
@@ -64,6 +80,11 @@ export default function HunterBlock() {
     fetchArticles()
     fetchTweet()
   }, [])
+
+  // Helper function to create Twitter URL
+  const getTweetUrl = (tweet: Tweet) => {
+    return `https://x.com/Web3_Dobie/status/${tweet.id}`
+  }
 
   return (
     <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
@@ -80,7 +101,7 @@ export default function HunterBlock() {
           Hunter is my trusted Web3 Doberman — part analyst, part watchdog.
           He helps sniff out alpha, barks at scams, and keeps this site running
           with daily insights on X, commentary, and briefings. Follow his
-          instincts. They’re usually right.
+          instincts. They're usually right.
         </p>
         <a
           href="https://x.com/@Web3_Dobie"
@@ -126,8 +147,13 @@ export default function HunterBlock() {
           ) : tweet ? (
             <>
               <p className="text-base text-white mb-2">{tweet.text}</p>
+              <div className="flex items-center gap-4 text-sm text-gray-400 mb-2">
+                <span>❤️ {tweet.public_metrics.like_count}</span>
+                <span>🔄 {tweet.public_metrics.retweet_count}</span>
+                <span>💬 {tweet.public_metrics.reply_count}</span>
+              </div>
               <Link
-                href={tweet.url}
+                href={getTweetUrl(tweet)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-500 hover:underline"

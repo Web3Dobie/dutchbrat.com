@@ -31,17 +31,13 @@ jobs:
           #!/bin/bash
           echo "Starting Next.js application..."
           
-          # Install dependencies if node_modules is missing
-          if [ ! -d "node_modules" ]; then
-            echo "Installing dependencies..."
-            npm ci
-          fi
+          # Install all dependencies including devDependencies
+          echo "Installing dependencies..."
+          npm ci --production=false
           
-          # Build the application if .next is missing
-          if [ ! -d ".next" ]; then
-            echo "Building application..."
-            npm run build
-          fi
+          # Build the application
+          echo "Building application..."
+          npm run build
           
           # Start the application
           echo "Starting the application..."
@@ -53,24 +49,51 @@ jobs:
       - name: Package for Azure with startup script
         working-directory: frontend
         run: |
-          # Package source files and let Azure build
-          files_to_zip="pages components lib styles public package.json package-lock.json startup.sh"
+          # Create a more robust package for App Router structure
+          echo "Creating deployment package..."
           
-          # Include optional files if they exist
-          [ -f next.config.js ] && files_to_zip="$files_to_zip next.config.js"
-          [ -f tailwind.config.js ] && files_to_zip="$files_to_zip tailwind.config.js"
-          [ -f postcss.config.js ] && files_to_zip="$files_to_zip postcss.config.js"
-          [ -f tsconfig.json ] && files_to_zip="$files_to_zip tsconfig.json"
-          [ -d "app" ] && files_to_zip="$files_to_zip app"
-          [ -d "src" ] && files_to_zip="$files_to_zip src"
+          # Start with essential files that must exist
+          zip -r ../deploy-package.zip package.json startup.sh
           
-          # Create the deployment package
-          zip -r ../deploy-package.zip $files_to_zip
+          # Add package-lock.json if it exists
+          [ -f package-lock.json ] && zip -r ../deploy-package.zip package-lock.json
+          
+          # Add the app directory (App Router)
+          [ -d "app" ] && zip -r ../deploy-package.zip app
+          
+          # Add other common directories if they exist
+          [ -d "pages" ] && zip -r ../deploy-package.zip pages
+          [ -d "src" ] && zip -r ../deploy-package.zip src
+          [ -d "components" ] && zip -r ../deploy-package.zip components
+          [ -d "lib" ] && zip -r ../deploy-package.zip lib
+          [ -d "styles" ] && zip -r ../deploy-package.zip styles
+          [ -d "public" ] && zip -r ../deploy-package.zip public
+          
+          # Add config files that exist
+          [ -f next.config.js ] && zip -r ../deploy-package.zip next.config.js
+          [ -f tailwind.config.ts ] && zip -r ../deploy-package.zip tailwind.config.ts
+          [ -f tailwind.config.js ] && zip -r ../deploy-package.zip tailwind.config.js
+          [ -f postcss.config.js ] && zip -r ../deploy-package.zip postcss.config.js
+          [ -f tsconfig.json ] && zip -r ../deploy-package.zip tsconfig.json
+          [ -f next-env.d.ts ] && zip -r ../deploy-package.zip next-env.d.ts
+          
+          echo "Package created successfully"
 
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configure Azure App Settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group $(az webapp show --name dutchbrat-website --query resourceGroup -o tsv) \
+            --name dutchbrat-website \
+            --settings \
+              NOTION_API_KEY="${{ secrets.NOTION_API_KEY }}" \
+              NOTION_DB_ID="${{ secrets.NOTION_DB_ID }}" \
+              TWITTER_BEARER_TOKEN="${{ secrets.TWITTER_BEARER_TOKEN }}" \
+              TWITTER_USERNAME="${{ secrets.TWITTER_USERNAME }}"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
@@ -81,4 +104,3 @@ jobs:
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
           package: './deploy-package.zip'
-# force deployment

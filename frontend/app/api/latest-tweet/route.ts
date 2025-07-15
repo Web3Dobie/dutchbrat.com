@@ -1,67 +1,112 @@
 // app/api/latest-tweet/route.ts
-export const dynamic = 'force-dynamic'
-import { NextRequest, NextResponse } from 'next/server';
+import { fetchTwitterData } from '../../../lib/twitterApi';
+import { NextResponse } from 'next/server';
 
-export async function GET(_req: NextRequest): Promise<NextResponse> {
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
+interface TwitterUser {
+  id: string;
+  username: string;
+  name: string;
+}
+
+interface TwitterTweet {
+  id: string;
+  text: string;
+  created_at: string;
+  public_metrics: {
+    like_count: number;
+    retweet_count: number;
+    reply_count: number;
+  };
+}
+
+interface TwitterResponse {
+  user: TwitterUser;
+  tweets: TwitterTweet[];
+}
+
+// Fallback data when Twitter API is unavailable
+const fallbackResponse: TwitterResponse = {
+  user: {
+    id: "fallback",
+    username: process.env.TWITTER_USERNAME || "dutchbrat",
+    name: "DutchBrat"
+  },
+  tweets: [{
+    id: "fallback_1",
+    text: "Twitter API temporarily unavailable due to rate limits. Latest tweets will be available soon.",
+    created_at: new Date().toISOString(),
+    public_metrics: {
+      like_count: 0,
+      retweet_count: 0,
+      reply_count: 0
+    }
+  }]
+};
+
+export async function GET(request: Request): Promise<NextResponse> {
   try {
-    const BEARER = process.env.TWITTER_BEARER_TOKEN;
-    if (!BEARER) throw new Error('TWITTER_BEARER_TOKEN not set');
-
-    const USER = process.env.TWITTER_USERNAME;
-    if (!USER) throw new Error('TWITTER_USERNAME not set');
-
-    // 1) Lookup user ID
-    const userRes = await fetch(
-      `https://api.twitter.com/2/users/by/username/${USER}`,
-      { headers: { Authorization: `Bearer ${BEARER}` } }
-    );
-    if (!userRes.ok) {
-      const body = await userRes.text();
-      console.error(`Twitter user API ${userRes.status}:`, body);
+    const { searchParams } = new URL(request.url);
+    const username = searchParams.get('username') || process.env.TWITTER_USERNAME;
+    
+    if (!username) {
       return NextResponse.json(
-        { error: `User lookup failed (${userRes.status})` },
-        { status: 502 }
+        { error: 'Username is required' },
+        { status: 400 }
       );
     }
-    const userData = await userRes.json();
-    const id = userData.data?.id;
-    if (!id) {
-      console.error('Twitter response missing data.id:', userData);
+    
+    // Get user ID first (this is cached)
+    const userResponse = await fetchTwitterData('users/by/username/' + username);
+    
+    if (!userResponse.data) {
       return NextResponse.json(
-        { error: 'Unable to extract user ID from Twitter' },
-        { status: 502 }
+        { error: 'User not found' },
+        { status: 404 }
       );
     }
-
-    // 2) Fetch latest tweet
-    const tweetRes = await fetch(
-      `https://api.twitter.com/2/users/${id}/tweets?max_results=5`,
-      { headers: { Authorization: `Bearer ${BEARER}` } }
-    );
-    if (!tweetRes.ok) {
-      const body = await tweetRes.text();
-      console.error(`Twitter tweets API ${tweetRes.status}:`, body);
-      return NextResponse.json(
-        { error: `Tweet fetch failed (${tweetRes.status})` },
-        { status: 502 }
-      );
+    
+    const userId: string = userResponse.data.id;
+    
+    // Get recent tweets (this is also cached)
+    const tweetsResponse = await fetchTwitterData(`users/${userId}/tweets`, {
+      'max_results': '10',
+      'tweet.fields': 'created_at,public_metrics,text',
+      'exclude': 'retweets,replies'
+    });
+    
+    const response: TwitterResponse = {
+      user: userResponse.data,
+      tweets: tweetsResponse.data || []
+    };
+    
+    return NextResponse.json(response);
+    
+  } catch (error) {
+    console.error('Twitter API route error:', error);
+    
+    if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
+      console.log('Rate limit exceeded, returning fallback data');
+      // Return fallback data instead of error
+      return NextResponse.json(fallbackResponse, { 
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-cache',
+          'X-Twitter-Status': 'rate-limited'
+        }
+      });
     }
-    const tweetData = await tweetRes.json();
-    const tweet = tweetData.data?.[0];
-    if (!tweet) {
-      return NextResponse.json(
-        { error: 'No tweets returned by Twitter' },
-        { status: 204 }
-      );
-    }
-
-    // 3) Success
-    return NextResponse.json(tweet);
-  } catch (err: any) {
-    console.error('Unhandled error in /api/latest-tweet:', err);
-    return NextResponse.json(
-      { error: err.message || 'Unknown server error' },
-      { status: 500 }
-    );
+    
+    // For other errors, return fallback data too
+    console.log('Twitter API error, returning fallback data');
+    return NextResponse.json(fallbackResponse, { 
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-cache',
+        'X-Twitter-Status': 'error'
+      }
+    });
   }
 }
