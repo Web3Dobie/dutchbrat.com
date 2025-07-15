@@ -1,4 +1,5 @@
 // app/api/latest-tweet/route.ts
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(_req: NextRequest): Promise<NextResponse> {
