@@ -87,40 +87,43 @@ export default function HunterBlock() {
   }
 
   return (
-    <section className="mt-20 flex flex-col md:flex-row items-center gap-8 border-t border-gray-800 pt-10">
-      {/* Hero image + text */}
-      <Image
-        src={HunterSmiling}
-        alt="Hunter the Web3Dobie"
-        width={220}
-        height={220}
-        className="rounded-xl border-4 border-emerald-500 shadow-lg"
-      />
-      <div className="text-lg max-w-xl">
-        <p className="mb-4">
-          Hunter is my trusted Web3 Doberman — part analyst, part watchdog.
-          He helps sniff out alpha, barks at scams, and keeps this site running
-          with daily insights on X, commentary, and briefings. Follow his
-          instincts. They're usually right.
-        </p>
-        <a
-          href="https://x.com/@Web3_Dobie"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block text-emerald-400 font-semibold hover:underline"
-        >
-          → Follow @Web3_Dobie on X 🐾
-        </a>
+    <section className="mt-20 border-t border-gray-800 pt-10">
+      {/* Hero section - image + text side by side */}
+      <div className="flex flex-col md:flex-row items-center gap-8 mb-12">
+        <Image
+          src={HunterSmiling}
+          alt="Hunter the Web3Dobie"
+          width={220}
+          height={220}
+          className="rounded-xl border-4 border-emerald-500 shadow-lg flex-shrink-0"
+        />
+        <div className="text-lg max-w-xl">
+          <p className="mb-4">
+            Hunter is my trusted Web3 Doberman — part analyst, part watchdog.
+            He helps sniff out alpha, barks at scams, and keeps this site running
+            with daily insights on X, commentary, and briefings. Follow his
+            instincts. They're usually right.
+          </p>
+          <a
+            href="https://x.com/@Web3_Dobie"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-emerald-400 font-semibold hover:underline"
+          >
+            → Follow @Web3_Dobie on X 🐾
+          </a>
+        </div>
       </div>
 
-      {/* Cards container */}
-      <div className="mt-8 w-full space-y-6">
-        {error && (
-          <div className="text-red-500 px-4">{error}</div>
-        )}
+      {/* Error message */}
+      {error && (
+        <div className="text-red-500 px-4 mb-6 max-w-4xl mx-auto">{error}</div>
+      )}
 
+      {/* Cards section - underneath hero, aligned with text width */}
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Latest Article Card */}
-        <div className="mb-6 p-4 border border-gray-700 rounded-xl bg-gray-900">
+        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900">
           <p className="text-sm text-gray-400 mb-2">Latest Article</p>
           {loading.article ? (
             <p className="text-gray-500">Loading article…</p>

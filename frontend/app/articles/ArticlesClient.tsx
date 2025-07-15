@@ -70,7 +70,7 @@ export default function ArticlesClient() {
         tryFetch();
     }, []);
 
-    // --- NEW: Auto-open article if ?articleId=... in query string
+    // Auto-open article if ?articleId=... in query string
     useEffect(() => {
         const articleId = getArticleIdFromQuery();
         if (
@@ -80,6 +80,17 @@ export default function ArticlesClient() {
         ) {
             const article = articles.find(a => a.id === articleId);
             if (article) {
+                // Auto-expand the year and month for this article
+                const date = new Date(article.date);
+                const year = date.getFullYear().toString();
+                const month = date.toLocaleString('default', { month: 'long' });
+                const monthKey = `${year}-${month}`;
+                
+                // Expand the year and month
+                setExpandedYears(prev => ({ ...prev, [year]: true }));
+                setExpandedMonths(prev => ({ ...prev, [monthKey]: true }));
+                
+                // Open the article
                 handleToggleArticle(article);
             }
         }
