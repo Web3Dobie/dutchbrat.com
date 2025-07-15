@@ -16,10 +16,11 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Deploy to Azure Web App
+      - name: Deploy to Azure Web App (only frontend)
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'dutchbrat-website'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8333198B22C94E4F8045643464BA21A2 }}
           package: ./frontend
+
