@@ -25,25 +25,20 @@ interface TwitterTweet {
 interface TwitterResponse {
   user: TwitterUser;
   tweets: TwitterTweet[];
+  fallback?: boolean;
+  fallbackReason?: string;
 }
 
-// Fallback data when Twitter API is unavailable
+// Updated fallback response with account link
 const fallbackResponse: TwitterResponse = {
   user: {
     id: "fallback",
-    username: process.env.TWITTER_USERNAME || "dutchbrat",
-    name: "DutchBrat"
+    username: process.env.TWITTER_USERNAME || "Web3_Dobie",
+    name: "Web3 Dobie"
   },
-  tweets: [{
-    id: "fallback_1",
-    text: "Twitter API temporarily unavailable due to rate limits. Latest tweets will be available soon.",
-    created_at: new Date().toISOString(),
-    public_metrics: {
-      like_count: 0,
-      retweet_count: 0,
-      reply_count: 0
-    }
-  }]
+  tweets: [], // Empty tweets array to trigger fallback display
+  fallback: true,
+  fallbackReason: "rate_limit"
 };
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -90,7 +85,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
       console.log('Rate limit exceeded, returning fallback data');
       // Return fallback data instead of error
-      return NextResponse.json(fallbackResponse, { 
+      return NextResponse.json({
+        ...fallbackResponse,
+        fallbackReason: "rate_limit"
+      }, { 
         status: 200,
         headers: {
           'Cache-Control': 'no-cache',
@@ -101,7 +99,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     
     // For other errors, return fallback data too
     console.log('Twitter API error, returning fallback data');
-    return NextResponse.json(fallbackResponse, { 
+    return NextResponse.json({
+      ...fallbackResponse,
+      fallbackReason: "api_error"
+    }, { 
       status: 200,
       headers: {
         'Cache-Control': 'no-cache',

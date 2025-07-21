@@ -32,11 +32,14 @@ type TwitterResponse = {
     name: string
   }
   tweets: Tweet[]
+  fallback?: boolean
+  fallbackReason?: string
 }
 
 export default function HunterBlock() {
   const [article, setArticle] = useState<Article | null>(null)
   const [tweet, setTweet] = useState<Tweet | null>(null)
+  const [twitterData, setTwitterData] = useState<TwitterResponse | null>(null)
   const [loading, setLoading] = useState({ article: true, tweet: true })
   const [error, setError] = useState<string | null>(null)
 
@@ -66,6 +69,9 @@ export default function HunterBlock() {
         if (!res.ok) throw new Error(`Tweet fetch failed: ${res.status}`)
         const data: TwitterResponse = await res.json()
         
+        // Store the full response for fallback handling
+        setTwitterData(data)
+        
         // Get the latest tweet from the response
         const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
         setTweet(latestTweet)
@@ -84,6 +90,17 @@ export default function HunterBlock() {
   // Helper function to create Twitter URL
   const getTweetUrl = (tweet: Tweet) => {
     return `https://x.com/Web3_Dobie/status/${tweet.id}`
+  }
+
+  // Helper function to get Twitter profile URL
+  const getTwitterProfileUrl = () => {
+    const username = twitterData?.user?.username || 'Web3_Dobie'
+    return `https://x.com/${username}`
+  }
+
+  // Check if we should show fallback
+  const shouldShowFallback = () => {
+    return twitterData?.fallback || (!tweet && !loading.tweet)
   }
 
   return (
@@ -147,6 +164,42 @@ export default function HunterBlock() {
           <p className="text-sm text-blue-400 mb-2">Latest Tweet</p>
           {loading.tweet ? (
             <p className="text-gray-500">Loading tweet…</p>
+          ) : shouldShowFallback() ? (
+            /* Fallback: Show Twitter account link instead of error message */
+            <div className="text-center py-4">
+              <div className="mb-3">
+                <svg 
+                  className="w-12 h-12 mx-auto text-blue-400 mb-2" 
+                  fill="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </div>
+              <p className="text-gray-300 mb-3">
+                Latest tweets temporarily unavailable
+              </p>
+              <Link
+                href={getTwitterProfileUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                <svg 
+                  className="w-4 h-4" 
+                  fill="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+                Visit @{twitterData?.user?.username || 'Web3_Dobie'} on X
+              </Link>
+              <p className="text-xs text-gray-500 mt-2">
+                {twitterData?.fallbackReason === 'rate_limit' 
+                  ? 'Rate limit reached - check back soon!' 
+                  : 'Service temporarily unavailable'}
+              </p>
+            </div>
           ) : tweet ? (
             <>
               <p className="text-base text-white mb-2">{tweet.text}</p>
@@ -165,7 +218,18 @@ export default function HunterBlock() {
               </Link>
             </>
           ) : (
-            <p className="text-gray-500">No tweet available.</p>
+            /* Final fallback if no tweet and no fallback data */
+            <div className="text-center py-4">
+              <p className="text-gray-500 mb-3">No tweet available</p>
+              <Link
+                href={getTwitterProfileUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline"
+              >
+                Visit @Web3_Dobie on X
+              </Link>
+            </div>
           )}
         </div>
       </div>
