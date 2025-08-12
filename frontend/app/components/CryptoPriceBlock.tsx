@@ -6,7 +6,7 @@ import Image from 'next/image'
 type TokenPrice = {
     price: number
     change24h: number
-    source?: 'binance' | 'coingecko'
+    source?: 'binance' | 'mexc'
 }
 
 type Prices = {
@@ -47,13 +47,12 @@ const BINANCE_TOKENS = {
     }
 }
 
-// CoinGecko-only tokens (not available on Binance)
-const COINGECKO_TOKENS = {
-    // Add your token here - replace with actual values
-    'world3': {
-        name: 'wai',  // internal key
-        ticker: 'WAI',          // display symbol
-        icon: '/icons/wai.png'  // icon path
+// MEXC-only tokens (not available on Binance)
+const MEXC_TOKENS = {
+    'WAIUSDT': {
+        name: 'wai',
+        ticker: 'WAI',
+        icon: '/icons/wai.png'
     }
 }
 
@@ -86,35 +85,30 @@ export default function CryptoPriceBlock() {
         return await Promise.all(pricePromises)
     }
 
-    const fetchCoinGeckoPrices = async () => {
-        const coinGeckoIds = Object.keys(COINGECKO_TOKENS)
+    const fetchMEXCPrices = async () => {
+        const symbols = Object.keys(MEXC_TOKENS)
 
-        if (coinGeckoIds.length === 0) return []
+        if (symbols.length === 0) return []
 
-        const idsString = coinGeckoIds.join(',')
-        const response = await fetch(
-            `https://api.coingecko.com/api/v3/simple/price?ids=${idsString}&vs_currencies=usd&include_24hr_change=true`
-        )
+        const pricePromises = symbols.map(async (symbol) => {
+            const response = await fetch(
+                `https://api.mexc.com/api/v3/ticker/24hr?symbol=${symbol}`
+            )
 
-        if (!response.ok) {
-            throw new Error('Failed to fetch from CoinGecko')
-        }
-
-        const data = await response.json()
-
-        return coinGeckoIds.map(id => {
-            const tokenData = data[id]
-            if (!tokenData) {
-                throw new Error(`No data for ${id} from CoinGecko`)
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${symbol} from MEXC`)
             }
 
+            const data = await response.json()
             return {
-                coinGeckoId: id,
-                price: tokenData.usd,
-                change24h: tokenData.usd_24h_change,
-                source: 'coingecko' as const
+                symbol,
+                price: parseFloat(data.lastPrice),
+                change24h: parseFloat(data.priceChangePercent),
+                source: 'mexc' as const
             }
         })
+
+        return await Promise.all(pricePromises)
     }
 
     const fetchAllPrices = async () => {
@@ -122,13 +116,13 @@ export default function CryptoPriceBlock() {
             setError(null)
 
             // Fetch from both sources in parallel
-            const [binanceResults, coinGeckoResults] = await Promise.all([
+            const [binanceResults, mexcResults] = await Promise.all([
                 fetchBinancePrices().catch(err => {
                     console.warn('Binance fetch failed:', err)
                     return []
                 }),
-                fetchCoinGeckoPrices().catch(err => {
-                    console.warn('CoinGecko fetch failed:', err)
+                fetchMEXCPrices().catch(err => {
+                    console.warn('MEXC fetch failed:', err)
                     return []
                 })
             ])
@@ -148,9 +142,9 @@ export default function CryptoPriceBlock() {
                 }
             })
 
-            // Process CoinGecko results
-            coinGeckoResults.forEach(({ coinGeckoId, price, change24h, source }) => {
-                const config = COINGECKO_TOKENS[coinGeckoId as keyof typeof COINGECKO_TOKENS]
+            // Process MEXC results
+            mexcResults.forEach(({ symbol, price, change24h, source }) => {
+                const config = MEXC_TOKENS[symbol as keyof typeof MEXC_TOKENS]
                 if (config) {
                     newPrices[config.name] = {
                         price,
@@ -161,12 +155,10 @@ export default function CryptoPriceBlock() {
             })
 
             setPrices(newPrices)
-            setLoading(false)
 
         } catch (error) {
             console.error('Error fetching prices:', error)
             setError('Failed to fetch prices')
-            setLoading(false)
 
             // Fallback to dummy data for development
             setPrices({
@@ -174,8 +166,11 @@ export default function CryptoPriceBlock() {
                 ethereum: { price: 3420, change24h: -1.23, source: 'binance' },
                 solana: { price: 145, change24h: 3.67, source: 'binance' },
                 xrp: { price: 0.56, change24h: -0.89, source: 'binance' },
-                dogecoin: { price: 0.085, change24h: 1.45, source: 'binance' }
+                dogecoin: { price: 0.085, change24h: 1.45, source: 'binance' },
+                wai: { price: 0.25, change24h: 0.00, source: 'mexc' }
             })
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -194,13 +189,15 @@ export default function CryptoPriceBlock() {
         const binanceConfig = Object.values(BINANCE_TOKENS).find(config => config.name === tokenName)
         if (binanceConfig) return binanceConfig
 
-        // Then check CoinGecko tokens
-        return Object.values(COINGECKO_TOKENS).find(config => config.name === tokenName)
+        // Check MEXC tokens
+        return Object.values(MEXC_TOKENS).find(config => config.name === tokenName)
     }
 
     // Helper function to format price
     const formatPrice = (price: number): string => {
-        if (price < 1) {
+        if (price < 0.01) {
+            return price.toFixed(6)
+        } else if (price < 1) {
             return price.toFixed(4)
         } else if (price < 100) {
             return price.toFixed(2)
@@ -247,21 +244,40 @@ export default function CryptoPriceBlock() {
                             {/* Token Icon */}
                             <div className="flex justify-center mb-2">
                                 <div className="relative w-8 h-8">
-                                    <Image
-                                        src={config.icon}
-                                        alt={`${config.ticker} icon`}
-                                        fill
-                                        className="object-contain"
-                                        onError={(e) => {
-                                            // Fallback to text if icon fails to load
-                                            const target = e.target as HTMLImageElement
-                                            target.style.display = 'none'
-                                            target.parentElement?.insertAdjacentHTML(
-                                                'afterbegin',
-                                                `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
-                                            )
-                                        }}
-                                    />
+                                    {/* Use regular img tag for BNB to avoid Next.js optimization issues */}
+                                    {config.ticker === 'BNB' ? (
+                                        <img
+                                            src={config.icon}
+                                            alt={`${config.ticker} icon`}
+                                            className="w-8 h-8 object-contain"
+                                            onLoad={() => console.log(`✅ ${config.ticker} icon loaded successfully`)}
+                                            onError={(e) => {
+                                                console.error(`❌ ${config.ticker} icon failed to load:`, config.icon)
+                                                const target = e.target as HTMLImageElement
+                                                target.style.display = 'none'
+                                                target.parentElement?.insertAdjacentHTML(
+                                                    'afterbegin',
+                                                    `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
+                                                )
+                                            }}
+                                        />
+                                    ) : (
+                                        <Image
+                                            src={config.icon}
+                                            alt={`${config.ticker} icon`}
+                                            fill
+                                            className="object-contain"
+                                            onError={(e) => {
+                                                // Fallback to text if icon fails to load
+                                                const target = e.target as HTMLImageElement
+                                                target.style.display = 'none'
+                                                target.parentElement?.insertAdjacentHTML(
+                                                    'afterbegin',
+                                                    `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
+                                                )
+                                            }}
+                                        />
+                                    )}
                                 </div>
                             </div>
 
@@ -271,7 +287,7 @@ export default function CryptoPriceBlock() {
                                 {/* Optional: Show source indicator */}
                                 {data.source && (
                                     <span className="ml-1 text-xs opacity-60">
-                                        ({data.source === 'binance' ? 'B' : 'CG'})
+                                        ({data.source === 'binance' ? 'B' : 'M'})
                                     </span>
                                 )}
                             </p>
@@ -296,7 +312,7 @@ export default function CryptoPriceBlock() {
             {/* Data source indicator */}
             <div className="text-center mt-4">
                 <p className="text-xs text-gray-500">
-                    Data from Binance & CoinGecko • Updated every 30s
+                    Data from Binance & MEXC • Updated every 30s
                 </p>
             </div>
         </div>
