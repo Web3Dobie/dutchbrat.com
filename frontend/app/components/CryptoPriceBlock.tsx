@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { createChart, ColorType } from 'lightweight-charts'
+import { createChart, ColorType, IChartApi } from 'lightweight-charts'
 
 type TokenPrice = {
     price: number
@@ -91,7 +91,7 @@ function ChartModal({
     tokenData: TokenPrice
 }) {
     const chartContainerRef = useRef<HTMLDivElement>(null)
-    const chartRef = useRef<any>(null)
+    const chartRef = useRef<IChartApi | null>(null)
     const [timeframe, setTimeframe] = useState<TimeFrame>('15m')
     const [chartData, setChartData] = useState<OHLCV[]>([])
     const [loading, setLoading] = useState(false)
@@ -177,7 +177,7 @@ function ChartModal({
 
         chartRef.current = chart
 
-        // Add candlestick series
+        // Add candlestick series (with type assertion for v5)
         const candlestickSeries = (chart as any).addCandlestickSeries({
             upColor: '#10b981',
             downColor: '#ef4444',
