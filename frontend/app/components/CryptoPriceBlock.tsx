@@ -38,6 +38,16 @@ const TOKEN_CONFIG = {
         name: 'dogecoin',
         ticker: 'DOGE',
         icon: '/icons/doge.png'
+    },
+    'BNBUSDT': {
+        name: 'binance coin',
+        ticker: 'BNB',
+        icon: '/icons/bnb.png'
+    },
+    'WAIUSDT': {
+        name: 'World3.ai',
+        ticker: 'WAI',
+        icon: '/icons/wai.png'
     }
 }
 
