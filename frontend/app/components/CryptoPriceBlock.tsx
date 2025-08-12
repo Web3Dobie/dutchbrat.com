@@ -6,6 +6,7 @@ import Image from 'next/image'
 type TokenPrice = {
     price: number
     change24h: number
+    source?: 'binance' | 'coingecko'
 }
 
 type Prices = {
@@ -13,7 +14,7 @@ type Prices = {
 }
 
 // Token mapping: Binance symbol -> display info
-const TOKEN_CONFIG = {
+const BINANCE_TOKENS = {
     'BTCUSDT': {
         name: 'bitcoin',
         ticker: 'BTC',
@@ -46,46 +47,115 @@ const TOKEN_CONFIG = {
     }
 }
 
+// CoinGecko-only tokens (not available on Binance)
+const COINGECKO_TOKENS = {
+    // Add your token here - replace with actual values
+    'WAI': {
+        name: 'World3',  // internal key
+        ticker: 'WAI',          // display symbol
+        icon: '/icons/wai.png'  // icon path
+    }
+}
+
 export default function CryptoPriceBlock() {
     const [prices, setPrices] = useState<Prices>({})
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     const fetchBinancePrices = async () => {
+        const symbols = Object.keys(BINANCE_TOKENS)
+
+        const pricePromises = symbols.map(async (symbol) => {
+            const response = await fetch(
+                `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`
+            )
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${symbol} from Binance`)
+            }
+
+            const data = await response.json()
+            return {
+                symbol,
+                price: parseFloat(data.lastPrice),
+                change24h: parseFloat(data.priceChangePercent),
+                source: 'binance' as const
+            }
+        })
+
+        return await Promise.all(pricePromises)
+    }
+
+    const fetchCoinGeckoPrices = async () => {
+        const coinGeckoIds = Object.keys(COINGECKO_TOKENS)
+
+        if (coinGeckoIds.length === 0) return []
+
+        const idsString = coinGeckoIds.join(',')
+        const response = await fetch(
+            `https://api.coingecko.com/api/v3/simple/price?ids=${idsString}&vs_currencies=usd&include_24hr_change=true`
+        )
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch from CoinGecko')
+        }
+
+        const data = await response.json()
+
+        return coinGeckoIds.map(id => {
+            const tokenData = data[id]
+            if (!tokenData) {
+                throw new Error(`No data for ${id} from CoinGecko`)
+            }
+
+            return {
+                coinGeckoId: id,
+                price: tokenData.usd,
+                change24h: tokenData.usd_24h_change,
+                source: 'coingecko' as const
+            }
+        })
+    }
+
+    const fetchAllPrices = async () => {
         try {
             setError(null)
 
-            // Get symbols from our config
-            const symbols = Object.keys(TOKEN_CONFIG)
-
-            // Fetch current prices from Binance
-            const pricePromises = symbols.map(async (symbol) => {
-                const response = await fetch(
-                    `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`
-                )
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch ${symbol}`)
-                }
-
-                const data = await response.json()
-                return {
-                    symbol,
-                    price: parseFloat(data.lastPrice),
-                    change24h: parseFloat(data.priceChangePercent)
-                }
-            })
-
-            const results = await Promise.all(pricePromises)
+            // Fetch from both sources in parallel
+            const [binanceResults, coinGeckoResults] = await Promise.all([
+                fetchBinancePrices().catch(err => {
+                    console.warn('Binance fetch failed:', err)
+                    return []
+                }),
+                fetchCoinGeckoPrices().catch(err => {
+                    console.warn('CoinGecko fetch failed:', err)
+                    return []
+                })
+            ])
 
             // Transform results into our expected format
             const newPrices: Prices = {}
-            results.forEach(({ symbol, price, change24h }) => {
-                const config = TOKEN_CONFIG[symbol as keyof typeof TOKEN_CONFIG]
+
+            // Process Binance results
+            binanceResults.forEach(({ symbol, price, change24h, source }) => {
+                const config = BINANCE_TOKENS[symbol as keyof typeof BINANCE_TOKENS]
                 if (config) {
                     newPrices[config.name] = {
                         price,
-                        change24h
+                        change24h,
+                        source
+                    }
+                }
+            })
+
+            // Process CoinGecko results
+            coinGeckoResults.forEach(({ coinGeckoId, price, change24h, source }) => {
+                const config = COINGECKO_TOKENS[coinGeckoId as keyof typeof COINGECKO_TOKENS]
+                if (config) {
+                    newPrices[config.name] = {
+                        price,
+                        change24h,
+                        source
                     }
                 }
             })
@@ -94,33 +164,38 @@ export default function CryptoPriceBlock() {
             setLoading(false)
 
         } catch (error) {
-            console.error('Error fetching Binance prices:', error)
+            console.error('Error fetching prices:', error)
             setError('Failed to fetch prices')
             setLoading(false)
 
             // Fallback to dummy data for development
             setPrices({
-                bitcoin: { price: 67500, change24h: 2.45 },
-                ethereum: { price: 3420, change24h: -1.23 },
-                solana: { price: 145, change24h: 3.67 },
-                xrp: { price: 0.56, change24h: -0.89 },
-                dogecoin: { price: 0.085, change24h: 1.45 }
+                bitcoin: { price: 67500, change24h: 2.45, source: 'binance' },
+                ethereum: { price: 3420, change24h: -1.23, source: 'binance' },
+                solana: { price: 145, change24h: 3.67, source: 'binance' },
+                xrp: { price: 0.56, change24h: -0.89, source: 'binance' },
+                dogecoin: { price: 0.085, change24h: 1.45, source: 'binance' }
             })
         }
     }
 
     useEffect(() => {
-        fetchBinancePrices()
+        fetchAllPrices()
 
-        // Refresh every 30 seconds (more frequent than CoinGecko)
-        const interval = setInterval(fetchBinancePrices, 30_000)
+        // Refresh every 30 seconds
+        const interval = setInterval(fetchAllPrices, 30_000)
 
         return () => clearInterval(interval)
     }, [])
 
     // Helper function to get token config by name
     const getTokenConfig = (tokenName: string) => {
-        return Object.values(TOKEN_CONFIG).find(config => config.name === tokenName)
+        // Check Binance tokens first
+        const binanceConfig = Object.values(BINANCE_TOKENS).find(config => config.name === tokenName)
+        if (binanceConfig) return binanceConfig
+
+        // Then check CoinGecko tokens
+        return Object.values(COINGECKO_TOKENS).find(config => config.name === tokenName)
     }
 
     // Helper function to format price
@@ -154,7 +229,7 @@ export default function CryptoPriceBlock() {
                 <div className="text-center mb-4">
                     <p className="text-red-400 text-sm">{error}</p>
                     <button
-                        onClick={fetchBinancePrices}
+                        onClick={fetchAllPrices}
                         className="text-blue-400 hover:text-blue-300 text-sm underline mt-1"
                     >
                         Retry
@@ -193,6 +268,12 @@ export default function CryptoPriceBlock() {
                             {/* Token Symbol */}
                             <p className="uppercase text-sm text-gray-400 font-medium">
                                 {config.ticker}
+                                {/* Optional: Show source indicator */}
+                                {data.source && (
+                                    <span className="ml-1 text-xs opacity-60">
+                                        ({data.source === 'binance' ? 'B' : 'CG'})
+                                    </span>
+                                )}
                             </p>
 
                             {/* Price */}
@@ -215,7 +296,7 @@ export default function CryptoPriceBlock() {
             {/* Data source indicator */}
             <div className="text-center mt-4">
                 <p className="text-xs text-gray-500">
-                    Data from Binance • Updated every 30s
+                    Data from Binance & CoinGecko • Updated every 30s
                 </p>
             </div>
         </div>
