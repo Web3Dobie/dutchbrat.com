@@ -40,14 +40,9 @@ const TOKEN_CONFIG = {
         icon: '/icons/doge.png'
     },
     'BNBUSDT': {
-        name: 'binance coin',
+        name: 'BNB',
         ticker: 'BNB',
         icon: '/icons/bnb.png'
-    },
-    'WAIUSDT': {
-        name: 'World3.ai',
-        ticker: 'WAI',
-        icon: '/icons/wai.png'
     }
 }
 
@@ -207,8 +202,8 @@ export default function CryptoPriceBlock() {
 
                             {/* 24h Change */}
                             <p className={`text-sm font-medium ${data.change24h >= 0
-                                    ? 'text-green-400'
-                                    : 'text-red-400'
+                                ? 'text-green-400'
+                                : 'text-red-400'
                                 }`}>
                                 {data.change24h >= 0 ? '+' : ''}{data.change24h.toFixed(2)}%
                             </p>
