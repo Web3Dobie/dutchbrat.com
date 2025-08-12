@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { createChart, ColorType, IChartApi, CandlestickData, Time } from 'lightweight-charts'
+import { createChart, ColorType, IChartApi, CandlestickData, Time, SeriesType } from 'lightweight-charts'
 
 type TokenPrice = {
     price: number
@@ -177,14 +177,8 @@ function ChartModal({
 
         chartRef.current = chart
 
-        // Debug: Let's see what methods are actually available
-        console.log('Chart object keys:', Object.getOwnPropertyNames(chart))
-        console.log('Chart prototype keys:', Object.getOwnPropertyNames(Object.getPrototypeOf(chart)))
-        console.log('Does addCandlestickSeries exist?', typeof (chart as any).addCandlestickSeries)
-        console.log('Available add methods:', Object.getOwnPropertyNames(chart).filter(key => key.startsWith('add')))
-
-        // Add candlestick series (bypassing TypeScript definitions issue)
-        const candlestickSeries = (chart as any).addCandlestickSeries({
+        // Add candlestick series using v5 API with type assertion
+        const candlestickSeries = chart.addSeries('Candlestick' as any, {
             upColor: '#10b981',
             downColor: '#ef4444',
             wickUpColor: '#10b981',
