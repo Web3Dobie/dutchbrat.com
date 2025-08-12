@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
+import { createChart, ColorType } from 'lightweight-charts'
 
 type TokenPrice = {
     price: number
@@ -12,6 +13,17 @@ type TokenPrice = {
 type Prices = {
     [key: string]: TokenPrice
 }
+
+type OHLCV = {
+    time: number
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+}
+
+type TimeFrame = '1m' | '5m' | '15m' | '1h' | '4h' | '1d'
 
 // Token mapping: Binance symbol -> display info
 const BINANCE_TOKENS = {
@@ -56,10 +68,229 @@ const MEXC_TOKENS = {
     }
 }
 
+// Timeframe configurations
+const TIMEFRAMES: { [key in TimeFrame]: { label: string; interval: string; limit: number } } = {
+    '1m': { label: '1m', interval: '1m', limit: 1440 }, // 24h of 1m candles
+    '5m': { label: '5m', interval: '5m', limit: 288 },  // 24h of 5m candles
+    '15m': { label: '15m', interval: '15m', limit: 96 }, // 24h of 15m candles
+    '1h': { label: '1h', interval: '1h', limit: 168 },   // 7 days of 1h candles
+    '4h': { label: '4h', interval: '4h', limit: 168 },   // 4 weeks of 4h candles
+    '1d': { label: '1d', interval: '1d', limit: 365 }    // 1 year of daily candles
+}
+
+// Chart Modal Component
+function ChartModal({
+    isOpen,
+    onClose,
+    tokenConfig,
+    tokenData
+}: {
+    isOpen: boolean
+    onClose: () => void
+    tokenConfig: any
+    tokenData: TokenPrice
+}) {
+    const chartContainerRef = useRef<HTMLDivElement>(null)
+    const chartRef = useRef<any>(null)
+    const [timeframe, setTimeframe] = useState<TimeFrame>('15m')
+    const [chartData, setChartData] = useState<OHLCV[]>([])
+    const [loading, setLoading] = useState(false)
+
+    // Get symbol for API calls
+    const getSymbol = () => {
+        const binanceSymbol = Object.entries(BINANCE_TOKENS).find(([_, config]) =>
+            config.name === tokenConfig.name
+        )?.[0]
+
+        const mexcSymbol = Object.entries(MEXC_TOKENS).find(([_, config]) =>
+            config.name === tokenConfig.name
+        )?.[0]
+
+        return binanceSymbol || mexcSymbol || ''
+    }
+
+    // Fetch chart data
+    const fetchChartData = useCallback(async (tf: TimeFrame) => {
+        setLoading(true)
+        try {
+            const symbol = getSymbol()
+            if (!symbol) return
+
+            const { interval, limit } = TIMEFRAMES[tf]
+
+            // Determine API endpoint based on token source
+            const isBinanceToken = Object.keys(BINANCE_TOKENS).includes(symbol)
+            const apiUrl = isBinanceToken
+                ? `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+                : `/api/mexc?symbol=${symbol}&endpoint=klines&interval=${interval}&limit=${limit}`
+
+            const response = await fetch(apiUrl)
+            if (!response.ok) throw new Error('Failed to fetch chart data')
+
+            const data = await response.json()
+
+            // Transform to OHLCV format
+            const ohlcvData: OHLCV[] = data.map((candle: any[]) => ({
+                time: Math.floor(candle[0] / 1000), // Convert to seconds
+                open: parseFloat(candle[1]),
+                high: parseFloat(candle[2]),
+                low: parseFloat(candle[3]),
+                close: parseFloat(candle[4]),
+                volume: parseFloat(candle[5])
+            }))
+
+            setChartData(ohlcvData)
+        } catch (error) {
+            console.error('Error fetching chart data:', error)
+        } finally {
+            setLoading(false)
+        }
+    }, [tokenConfig])
+
+    // Initialize chart
+    useEffect(() => {
+        if (!isOpen || !chartContainerRef.current) return
+
+        const chart = createChart(chartContainerRef.current, {
+            width: chartContainerRef.current.clientWidth,
+            height: 400,
+            layout: {
+                background: { type: ColorType.Solid, color: '#1f2937' },
+                textColor: '#d1d5db',
+            },
+            grid: {
+                vertLines: { color: '#374151' },
+                horzLines: { color: '#374151' },
+            },
+            crosshair: {
+                mode: 1,
+            },
+            rightPriceScale: {
+                borderColor: '#4b5563',
+            },
+            timeScale: {
+                borderColor: '#4b5563',
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        })
+
+        chartRef.current = chart
+
+        // Add candlestick series
+        const candlestickSeries = (chart as any).addCandlestickSeries({
+            upColor: '#10b981',
+            downColor: '#ef4444',
+            borderDownColor: '#ef4444',
+            borderUpColor: '#10b981',
+            wickDownColor: '#ef4444',
+            wickUpColor: '#10b981',
+        })
+
+        // Set chart data
+        if (chartData.length > 0) {
+            candlestickSeries.setData(chartData.map(d => ({
+                time: d.time,
+                open: d.open,
+                high: d.high,
+                low: d.low,
+                close: d.close
+            })))
+        }
+
+        // Handle resize
+        const handleResize = () => {
+            if (chartContainerRef.current) {
+                chart.applyOptions({
+                    width: chartContainerRef.current.clientWidth
+                })
+            }
+        }
+
+        window.addEventListener('resize', handleResize)
+
+        return () => {
+            window.removeEventListener('resize', handleResize)
+            chart.remove()
+            chartRef.current = null
+        }
+    }, [isOpen, chartData, tokenConfig])
+
+    // Fetch data when timeframe changes
+    useEffect(() => {
+        if (isOpen) {
+            fetchChartData(timeframe)
+        }
+    }, [isOpen, timeframe, tokenConfig])
+
+    if (!isOpen) return null
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-gray-700">
+                    <div className="flex items-center gap-3">
+                        <img
+                            src={tokenConfig.icon}
+                            alt={tokenConfig.ticker}
+                            className="w-8 h-8"
+                        />
+                        <div>
+                            <h3 className="text-xl font-bold text-white">{tokenConfig.ticker}</h3>
+                            <p className="text-gray-400 text-sm">
+                                ${tokenData.price.toLocaleString()}
+                                <span className={`ml-2 ${tokenData.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {tokenData.change24h >= 0 ? '+' : ''}{tokenData.change24h.toFixed(2)}%
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-white text-2xl"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                {/* Timeframe Selector */}
+                <div className="flex gap-2 p-4 border-b border-gray-700">
+                    {Object.entries(TIMEFRAMES).map(([tf, config]) => (
+                        <button
+                            key={tf}
+                            onClick={() => setTimeframe(tf as TimeFrame)}
+                            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${timeframe === tf
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                }`}
+                        >
+                            {config.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Chart Container */}
+                <div className="p-4">
+                    {loading ? (
+                        <div className="flex items-center justify-center h-96">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                            <span className="ml-2 text-gray-400">Loading chart...</span>
+                        </div>
+                    ) : (
+                        <div ref={chartContainerRef} className="w-full h-96" />
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export default function CryptoPriceBlock() {
     const [prices, setPrices] = useState<Prices>({})
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [selectedToken, setSelectedToken] = useState<{ config: any, data: TokenPrice } | null>(null)
 
     const fetchBinancePrices = async () => {
         const symbols = Object.keys(BINANCE_TOKENS)
@@ -92,7 +323,7 @@ export default function CryptoPriceBlock() {
 
         const pricePromises = symbols.map(async (symbol) => {
             const response = await fetch(
-                `https://api.mexc.com/api/v3/ticker/24hr?symbol=${symbol}`
+                `/api/mexc?symbol=${symbol}&endpoint=ticker/24hr`
             )
 
             if (!response.ok) {
@@ -209,6 +440,14 @@ export default function CryptoPriceBlock() {
         }
     }
 
+    // Handle token click
+    const handleTokenClick = (tokenName: string, data: TokenPrice) => {
+        const config = getTokenConfig(tokenName)
+        if (config) {
+            setSelectedToken({ config, data })
+        }
+    }
+
     if (loading) {
         return (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex justify-center items-center mb-10">
@@ -221,100 +460,116 @@ export default function CryptoPriceBlock() {
     }
 
     return (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-10">
-            {error && (
-                <div className="text-center mb-4">
-                    <p className="text-red-400 text-sm">{error}</p>
-                    <button
-                        onClick={fetchAllPrices}
-                        className="text-blue-400 hover:text-blue-300 text-sm underline mt-1"
-                    >
-                        Retry
-                    </button>
-                </div>
-            )}
+        <>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-10">
+                {error && (
+                    <div className="text-center mb-4">
+                        <p className="text-red-400 text-sm">{error}</p>
+                        <button
+                            onClick={fetchAllPrices}
+                            className="text-blue-400 hover:text-blue-300 text-sm underline mt-1"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
 
-            <div className="flex flex-wrap justify-center gap-4">
-                {Object.entries(prices).map(([tokenName, data]) => {
-                    const config = getTokenConfig(tokenName)
-                    if (!config) return null
+                <div className="flex flex-wrap justify-center gap-4">
+                    {Object.entries(prices).map(([tokenName, data]) => {
+                        const config = getTokenConfig(tokenName)
+                        if (!config) return null
 
-                    return (
-                        <div key={tokenName} className="text-center min-w-[100px]">
-                            {/* Token Icon */}
-                            <div className="flex justify-center mb-2">
-                                <div className="relative w-8 h-8">
-                                    {/* Use regular img tag for BNB to avoid Next.js optimization issues */}
-                                    {config.ticker === 'BNB' ? (
-                                        <img
-                                            src={config.icon}
-                                            alt={`${config.ticker} icon`}
-                                            className="w-8 h-8 object-contain"
-                                            onLoad={() => console.log(`✅ ${config.ticker} icon loaded successfully`)}
-                                            onError={(e) => {
-                                                console.error(`❌ ${config.ticker} icon failed to load:`, config.icon)
-                                                const target = e.target as HTMLImageElement
-                                                target.style.display = 'none'
-                                                target.parentElement?.insertAdjacentHTML(
-                                                    'afterbegin',
-                                                    `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
-                                                )
-                                            }}
-                                        />
-                                    ) : (
-                                        <Image
-                                            src={config.icon}
-                                            alt={`${config.ticker} icon`}
-                                            fill
-                                            className="object-contain"
-                                            onError={(e) => {
-                                                // Fallback to text if icon fails to load
-                                                const target = e.target as HTMLImageElement
-                                                target.style.display = 'none'
-                                                target.parentElement?.insertAdjacentHTML(
-                                                    'afterbegin',
-                                                    `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
-                                                )
-                                            }}
-                                        />
-                                    )}
+                        return (
+                            <div
+                                key={tokenName}
+                                className="text-center min-w-[100px] cursor-pointer hover:bg-gray-800 rounded-lg p-2 transition-colors"
+                                onClick={() => handleTokenClick(tokenName, data)}
+                            >
+                                {/* Token Icon */}
+                                <div className="flex justify-center mb-2">
+                                    <div className="relative w-8 h-8">
+                                        {/* Use regular img tag for BNB to avoid Next.js optimization issues */}
+                                        {config.ticker === 'BNB' ? (
+                                            <img
+                                                src={config.icon}
+                                                alt={`${config.ticker} icon`}
+                                                className="w-8 h-8 object-contain"
+                                                onLoad={() => console.log(`✅ ${config.ticker} icon loaded successfully`)}
+                                                onError={(e) => {
+                                                    console.error(`❌ ${config.ticker} icon failed to load:`, config.icon)
+                                                    const target = e.target as HTMLImageElement
+                                                    target.style.display = 'none'
+                                                    target.parentElement?.insertAdjacentHTML(
+                                                        'afterbegin',
+                                                        `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
+                                                    )
+                                                }}
+                                            />
+                                        ) : (
+                                            <Image
+                                                src={config.icon}
+                                                alt={`${config.ticker} icon`}
+                                                fill
+                                                className="object-contain"
+                                                onError={(e) => {
+                                                    // Fallback to text if icon fails to load
+                                                    const target = e.target as HTMLImageElement
+                                                    target.style.display = 'none'
+                                                    target.parentElement?.insertAdjacentHTML(
+                                                        'afterbegin',
+                                                        `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
+                                                    )
+                                                }}
+                                            />
+                                        )}
+                                    </div>
                                 </div>
+
+                                {/* Token Symbol */}
+                                <p className="uppercase text-sm text-gray-400 font-medium">
+                                    {config.ticker}
+                                    {/* Optional: Show source indicator */}
+                                    {data.source && (
+                                        <span className="ml-1 text-xs opacity-60">
+                                            ({data.source === 'binance' ? 'B' : 'M'})
+                                        </span>
+                                    )}
+                                </p>
+
+                                {/* Price */}
+                                <p className="text-xl font-bold text-white">
+                                    ${formatPrice(data.price)}
+                                </p>
+
+                                {/* 24h Change */}
+                                <p className={`text-sm font-medium ${data.change24h >= 0
+                                    ? 'text-green-400'
+                                    : 'text-red-400'
+                                    }`}>
+                                    {data.change24h >= 0 ? '+' : ''}{data.change24h.toFixed(2)}%
+                                </p>
                             </div>
+                        )
+                    })}
+                </div>
 
-                            {/* Token Symbol */}
-                            <p className="uppercase text-sm text-gray-400 font-medium">
-                                {config.ticker}
-                                {/* Optional: Show source indicator */}
-                                {data.source && (
-                                    <span className="ml-1 text-xs opacity-60">
-                                        ({data.source === 'binance' ? 'B' : 'M'})
-                                    </span>
-                                )}
-                            </p>
-
-                            {/* Price */}
-                            <p className="text-xl font-bold text-white">
-                                ${formatPrice(data.price)}
-                            </p>
-
-                            {/* 24h Change */}
-                            <p className={`text-sm font-medium ${data.change24h >= 0
-                                ? 'text-green-400'
-                                : 'text-red-400'
-                                }`}>
-                                {data.change24h >= 0 ? '+' : ''}{data.change24h.toFixed(2)}%
-                            </p>
-                        </div>
-                    )
-                })}
+                {/* Data source indicator */}
+                <div className="text-center mt-4">
+                    <p className="text-xs text-gray-500">
+                        Data from Binance & MEXC • Updated every 30s • Click tokens for charts
+                    </p>
+                </div>
             </div>
 
-            {/* Data source indicator */}
-            <div className="text-center mt-4">
-                <p className="text-xs text-gray-500">
-                    Data from Binance & MEXC • Updated every 30s
-                </p>
-            </div>
-        </div>
+            {/* Chart Modal */}
+            {selectedToken && (
+                <ChartModal
+                    isOpen={!!selectedToken}
+                    onClose={() => setSelectedToken(null)}
+                    tokenConfig={selectedToken.config}
+                    tokenData={selectedToken.data}
+                />
+            )}
+        </>
     )
 }
