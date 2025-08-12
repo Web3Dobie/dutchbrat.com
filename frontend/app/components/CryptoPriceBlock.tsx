@@ -50,8 +50,8 @@ const BINANCE_TOKENS = {
 // CoinGecko-only tokens (not available on Binance)
 const COINGECKO_TOKENS = {
     // Add your token here - replace with actual values
-    'WAI': {
-        name: 'World3',  // internal key
+    'world3': {
+        name: 'wai',  // internal key
         ticker: 'WAI',          // display symbol
         icon: '/icons/wai.png'  // icon path
     }
