@@ -78,6 +78,39 @@ const TIMEFRAMES: { [key in TimeFrame]: { label: string; interval: string; limit
     '1d': { label: '1d', interval: '1d', limit: 365 }    // 1 year of daily candles
 }
 
+// Helper function to determine price format based on price level
+const getPriceFormat = (averagePrice: number) => {
+    if (averagePrice < 1) {
+        // For tokens below $1, show 6 decimal places (2 extra)
+        return {
+            type: 'price' as const,
+            precision: 6,
+            minMove: 0.000001
+        }
+    } else if (averagePrice < 10) {
+        // For tokens $1-$10, show 4 decimal places
+        return {
+            type: 'price' as const,
+            precision: 4,
+            minMove: 0.0001
+        }
+    } else if (averagePrice < 100) {
+        // For tokens $10-$100, show 2 decimal places
+        return {
+            type: 'price' as const,
+            precision: 2,
+            minMove: 0.01
+        }
+    } else {
+        // For tokens above $100, show 2 decimal places
+        return {
+            type: 'price' as const,
+            precision: 2,
+            minMove: 0.01
+        }
+    }
+}
+
 // Chart Modal Component
 function ChartModal({
     isOpen,
@@ -178,12 +211,21 @@ function ChartModal({
 
         chartRef.current = chart
 
-        // Add candlestick series using v5 API (import CandlestickSeries)
+        // Calculate average price for formatting
+        const averagePrice = chartData.length > 0
+            ? chartData.reduce((sum, candle) => sum + candle.close, 0) / chartData.length
+            : tokenData.price
+
+        // Get appropriate price format
+        const priceFormat = getPriceFormat(averagePrice)
+
+        // Add candlestick series with dynamic price formatting
         const candlestickSeries = chart.addSeries(CandlestickSeries, {
             upColor: '#10b981',
             downColor: '#ef4444',
             wickUpColor: '#10b981',
             wickDownColor: '#ef4444',
+            priceFormat: priceFormat
         })
 
         // Configure main price scale margins (top 65% with padding)
@@ -256,6 +298,17 @@ function ChartModal({
                 tooltipRef.current = tooltip
             }
 
+            // Helper function to format price in tooltip based on token price level
+            const formatTooltipPrice = (price: number) => {
+                if (averagePrice < 1) {
+                    return price.toFixed(6)
+                } else if (averagePrice < 10) {
+                    return price.toFixed(4)
+                } else {
+                    return price.toFixed(2)
+                }
+            }
+
             // Subscribe to crosshair move for tooltip
             chart.subscribeCrosshairMove((param: any) => {
                 if (!tooltipRef.current || !chartContainerRef.current) return
@@ -289,24 +342,24 @@ function ChartModal({
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                             <div>
                                 <div style="color: #9ca3af;">Open:</div>
-                                <div style="color: #f3f4f6;">$${candleData.open.toFixed(4)}</div>
+                                <div style="color: #f3f4f6;">$${formatTooltipPrice(candleData.open)}</div>
                             </div>
                             <div>
                                 <div style="color: #9ca3af;">High:</div>
-                                <div style="color: #f3f4f6;">$${candleData.high.toFixed(4)}</div>
+                                <div style="color: #f3f4f6;">$${formatTooltipPrice(candleData.high)}</div>
                             </div>
                             <div>
                                 <div style="color: #9ca3af;">Low:</div>
-                                <div style="color: #f3f4f6;">$${candleData.low.toFixed(4)}</div>
+                                <div style="color: #f3f4f6;">$${formatTooltipPrice(candleData.low)}</div>
                             </div>
                             <div>
                                 <div style="color: #9ca3af;">Close:</div>
-                                <div style="color: #f3f4f6;">$${candleData.close.toFixed(4)}</div>
+                                <div style="color: #f3f4f6;">$${formatTooltipPrice(candleData.close)}</div>
                             </div>
                         </div>
                         <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #374151;">
                             <div style="color: ${changeColor};">
-                                ${change >= 0 ? '+' : ''}${change.toFixed(4)} (${changePercent.toFixed(2)}%)
+                                ${change >= 0 ? '+' : ''}${formatTooltipPrice(change)} (${changePercent.toFixed(2)}%)
                             </div>
                         </div>
                     `
@@ -363,7 +416,7 @@ function ChartModal({
             chart.remove()
             chartRef.current = null
         }
-    }, [isOpen, chartData, tokenConfig])
+    }, [isOpen, chartData, tokenConfig, tokenData])
 
     // Fetch data when timeframe changes
     useEffect(() => {
@@ -410,8 +463,8 @@ function ChartModal({
                             key={tf}
                             onClick={() => setTimeframe(tf as TimeFrame)}
                             className={`px-3 py-1 rounded text-sm font-medium transition-colors ${timeframe === tf
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                 }`}
                         >
                             {config.label}
