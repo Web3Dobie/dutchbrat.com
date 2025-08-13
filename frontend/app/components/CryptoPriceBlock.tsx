@@ -91,7 +91,8 @@ function ChartModal({
     tokenData: TokenPrice
 }) {
     const chartContainerRef = useRef<HTMLDivElement>(null)
-    const chartRef = useRef<IChartApi | null>(null)
+    const chartRef = useRef<any>(null)
+    const tooltipRef = useRef<HTMLDivElement | null>(null)
     const [timeframe, setTimeframe] = useState<TimeFrame>('15m')
     const [chartData, setChartData] = useState<OHLCV[]>([])
     const [loading, setLoading] = useState(false)
@@ -232,6 +233,118 @@ function ChartModal({
                 }
             })
             volumeSeries.setData(volumeData)
+
+            // Create tooltip element
+            if (!tooltipRef.current && chartContainerRef.current) {
+                const tooltip = document.createElement('div')
+                tooltip.style.cssText = `
+                    position: absolute;
+                    display: none;
+                    padding: 8px 12px;
+                    background: rgba(17, 24, 39, 0.95);
+                    border: 1px solid #374151;
+                    border-radius: 6px;
+                    color: white;
+                    font-size: 12px;
+                    font-family: monospace;
+                    pointer-events: none;
+                    z-index: 1000;
+                    backdrop-filter: blur(4px);
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                `
+                chartContainerRef.current.appendChild(tooltip)
+                tooltipRef.current = tooltip
+            }
+
+            // Subscribe to crosshair move for tooltip
+            chart.subscribeCrosshairMove((param: any) => {
+                if (!tooltipRef.current || !chartContainerRef.current) return
+
+                if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
+                    tooltipRef.current.style.display = 'none'
+                    return
+                }
+
+                // Get data for current time
+                const candleData = param.seriesData.get(candlestickSeries)
+                const volumeData = param.seriesData.get(volumeSeries)
+
+                if (!candleData && !volumeData) {
+                    tooltipRef.current.style.display = 'none'
+                    return
+                }
+
+                // Format the tooltip content
+                let tooltipContent = ''
+
+                if (candleData) {
+                    const change = candleData.close - candleData.open
+                    const changePercent = (change / candleData.open) * 100
+                    const changeColor = change >= 0 ? '#10b981' : '#ef4444'
+
+                    tooltipContent += `
+                        <div style="margin-bottom: 8px; font-weight: bold; color: #f3f4f6;">
+                            ${new Date(param.time * 1000).toLocaleString()}
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div>
+                                <div style="color: #9ca3af;">Open:</div>
+                                <div style="color: #f3f4f6;">$${candleData.open.toFixed(4)}</div>
+                            </div>
+                            <div>
+                                <div style="color: #9ca3af;">High:</div>
+                                <div style="color: #f3f4f6;">$${candleData.high.toFixed(4)}</div>
+                            </div>
+                            <div>
+                                <div style="color: #9ca3af;">Low:</div>
+                                <div style="color: #f3f4f6;">$${candleData.low.toFixed(4)}</div>
+                            </div>
+                            <div>
+                                <div style="color: #9ca3af;">Close:</div>
+                                <div style="color: #f3f4f6;">$${candleData.close.toFixed(4)}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #374151;">
+                            <div style="color: ${changeColor};">
+                                ${change >= 0 ? '+' : ''}${change.toFixed(4)} (${changePercent.toFixed(2)}%)
+                            </div>
+                        </div>
+                    `
+                }
+
+                if (volumeData) {
+                    tooltipContent += `
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #374151;">
+                            <div style="color: #9ca3af;">Volume:</div>
+                            <div style="color: #f3f4f6;">${volumeData.value.toLocaleString()}</div>
+                        </div>
+                    `
+                }
+
+                tooltipRef.current.innerHTML = tooltipContent
+                tooltipRef.current.style.display = 'block'
+
+                // Position tooltip
+                const containerRect = chartContainerRef.current.getBoundingClientRect()
+                const tooltipRect = tooltipRef.current.getBoundingClientRect()
+
+                let left = param.point.x + 15
+                let top = param.point.y - 10
+
+                // Keep tooltip within container bounds
+                if (left + tooltipRect.width > containerRect.width) {
+                    left = param.point.x - tooltipRect.width - 15
+                }
+                if (top < 0) {
+                    top = 10
+                }
+                if (top + tooltipRect.height > containerRect.height) {
+                    top = containerRect.height - tooltipRect.height - 10
+                }
+
+                tooltipRef.current.style.left = left + 'px'
+                tooltipRef.current.style.top = top + 'px'
+            })
         }
 
         // Handle resize
@@ -257,7 +370,7 @@ function ChartModal({
         if (isOpen) {
             fetchChartData(timeframe)
         }
-    }, [isOpen, timeframe, tokenConfig])
+    }, [isOpen, timeframe, tokenConfig, fetchChartData])
 
     if (!isOpen) return null
 
@@ -309,7 +422,7 @@ function ChartModal({
                 {/* Chart Container */}
                 <div className="p-4">
                     {loading ? (
-                        <div className="flex items-center justify-center h-96">
+                        <div className="flex items-center justify-center h-[500px]">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
                             <span className="ml-2 text-gray-400">Loading chart...</span>
                         </div>
