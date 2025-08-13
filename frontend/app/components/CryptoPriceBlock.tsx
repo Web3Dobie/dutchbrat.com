@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { createChart, ColorType, IChartApi, CandlestickData, Time, SeriesType } from 'lightweight-charts'
+import { createChart, ColorType, IChartApi, CandlestickData, Time, CandlestickSeries } from 'lightweight-charts'
 
 type TokenPrice = {
     price: number
@@ -177,8 +177,8 @@ function ChartModal({
 
         chartRef.current = chart
 
-        // Add candlestick series using v5 API with type assertion
-        const candlestickSeries = chart.addSeries('Candlestick' as any, {
+        // Add candlestick series using v5 API (import CandlestickSeries)
+        const candlestickSeries = chart.addSeries(CandlestickSeries, {
             upColor: '#10b981',
             downColor: '#ef4444',
             wickUpColor: '#10b981',
