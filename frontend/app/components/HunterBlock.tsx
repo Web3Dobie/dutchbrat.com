@@ -48,6 +48,12 @@ export default function HunterBlock() {
     tweet: true
   })
   const [error, setError] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
+
+  // Fix hydration mismatch by ensuring client-side rendering
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   const fetchLatestArticle = async () => {
     try {
@@ -144,7 +150,7 @@ export default function HunterBlock() {
     <section className="mt-16 px-6">
       {/* Hero section */}
       <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-start gap-8 mb-8">
-        <div className="md:w-1/3 flex justify-center">
+        <div className="flex justify-center md:justify-start">
           <Image
             src={HunterSmiling}
             alt="Hunter the Web3Dobie"
@@ -153,7 +159,7 @@ export default function HunterBlock() {
             className="rounded-xl border-4 border-emerald-500 shadow-lg flex-shrink-0"
           />
         </div>
-        <div className="md:w-2/3">
+        <div className="flex-1">
           <h2 className="text-3xl font-bold mb-4 text-emerald-400">
             Meet Hunter, the Alpha Dog 🐾
           </h2>
@@ -181,121 +187,123 @@ export default function HunterBlock() {
         </div>
       )}
 
-      {/* Cards section - temporarily back to 2 cards for debugging */}
-      <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Latest Article Card */}
-        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200 w-full">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-gray-400 font-semibold">📰 Latest Article</p>
-            {article && (
-              <p className="text-xs text-gray-500">
-                {formatArticleDate(article.publishedAt)}
-              </p>
-            )}
-          </div>
-
-          {loading.article ? (
-            <div className="animate-pulse">
-              <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-              <div className="h-3 bg-gray-700 rounded w-full mb-1"></div>
-              <div className="h-3 bg-gray-700 rounded w-2/3"></div>
+      {/* Cards section - left-aligned 2-column layout */}
+      <div className="max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:max-w-none">
+          {/* Latest Article Card */}
+          <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200 w-full">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-gray-400 font-semibold">📰 Latest Article</p>
+              {article && isClient && (
+                <p className="text-xs text-gray-500">
+                  {formatArticleDate(article.publishedAt)}
+                </p>
+              )}
             </div>
-          ) : article ? (
-            <div className="space-y-3">
-              <Link
-                href={`/articles?articleId=${article.id}`}
-                className="text-base font-semibold text-white hover:text-gray-300 transition-colors leading-tight block"
-              >
-                {truncateText(article.headline, 80)}
-              </Link>
-              <p className="text-sm text-gray-300 leading-relaxed">
-                {truncateText(article.summary, 120)}
-              </p>
-              <Link
-                href={`/articles?articleId=${article.id}`}
-                className="inline-block text-sm text-blue-400 hover:underline transition-colors"
-              >
-                Read full article →
-              </Link>
-            </div>
-          ) : (
-            <div className="text-center py-4">
-              <p className="text-gray-500 mb-2">No articles available.</p>
-              <Link
-                href="/articles"
-                className="text-sm text-blue-400 hover:underline"
-              >
-                Browse all articles →
-              </Link>
-            </div>
-          )}
-        </div>
 
-        {/* Latest Tweet Card */}
-        <div className="p-4 border border-blue-700 rounded-xl bg-gray-900 hover:border-blue-600 transition-colors duration-200 w-full">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
-            {tweet && (
-              <p className="text-xs text-gray-500">
-                {formatTweetDate(tweet.created_at)}
-              </p>
-            )}
-          </div>
-
-          {loading.tweet ? (
-            <div className="animate-pulse">
-              <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
-              <div className="h-4 bg-gray-700 rounded w-4/5 mb-2"></div>
-              <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-            </div>
-          ) : tweet ? (
-            <div className="space-y-3">
-              <p className="text-sm text-white leading-relaxed">
-                {truncateText(tweet.text, 160)}
-              </p>
-
-              {/* Engagement metrics */}
-              <div className="flex items-center gap-4 text-xs text-gray-400">
-                <span className="flex items-center gap-1">
-                  <span>❤️</span>
-                  <span>{tweet.public_metrics.like_count.toLocaleString()}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span>🔄</span>
-                  <span>{tweet.public_metrics.retweet_count.toLocaleString()}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span>💬</span>
-                  <span>{tweet.public_metrics.reply_count.toLocaleString()}</span>
-                </span>
+            {loading.article ? (
+              <div className="animate-pulse">
+                <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+                <div className="h-3 bg-gray-700 rounded w-full mb-1"></div>
+                <div className="h-3 bg-gray-700 rounded w-2/3"></div>
               </div>
+            ) : article ? (
+              <div className="space-y-3">
+                <Link
+                  href={`/articles?articleId=${article.id}`}
+                  className="text-base font-semibold text-white hover:text-gray-300 transition-colors leading-tight block"
+                >
+                  {truncateText(article.headline, 80)}
+                </Link>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  {truncateText(article.summary, 120)}
+                </p>
+                <Link
+                  href={`/articles?articleId=${article.id}`}
+                  className="inline-block text-sm text-blue-400 hover:underline transition-colors"
+                >
+                  Read full article →
+                </Link>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-500 mb-2">No articles available.</p>
+                <Link
+                  href="/articles"
+                  className="text-sm text-blue-400 hover:underline"
+                >
+                  Browse all articles →
+                </Link>
+              </div>
+            )}
+          </div>
 
-              <Link
-                href={getTweetUrl(tweet)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block text-sm text-blue-400 hover:underline transition-colors"
-              >
-                View on X (Twitter) →
-              </Link>
+          {/* Latest Tweet Card */}
+          <div className="p-4 border border-blue-700 rounded-xl bg-gray-900 hover:border-blue-600 transition-colors duration-200 w-full">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
+              {tweet && isClient && (
+                <p className="text-xs text-gray-500">
+                  {formatTweetDate(tweet.created_at)}
+                </p>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-4">
-              <p className="text-gray-500 mb-2">No tweet available.</p>
-              <a
-                href="https://x.com/@Web3_Dobie"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-blue-400 hover:underline"
-              >
-                Follow @Web3_Dobie →
-              </a>
-            </div>
-          )}
+
+            {loading.tweet ? (
+              <div className="animate-pulse">
+                <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
+                <div className="h-4 bg-gray-700 rounded w-4/5 mb-2"></div>
+                <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+              </div>
+            ) : tweet ? (
+              <div className="space-y-3">
+                <p className="text-sm text-white leading-relaxed">
+                  {truncateText(tweet.text, 160)}
+                </p>
+
+                {/* Engagement metrics */}
+                <div className="flex items-center gap-4 text-xs text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <span>❤️</span>
+                    <span>{tweet.public_metrics.like_count.toLocaleString()}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span>🔄</span>
+                    <span>{tweet.public_metrics.retweet_count.toLocaleString()}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span>💬</span>
+                    <span>{tweet.public_metrics.reply_count.toLocaleString()}</span>
+                  </span>
+                </div>
+
+                <Link
+                  href={getTweetUrl(tweet)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-sm text-blue-400 hover:underline transition-colors"
+                >
+                  View on X (Twitter) →
+                </Link>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-gray-500 mb-2">No tweet available.</p>
+                <a
+                  href="https://x.com/@Web3_Dobie"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-400 hover:underline"
+                >
+                  Follow @Web3_Dobie →
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Crypto News Card - Temporarily commented out for debugging */}
+          {/* <CryptoNewsCard /> */}
         </div>
-
-        {/* Crypto News Card - Temporarily commented out for debugging */}
-        {/* <CryptoNewsCard /> */}
       </div>
 
       {/* Additional info section */}
@@ -304,10 +312,12 @@ export default function HunterBlock() {
           <p className="text-sm text-gray-400 mb-2">
             🤖 Hunter's AI is powered by advanced market analysis and sentiment tracking
           </p>
-          <p className="text-xs text-gray-500">
-            Last updated: {new Date().toLocaleTimeString()} |
-            Data refreshes every 5 minutes
-          </p>
+          {isClient && (
+            <p className="text-xs text-gray-500">
+              Last updated: {new Date().toLocaleTimeString()} |
+              Data refreshes every 5 minutes
+            </p>
+          )}
         </div>
       </div>
     </section>
