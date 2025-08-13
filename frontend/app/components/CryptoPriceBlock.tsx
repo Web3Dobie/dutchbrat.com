@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Image from 'next/image'
-import { createChart, ColorType, IChartApi, CandlestickData, Time, CandlestickSeries } from 'lightweight-charts'
+import { createChart, ColorType, IChartApi, CandlestickData, Time, CandlestickSeries, HistogramSeries } from 'lightweight-charts'
 
 type TokenPrice = {
     price: number
@@ -153,7 +153,7 @@ function ChartModal({
 
         const chart = createChart(chartContainerRef.current, {
             width: chartContainerRef.current.clientWidth,
-            height: 400,
+            height: 500, // Increased height for volume
             layout: {
                 background: { type: ColorType.Solid, color: '#1f2937' },
                 textColor: '#d1d5db',
@@ -185,6 +185,23 @@ function ChartModal({
             wickDownColor: '#ef4444',
         })
 
+        // Add volume histogram series
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+            color: '#26a69a',
+            priceFormat: {
+                type: 'volume',
+            },
+            priceScaleId: 'volume',
+        } as any)
+
+        // Configure volume scale margins
+        volumeSeries.priceScale().applyOptions({
+            scaleMargins: {
+                top: 0.7,
+                bottom: 0,
+            },
+        })
+
         // Set chart data with proper typing
         if (chartData.length > 0) {
             const candlestickData: CandlestickData[] = chartData.map(d => ({
@@ -195,6 +212,18 @@ function ChartModal({
                 close: d.close
             }))
             candlestickSeries.setData(candlestickData)
+
+            // Volume data - color bars based on price direction
+            const volumeData = chartData.map((d, index) => {
+                const prevClose = index > 0 ? chartData[index - 1].close : d.open
+                const isUp = d.close >= prevClose
+                return {
+                    time: d.time as Time,
+                    value: d.volume,
+                    color: isUp ? '#10b981' : '#ef4444' // Green for up, red for down
+                }
+            })
+            volumeSeries.setData(volumeData)
         }
 
         // Handle resize
@@ -277,7 +306,7 @@ function ChartModal({
                             <span className="ml-2 text-gray-400">Loading chart...</span>
                         </div>
                     ) : (
-                        <div ref={chartContainerRef} className="w-full h-96" />
+                        <div ref={chartContainerRef} className="w-full h-[500px]" />
                     )}
                 </div>
             </div>
