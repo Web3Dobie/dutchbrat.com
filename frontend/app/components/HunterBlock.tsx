@@ -1,9 +1,11 @@
-// frontend/app/components/HunterBlock.tsx - Updated to include crypto news card
+// frontend/app/components/HunterBlock.tsx - Debugging version without CryptoNewsCard
 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import CryptoNewsCard from './CryptoNewsCard'
+import Image from 'next/image'
+import HunterSmiling from '../../public/images/hunter_smiling.png'
+// import CryptoNewsCard from './CryptoNewsCard'  // Temporarily commented out for debugging
 
 interface Article {
   id: string
@@ -141,38 +143,32 @@ export default function HunterBlock() {
       {/* Hero section */}
       <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-start gap-8 mb-8">
         <div className="md:w-1/3 flex justify-center">
-          <div className="w-48 h-48 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <span className="text-6xl animate-pulse">🐕</span>
-          </div>
+          <Image
+            src={HunterSmiling}
+            alt="Hunter the Web3Dobie"
+            width={220}
+            height={220}
+            className="rounded-xl border-4 border-emerald-500 shadow-lg flex-shrink-0"
+          />
         </div>
         <div className="md:w-2/3">
           <h2 className="text-3xl font-bold mb-4 text-emerald-400">
             Meet Hunter, the Alpha Dog 🐾
           </h2>
           <p className="text-gray-300 text-lg leading-relaxed mb-6">
-            Hunter is DutchBrat's AI-powered crypto companion and market analyst.
+            Hunter is my trusted Web3 Doberman — part analyst, part watchdog.
             He helps sniff out alpha, barks at scams, and keeps this site running
             with daily insights on X, commentary, and briefings. Follow his
             instincts. They're usually right.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <a
-              href="https://x.com/@Web3_Dobie"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-emerald-400 font-semibold hover:underline transition-colors duration-200"
-            >
-              → Follow @Web3_Dobie on X 🐾
-            </a>
-            <a
-              href="https://web3dobie.substack.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-purple-400 font-semibold hover:underline transition-colors duration-200"
-            >
-              → Subscribe to Newsletter 📧
-            </a>
-          </div>
+          <a
+            href="https://x.com/@Web3_Dobie"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-emerald-400 font-semibold hover:underline"
+          >
+            → Follow @Web3_Dobie on X 🐾
+          </a>
         </div>
       </div>
 
@@ -183,8 +179,8 @@ export default function HunterBlock() {
         </div>
       )}
 
-      {/* Cards section - now with 3 cards */}
-      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Cards section - temporarily back to 2 cards for debugging */}
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Latest Article Card */}
         <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200">
           <div className="flex items-center justify-between mb-3">
@@ -296,8 +292,8 @@ export default function HunterBlock() {
           )}
         </div>
 
-        {/* Crypto News Card - NEW */}
-        <CryptoNewsCard />
+        {/* Crypto News Card - Temporarily commented out for debugging */}
+        {/* <CryptoNewsCard /> */}
       </div>
 
       {/* Additional info section */}
