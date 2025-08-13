@@ -52,15 +52,17 @@ export default function HunterBlock() {
   const fetchLatestArticle = async () => {
     try {
       setLoading(prev => ({ ...prev, article: true }))
-      const response = await fetch('/api/articles/latest')
-      const result: ArticleResponse = await response.json()
+      const response = await fetch('/api/articles')  // Changed back to original endpoint
 
-      if (result.success && result.article) {
-        setArticle(result.article)
-      } else {
-        console.log('No latest article available')
-        setArticle(null)
-      }
+      if (!response.ok) throw new Error(`Articles fetch failed: ${response.status}`)
+
+      const allArticles: Article[] = await response.json()
+      const sorted = allArticles.sort(
+        (a, b) =>
+          new Date(b.publishedAt || 0).getTime() -
+          new Date(a.publishedAt || 0).getTime()
+      )
+      setArticle(sorted[0] || null)
     } catch (err) {
       console.error('Error fetching latest article:', err)
       setError('Failed to load latest article')
@@ -72,15 +74,15 @@ export default function HunterBlock() {
   const fetchLatestTweet = async () => {
     try {
       setLoading(prev => ({ ...prev, tweet: true }))
-      const response = await fetch('/api/twitter/latest-tweet')
-      const result: TweetResponse = await response.json()
+      const response = await fetch('/api/latest-tweet')  // Changed back to original endpoint
 
-      if (result.success && result.data && result.data.length > 0) {
-        setTweet(result.data[0])
-      } else {
-        console.log('No latest tweet available')
-        setTweet(null)
-      }
+      if (!response.ok) throw new Error(`Tweet fetch failed: ${response.status}`)
+
+      const data: any = await response.json()
+
+      // Handle the response structure from your original API
+      const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
+      setTweet(latestTweet)
     } catch (err) {
       console.error('Error fetching latest tweet:', err)
       setError('Failed to load latest tweet')
@@ -180,9 +182,9 @@ export default function HunterBlock() {
       )}
 
       {/* Cards section - temporarily back to 2 cards for debugging */}
-      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Latest Article Card */}
-        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200">
+        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200 w-full">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm text-gray-400 font-semibold">📰 Latest Article</p>
             {article && (
@@ -230,7 +232,7 @@ export default function HunterBlock() {
         </div>
 
         {/* Latest Tweet Card */}
-        <div className="p-4 border border-blue-700 rounded-xl bg-gray-900 hover:border-blue-600 transition-colors duration-200">
+        <div className="p-4 border border-blue-700 rounded-xl bg-gray-900 hover:border-blue-600 transition-colors duration-200 w-full">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
             {tweet && (
