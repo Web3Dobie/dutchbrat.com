@@ -15,8 +15,8 @@ export default function HeroIntro() {
             <div>
                 <h1 className="text-4xl font-bold mb-3">Welcome to DutchBrat</h1>
                 <p className="text-lg max-w-xl">
-                    I'm a hedge fund guy and crypto enthousiast 🧠📉📈. After 20+ years in traditional finance,
-                    and being an early crypto adopter since 2010, I'm fully straddling TradFi & DeFi. 
+                    I'm a hedge fund guy and crypto enthousiast 🧠📉📈. With 30 years of working in traditional
+                    finance, and being an early crypto adopter since 2010, I'm fully straddling TradFi & DeFi.
                     DutchBrat.com is my Web3 venture, where I break down markets, publish my briefings,
                     and share what Hunter and I are tracking across the crypto landscape.
                 </p>
