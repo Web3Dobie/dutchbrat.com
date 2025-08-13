@@ -185,6 +185,14 @@ function ChartModal({
             wickDownColor: '#ef4444',
         })
 
+        // Configure main price scale margins (top 65% with padding)
+        candlestickSeries.priceScale().applyOptions({
+            scaleMargins: {
+                top: 0.1,    // 10% padding at top
+                bottom: 0.4, // 40% space for volume + gap
+            },
+        })
+
         // Add volume histogram series
         const volumeSeries = chart.addSeries(HistogramSeries, {
             color: '#26a69a',
@@ -194,11 +202,11 @@ function ChartModal({
             priceScaleId: 'volume',
         } as any)
 
-        // Configure volume scale margins
+        // Configure volume scale margins (bottom 25% with padding)
         volumeSeries.priceScale().applyOptions({
             scaleMargins: {
-                top: 0.7,
-                bottom: 0,
+                top: 0.75,   // Start at 75% down (25% for volume)
+                bottom: 0.05, // 5% padding at bottom
             },
         })
 
