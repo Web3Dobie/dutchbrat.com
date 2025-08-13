@@ -1,236 +1,315 @@
+// frontend/app/components/HunterBlock.tsx - Updated to include crypto news card
 'use client'
 
-import Image from 'next/image'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import React, { useEffect, useState } from 'react'
-import HunterSmiling from '../../public/images/hunter_smiling.png'
+import CryptoNewsCard from './CryptoNewsCard'
 
-type Article = {
+interface Article {
   id: string
   headline: string
   summary: string
-  image: string
-  file: string
-  date: string
+  content?: string
+  publishedAt: string
 }
 
-type Tweet = {
+interface Tweet {
   id: string
   text: string
   created_at: string
   public_metrics: {
-    like_count: number
     retweet_count: number
+    like_count: number
     reply_count: number
+    quote_count: number
   }
+  author_id: string
 }
 
-type TwitterResponse = {
-  user: {
-    id: string
-    username: string
-    name: string
-  }
-  tweets: Tweet[]
-  fallback?: boolean
-  fallbackReason?: string
+interface ArticleResponse {
+  success: boolean
+  article?: Article
+  error?: string
+}
+
+interface TweetResponse {
+  success: boolean
+  data?: Tweet[]
+  error?: string
 }
 
 export default function HunterBlock() {
   const [article, setArticle] = useState<Article | null>(null)
   const [tweet, setTweet] = useState<Tweet | null>(null)
-  const [twitterData, setTwitterData] = useState<TwitterResponse | null>(null)
-  const [loading, setLoading] = useState({ article: true, tweet: true })
+  const [loading, setLoading] = useState({
+    article: true,
+    tweet: true
+  })
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchArticles = async () => {
-      try {
-        const res = await fetch('/api/articles')
-        if (!res.ok) throw new Error(`Articles fetch failed: ${res.status}`)
-        const all: Article[] = await res.json()
-        const sorted = all.sort(
-          (a, b) =>
-            new Date(b.date || 0).getTime() -
-            new Date(a.date || 0).getTime()
-        )
-        setArticle(sorted[0] || null)
-      } catch (err: any) {
-        console.error('Articles error:', err)
-        setError('Could not load the latest article.')
-      } finally {
-        setLoading(l => ({ ...l, article: false }))
+  const fetchLatestArticle = async () => {
+    try {
+      setLoading(prev => ({ ...prev, article: true }))
+      const response = await fetch('/api/articles/latest')
+      const result: ArticleResponse = await response.json()
+
+      if (result.success && result.article) {
+        setArticle(result.article)
+      } else {
+        console.log('No latest article available')
+        setArticle(null)
       }
+    } catch (err) {
+      console.error('Error fetching latest article:', err)
+      setError('Failed to load latest article')
+    } finally {
+      setLoading(prev => ({ ...prev, article: false }))
     }
+  }
 
-    const fetchTweet = async () => {
-      try {
-        const res = await fetch('/api/latest-tweet')
-        if (!res.ok) throw new Error(`Tweet fetch failed: ${res.status}`)
-        const data: TwitterResponse = await res.json()
-        
-        // Store the full response for fallback handling
-        setTwitterData(data)
-        
-        // Get the latest tweet from the response
-        const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
-        setTweet(latestTweet)
-      } catch (err: any) {
-        console.error('Twitter error:', err)
-        setError('Could not load the latest tweet.')
-      } finally {
-        setLoading(l => ({ ...l, tweet: false }))
+  const fetchLatestTweet = async () => {
+    try {
+      setLoading(prev => ({ ...prev, tweet: true }))
+      const response = await fetch('/api/twitter/latest-tweet')
+      const result: TweetResponse = await response.json()
+
+      if (result.success && result.data && result.data.length > 0) {
+        setTweet(result.data[0])
+      } else {
+        console.log('No latest tweet available')
+        setTweet(null)
       }
+    } catch (err) {
+      console.error('Error fetching latest tweet:', err)
+      setError('Failed to load latest tweet')
+    } finally {
+      setLoading(prev => ({ ...prev, tweet: false }))
     }
+  }
 
-    fetchArticles()
-    fetchTweet()
-  }, [])
-
-  // Helper function to create Twitter URL
-  const getTweetUrl = (tweet: Tweet) => {
+  const getTweetUrl = (tweet: Tweet): string => {
+    // Assuming the author_id corresponds to Web3_Dobie account
     return `https://x.com/Web3_Dobie/status/${tweet.id}`
   }
 
-  // Helper function to get Twitter profile URL
-  const getTwitterProfileUrl = () => {
-    const username = twitterData?.user?.username || 'Web3_Dobie'
-    return `https://x.com/${username}`
+  const formatTweetDate = (dateString: string): string => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffHours < 1) {
+      const diffMins = Math.floor(diffMs / (1000 * 60))
+      return `${diffMins}m ago`
+    } else if (diffHours < 24) {
+      return `${diffHours}h ago`
+    } else {
+      return `${diffDays}d ago`
+    }
   }
 
-  // Check if we should show fallback
-  const shouldShowFallback = () => {
-    return twitterData?.fallback || (!tweet && !loading.tweet)
+  const formatArticleDate = (dateString: string): string => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
+
+  const truncateText = (text: string, maxLength: number): string => {
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
+  useEffect(() => {
+    fetchLatestArticle()
+    fetchLatestTweet()
+
+    // Refresh data every 5 minutes
+    const interval = setInterval(() => {
+      fetchLatestArticle()
+      fetchLatestTweet()
+    }, 5 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
-    <section className="mt-20 border-t border-gray-800 pt-10">
-      {/* Hero section - image + text side by side */}
-      <div className="flex flex-col md:flex-row items-center gap-8 mb-12">
-        <Image
-          src={HunterSmiling}
-          alt="Hunter the Web3Dobie"
-          width={220}
-          height={220}
-          className="rounded-xl border-4 border-emerald-500 shadow-lg flex-shrink-0"
-        />
-        <div className="text-lg max-w-xl">
-          <p className="mb-4">
-            Hunter is my trusted Web3 Doberman — part analyst, part watchdog.
+    <section className="mt-16 px-6">
+      {/* Hero section */}
+      <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-start gap-8 mb-8">
+        <div className="md:w-1/3 flex justify-center">
+          <div className="w-48 h-48 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <span className="text-6xl animate-pulse">🐕</span>
+          </div>
+        </div>
+        <div className="md:w-2/3">
+          <h2 className="text-3xl font-bold mb-4 text-emerald-400">
+            Meet Hunter, the Alpha Dog 🐾
+          </h2>
+          <p className="text-gray-300 text-lg leading-relaxed mb-6">
+            Hunter is DutchBrat's AI-powered crypto companion and market analyst.
             He helps sniff out alpha, barks at scams, and keeps this site running
             with daily insights on X, commentary, and briefings. Follow his
             instincts. They're usually right.
           </p>
-          <a
-            href="https://x.com/@Web3_Dobie"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block text-emerald-400 font-semibold hover:underline"
-          >
-            → Follow @Web3_Dobie on X 🐾
-          </a>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <a
+              href="https://x.com/@Web3_Dobie"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-emerald-400 font-semibold hover:underline transition-colors duration-200"
+            >
+              → Follow @Web3_Dobie on X 🐾
+            </a>
+            <a
+              href="https://web3dobie.substack.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-purple-400 font-semibold hover:underline transition-colors duration-200"
+            >
+              → Subscribe to Newsletter 📧
+            </a>
+          </div>
         </div>
       </div>
 
       {/* Error message */}
       {error && (
-        <div className="text-red-500 px-4 mb-6 max-w-4xl mx-auto">{error}</div>
+        <div className="text-red-500 px-4 mb-6 max-w-4xl mx-auto bg-red-900/20 border border-red-800 rounded-lg p-3">
+          <span className="font-medium">⚠️ {error}</span>
+        </div>
       )}
 
-      {/* Cards section - underneath hero, aligned with text width */}
-      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Cards section - now with 3 cards */}
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Latest Article Card */}
-        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900">
-          <p className="text-sm text-gray-400 mb-2">Latest Article</p>
+        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm text-gray-400 font-semibold">📰 Latest Article</p>
+            {article && (
+              <p className="text-xs text-gray-500">
+                {formatArticleDate(article.publishedAt)}
+              </p>
+            )}
+          </div>
+
           {loading.article ? (
-            <p className="text-gray-500">Loading article…</p>
+            <div className="animate-pulse">
+              <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
+              <div className="h-3 bg-gray-700 rounded w-full mb-1"></div>
+              <div className="h-3 bg-gray-700 rounded w-2/3"></div>
+            </div>
           ) : article ? (
-            <>
+            <div className="space-y-3">
               <Link
                 href={`/articles?articleId=${article.id}`}
-                className="text-xl font-semibold text-white hover:underline"
+                className="text-base font-semibold text-white hover:text-gray-300 transition-colors leading-tight block"
               >
-                {article.headline}
+                {truncateText(article.headline, 80)}
               </Link>
-              <p className="mt-1 text-gray-300">{article.summary}</p>
-            </>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                {truncateText(article.summary, 120)}
+              </p>
+              <Link
+                href={`/articles?articleId=${article.id}`}
+                className="inline-block text-sm text-blue-400 hover:underline transition-colors"
+              >
+                Read full article →
+              </Link>
+            </div>
           ) : (
-            <p className="text-gray-500">No articles available.</p>
+            <div className="text-center py-4">
+              <p className="text-gray-500 mb-2">No articles available.</p>
+              <Link
+                href="/articles"
+                className="text-sm text-blue-400 hover:underline"
+              >
+                Browse all articles →
+              </Link>
+            </div>
           )}
         </div>
 
         {/* Latest Tweet Card */}
-        <div className="p-4 border border-blue-700 rounded-xl bg-gray-900">
-          <p className="text-sm text-blue-400 mb-2">Latest Tweet</p>
+        <div className="p-4 border border-blue-700 rounded-xl bg-gray-900 hover:border-blue-600 transition-colors duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
+            {tweet && (
+              <p className="text-xs text-gray-500">
+                {formatTweetDate(tweet.created_at)}
+              </p>
+            )}
+          </div>
+
           {loading.tweet ? (
-            <p className="text-gray-500">Loading tweet…</p>
-          ) : shouldShowFallback() ? (
-            /* Fallback: Show Twitter account link instead of error message */
-            <div className="text-center py-4">
-              <div className="mb-3">
-                <svg 
-                  className="w-12 h-12 mx-auto text-blue-400 mb-2" 
-                  fill="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-              </div>
-              <p className="text-gray-300 mb-3">
-                Latest tweets temporarily unavailable
-              </p>
-              <Link
-                href={getTwitterProfileUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              >
-                <svg 
-                  className="w-4 h-4" 
-                  fill="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-                Visit @{twitterData?.user?.username || 'Web3_Dobie'} on X
-              </Link>
-              <p className="text-xs text-gray-500 mt-2">
-                {twitterData?.fallbackReason === 'rate_limit' 
-                  ? 'Rate limit reached - check back soon!' 
-                  : 'Service temporarily unavailable'}
-              </p>
+            <div className="animate-pulse">
+              <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
+              <div className="h-4 bg-gray-700 rounded w-4/5 mb-2"></div>
+              <div className="h-3 bg-gray-700 rounded w-1/2"></div>
             </div>
           ) : tweet ? (
-            <>
-              <p className="text-base text-white mb-2">{tweet.text}</p>
-              <div className="flex items-center gap-4 text-sm text-gray-400 mb-2">
-                <span>❤️ {tweet.public_metrics.like_count}</span>
-                <span>🔄 {tweet.public_metrics.retweet_count}</span>
-                <span>💬 {tweet.public_metrics.reply_count}</span>
+            <div className="space-y-3">
+              <p className="text-sm text-white leading-relaxed">
+                {truncateText(tweet.text, 160)}
+              </p>
+
+              {/* Engagement metrics */}
+              <div className="flex items-center gap-4 text-xs text-gray-400">
+                <span className="flex items-center gap-1">
+                  <span>❤️</span>
+                  <span>{tweet.public_metrics.like_count.toLocaleString()}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span>🔄</span>
+                  <span>{tweet.public_metrics.retweet_count.toLocaleString()}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span>💬</span>
+                  <span>{tweet.public_metrics.reply_count.toLocaleString()}</span>
+                </span>
               </div>
+
               <Link
                 href={getTweetUrl(tweet)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
+                className="inline-block text-sm text-blue-400 hover:underline transition-colors"
               >
-                View on X (Twitter)
-              </Link>
-            </>
-          ) : (
-            /* Final fallback if no tweet and no fallback data */
-            <div className="text-center py-4">
-              <p className="text-gray-500 mb-3">No tweet available</p>
-              <Link
-                href={getTwitterProfileUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
-              >
-                Visit @Web3_Dobie on X
+                View on X (Twitter) →
               </Link>
             </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-gray-500 mb-2">No tweet available.</p>
+              <a
+                href="https://x.com/@Web3_Dobie"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-400 hover:underline"
+              >
+                Follow @Web3_Dobie →
+              </a>
+            </div>
           )}
+        </div>
+
+        {/* Crypto News Card - NEW */}
+        <CryptoNewsCard />
+      </div>
+
+      {/* Additional info section */}
+      <div className="max-w-4xl mx-auto mt-8 p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+        <div className="text-center">
+          <p className="text-sm text-gray-400 mb-2">
+            🤖 Hunter's AI is powered by advanced market analysis and sentiment tracking
+          </p>
+          <p className="text-xs text-gray-500">
+            Last updated: {new Date().toLocaleTimeString()} |
+            Data refreshes every 5 minutes
+          </p>
         </div>
       </div>
     </section>
