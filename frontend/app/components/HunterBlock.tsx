@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import HunterSmiling from '../../public/images/hunter_smiling.png'
-// import CryptoNewsCard from './CryptoNewsCard'  // Temporarily commented out for debugging
+import CryptoNewsCard from './CryptoNewsCard'  // Uncommented for production
 
 interface Article {
   id: string
