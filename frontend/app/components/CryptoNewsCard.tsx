@@ -1,4 +1,4 @@
-// frontend/app/components/CryptoNewsCard.tsx
+// frontend/app/components/CryptoNewsCard.tsx - Improved with better fallbacks
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -27,24 +27,38 @@ export default function CryptoNewsCard() {
     const [error, setError] = useState<string | null>(null)
     const [lastFetched, setLastFetched] = useState<string>('')
     const [lastRotated, setLastRotated] = useState<string>('')
+    const [isClient, setIsClient] = useState(false)
+
+    // Fix hydration mismatch
+    useEffect(() => {
+        setIsClient(true)
+    }, [])
 
     const fetchCryptoNews = async () => {
         try {
             setLoading(true)
+            setError(null)
+
             const response = await fetch('/api/crypto-news')
+
+            if (!response.ok) {
+                throw new Error(`Crypto news fetch failed: ${response.status}`)
+            }
+
             const result: CryptoNewsResponse = await response.json()
 
-            if (result.success && result.data.length > 0) {
+            if (result.success && result.data && result.data.length > 0) {
                 setAllNews(result.data)
                 setCurrentNewsIndex(0) // Reset to first headline when fetching new data
                 setLastFetched(result.lastUpdated)
                 setError(null)
             } else {
-                setError(result.error || 'No crypto news available')
+                throw new Error(result.error || 'No crypto news available')
             }
         } catch (err) {
-            setError('Network error while fetching crypto news')
-            console.error('Crypto news fetch error:', err)
+            console.error('Error fetching crypto news:', err)
+            setError('Failed to load crypto news')
+            // Don't clear existing news on error, just show error state
         } finally {
             setLoading(false)
         }
@@ -86,40 +100,47 @@ export default function CryptoNewsCard() {
         return `${diffDays}d ago`
     }
 
+    const truncateText = (text: string, maxLength: number): string => {
+        if (text.length <= maxLength) return text
+        return text.substring(0, maxLength) + '...'
+    }
+
     const currentNews = allNews[currentNewsIndex]
     const rotationInfo = allNews.length > 1 ? `${currentNewsIndex + 1}/${allNews.length}` : ''
 
-    const formatTimeAgoForNews = (timestamp: string): string => {
-        const now = new Date()
-        const time = new Date(timestamp)
-        const diffMs = now.getTime() - time.getTime()
-        const diffMins = Math.floor(diffMs / (1000 * 60))
-
-        if (diffMins < 60) return `${diffMins}m ago`
-        const diffHours = Math.floor(diffMins / 60)
-        if (diffHours < 24) return `${diffHours}h ago`
-        const diffDays = Math.floor(diffHours / 24)
-        return `${diffDays}d ago`
-    }
-
     return (
-        <div className="p-4 border border-orange-700 rounded-xl bg-gray-900">
+        <div className="p-4 border border-orange-700 rounded-xl bg-gray-900 hover:border-orange-600 transition-colors duration-200 w-full">
             <div className="flex items-center justify-between mb-3">
                 <p className="text-sm text-orange-400 font-semibold">🚀 Latest Crypto News</p>
                 <div className="text-xs text-gray-500 text-right">
-                    {rotationInfo && (
+                    {rotationInfo && isClient && (
                         <div className="mb-1">Headlines {rotationInfo}</div>
                     )}
-                    {lastFetched && (
-                        <div>Fetched {formatTimeAgoForNews(lastFetched)}</div>
+                    {lastFetched && isClient && (
+                        <div>Fetched {formatTimeAgo(lastFetched)}</div>
                     )}
                 </div>
             </div>
 
             {loading ? (
-                <p className="text-gray-500">Loading crypto news…</p>
+                <div className="animate-pulse">
+                    <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
+                    <div className="h-4 bg-gray-700 rounded w-4/5 mb-2"></div>
+                    <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+                </div>
             ) : error ? (
-                <p className="text-red-400">Error: {error}</p>
+                <div className="text-center py-4">
+                    <p className="text-gray-500 mb-2">News fetch unavailable</p>
+                    <p className="text-xs text-gray-600 mb-3">
+                        Hunter's news pipeline is taking a break 🐾
+                    </p>
+                    <button
+                        onClick={fetchCryptoNews}
+                        className="text-sm text-orange-400 hover:underline transition-colors"
+                    >
+                        Try again →
+                    </button>
+                </div>
             ) : currentNews ? (
                 <div className="space-y-3">
                     <Link
@@ -128,12 +149,12 @@ export default function CryptoNewsCard() {
                         rel="noopener noreferrer"
                         className="text-base font-semibold text-white hover:text-orange-400 transition-colors leading-tight block"
                     >
-                        {currentNews.headline}
+                        {truncateText(currentNews.headline, 80)}
                     </Link>
 
                     {/* Hunter's comment */}
-                    <p className="text-sm text-gray-300 italic">
-                        {currentNews.hunterComment}
+                    <p className="text-sm text-gray-300 italic leading-relaxed">
+                        {truncateText(currentNews.hunterComment, 120)}
                     </p>
 
                     <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-700">
@@ -142,30 +163,49 @@ export default function CryptoNewsCard() {
                             {currentNews.score && (
                                 <span className="text-orange-400">Score: {currentNews.score}</span>
                             )}
-                            <span>{formatTimeAgoForNews(currentNews.timestamp)}</span>
+                            {isClient && (
+                                <span>{formatTimeAgo(currentNews.timestamp)}</span>
+                            )}
                         </div>
                     </div>
 
-                    <div className="pt-2 border-t border-gray-700">
-                        <p className="text-xs text-gray-400 text-center">
-                            Powered by Hunter's AI News Pipeline 🐾
-                            {allNews.length > 1 && (
-                                <span className="block mt-1">
-                                    Next rotation in ~{15 - Math.floor((Date.now() - new Date(lastRotated || lastFetched).getTime()) / (1000 * 60))}min
-                                </span>
-                            )}
-                        </p>
-                    </div>
-                </div>
-            ) : allNews.length === 0 ? (
-                <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">News fetch unavailable</p>
-                    <p className="text-xs text-gray-600">
-                        Hunter's news pipeline is taking a break 🐾
-                    </p>
+                    <Link
+                        href={currentNews.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-sm text-orange-400 hover:underline transition-colors"
+                    >
+                        Read full article →
+                    </Link>
+
+                    {isClient && (
+                        <div className="pt-2 border-t border-gray-700">
+                            <p className="text-xs text-gray-400 text-center">
+                                Powered by Hunter's AI News Pipeline 🐾
+                                {allNews.length > 1 && lastRotated && (
+                                    <span className="block mt-1">
+                                        Next rotation in ~{Math.max(0, 15 - Math.floor((Date.now() - new Date(lastRotated || lastFetched).getTime()) / (1000 * 60)))}min
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                    )}
                 </div>
             ) : (
-                <p className="text-gray-500">No crypto news available.</p>
+                <div className="text-center py-4">
+                    <p className="text-gray-500 mb-2">No crypto news available</p>
+                    <p className="text-xs text-gray-600 mb-3">
+                        Check back soon for fresh headlines 📰
+                    </p>
+                    <a
+                        href="https://www.coindesk.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-orange-400 hover:underline"
+                    >
+                        Browse CoinDesk →
+                    </a>
+                </div>
             )}
         </div>
     )
