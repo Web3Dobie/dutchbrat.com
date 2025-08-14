@@ -149,8 +149,8 @@ export default function HunterBlock() {
   return (
     <section className="mt-16 px-6">
       {/* Hero section */}
-      <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-start gap-8 mb-8">
-        <div className="flex justify-center md:justify-start">
+      <div className="max-w-4xl flex flex-col md:flex-row items-start gap-8 mb-8">
+        <div className="flex justify-start">
           <Image
             src={HunterSmiling}
             alt="Hunter the Web3Dobie"
@@ -182,14 +182,14 @@ export default function HunterBlock() {
 
       {/* Error message */}
       {error && (
-        <div className="text-red-500 px-4 mb-6 max-w-4xl mx-auto bg-red-900/20 border border-red-800 rounded-lg p-3">
+        <div className="text-red-500 px-4 mb-6 max-w-4xl bg-red-900/20 border border-red-800 rounded-lg p-3">
           <span className="font-medium">⚠️ {error}</span>
         </div>
       )}
 
       {/* Cards section - left-aligned 2-column layout */}
-      <div className="max-w-4xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:max-w-none">
+      <div className="max-w-4xl">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Latest Article Card */}
           <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200 w-full">
             <div className="flex items-center justify-between mb-3">
@@ -307,7 +307,7 @@ export default function HunterBlock() {
       </div>
 
       {/* Additional info section */}
-      <div className="max-w-4xl mx-auto mt-8 p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+      <div className="max-w-4xl mt-8 p-4 bg-gray-800/50 rounded-xl border border-gray-700">
         <div className="text-center">
           <p className="text-sm text-gray-400 mb-2">
             🤖 Hunter's AI is powered by advanced market analysis and sentiment tracking
