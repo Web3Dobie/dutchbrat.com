@@ -1,4 +1,4 @@
-// frontend/app/api/crypto-news/route.ts - Fixed version
+// frontend/app/api/crypto-news/route.ts - Complete version with debugging
 import { NextResponse } from 'next/server'
 
 // Force dynamic rendering to prevent caching
@@ -14,8 +14,12 @@ interface CryptoNewsItem {
 }
 
 export async function GET() {
+    console.log('🔍 API route called at:', new Date().toISOString())
+
     try {
+        console.log('📡 About to fetch from X-AI-Agent...')
         const result = await fetchTop4HourlyHeadlines()
+        console.log('📊 Fetch result:', result)
 
         return NextResponse.json({
             success: true,
@@ -30,9 +34,10 @@ export async function GET() {
             },
         })
     } catch (error) {
-        console.error('Error fetching crypto news:', error)
+        console.error('❌ API route error:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch crypto news'
         return NextResponse.json(
-            { success: false, error: 'Failed to fetch crypto news' },
+            { success: false, error: errorMessage },
             {
                 status: 500,
                 headers: {
@@ -49,7 +54,11 @@ async function fetchTop4HourlyHeadlines(): Promise<{ data: CryptoNewsItem[], las
     try {
         // Add cache-busting parameter
         const timestamp = Date.now()
-        const response = await fetch(`http://74.241.128.114:3001/crypto-news-data?t=${timestamp}`, {
+        const url = `http://74.241.128.114:3001/crypto-news-data?t=${timestamp}`
+
+        console.log('🔍 Attempting to fetch from:', url)
+
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
@@ -59,11 +68,16 @@ async function fetchTop4HourlyHeadlines(): Promise<{ data: CryptoNewsItem[], las
             signal: AbortSignal.timeout(10000) // 10 second timeout
         })
 
+        console.log('📡 Response status:', response.status)
+        console.log('📡 Response ok:', response.ok)
+
         if (!response.ok) {
+            console.error(`❌ HTTP error: ${response.status} ${response.statusText}`)
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
 
         const data = await response.json()
+        console.log('📊 Raw data received:', JSON.stringify(data, null, 2))
 
         if (data.success && data.data && data.data.length > 0) {
             console.log(`✅ Loaded ${data.data.length} headlines from X-AI-Agent via HTTP`)
@@ -74,17 +88,31 @@ async function fetchTop4HourlyHeadlines(): Promise<{ data: CryptoNewsItem[], las
                 lastUpdated: data.lastUpdated // Preserve the original timestamp
             }
         } else {
-            console.log('⚠️ X-AI-Agent returned no headlines')
+            console.log('⚠️ X-AI-Agent returned no headlines or empty data')
+            console.log('📊 Data structure:', {
+                success: data.success,
+                dataExists: !!data.data,
+                dataLength: data.data?.length,
+                lastUpdated: data.lastUpdated
+            })
+
             return {
                 data: [],
-                lastUpdated: new Date().toISOString()
+                lastUpdated: data.lastUpdated || new Date().toISOString()
             }
         }
 
     } catch (error) {
         console.error('🌐 HTTP fetch from X-AI-Agent failed:', error)
 
-        // Return empty array instead of mock data
+        const errorDetails = {
+            name: error instanceof Error ? error.name : 'Unknown',
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+        }
+        console.error('🔍 Error details:', errorDetails)
+
+        // Return empty array instead of throwing
         return {
             data: [],
             lastUpdated: new Date().toISOString()
