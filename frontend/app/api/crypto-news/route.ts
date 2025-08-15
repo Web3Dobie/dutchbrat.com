@@ -56,9 +56,8 @@ export async function GET() {
 
 async function fetchTop4HourlyHeadlines(): Promise<{ data: CryptoNewsItem[], lastUpdated: string, success: boolean }> {
     try {
-        // Add cache-busting parameter
-        const timestamp = Date.now()
-        const url = `http://74.241.128.114:3001/crypto-news-data?t=${timestamp}`
+        // Remove cache-busting parameter that's causing 404
+        const url = `http://74.241.128.114:3001/crypto-news-data`
 
         console.log('🔍 Attempting HTTP fetch from:', url)
 
