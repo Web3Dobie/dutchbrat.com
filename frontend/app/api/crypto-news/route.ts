@@ -1,5 +1,7 @@
-// frontend/app/api/crypto-news/route.ts - Complete version with debugging
+// frontend/app/api/crypto-news/route.ts - Direct file read version
 import { NextResponse } from 'next/server'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
 
 // Force dynamic rendering to prevent caching
 export const dynamic = 'force-dynamic'
@@ -13,18 +15,31 @@ interface CryptoNewsItem {
     hunterComment: string
 }
 
+interface CryptoNewsData {
+    success: boolean
+    data: CryptoNewsItem[]
+    lastUpdated: string
+    totalHeadlines?: number
+    rotationSchedule?: string
+    message?: string
+}
+
 export async function GET() {
     console.log('🔍 API route called at:', new Date().toISOString())
 
     try {
-        console.log('📡 About to fetch from X-AI-Agent...')
-        const result = await fetchTop4HourlyHeadlines()
-        console.log('📊 Fetch result:', result)
+        console.log('📁 Reading crypto news file directly...')
+        const result = await readCryptoNewsFile()
+        console.log('📊 File read result:', {
+            success: result.success,
+            dataLength: result.data.length,
+            lastUpdated: result.lastUpdated
+        })
 
         return NextResponse.json({
-            success: true,
+            success: result.success,
             data: result.data,
-            lastUpdated: result.lastUpdated, // Use the actual lastUpdated from your server
+            lastUpdated: result.lastUpdated,
             rotationSchedule: "15min intervals"
         }, {
             headers: {
@@ -50,72 +65,57 @@ export async function GET() {
     }
 }
 
-async function fetchTop4HourlyHeadlines(): Promise<{ data: CryptoNewsItem[], lastUpdated: string }> {
+async function readCryptoNewsFile(): Promise<{ data: CryptoNewsItem[], lastUpdated: string, success: boolean }> {
     try {
-        // Add cache-busting parameter
-        const timestamp = Date.now()
-        const url = `http://74.241.128.114:3001/crypto-news-data?t=${timestamp}`
+        // Path to the JSON file on the same VM
+        const filePath = '/home/hunter/projects/X-AI-Agent/data/crypto_news_api.json'
 
-        console.log('🔍 Attempting to fetch from:', url)
+        console.log('🔍 Attempting to read file:', filePath)
 
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache',
-            },
-            // Add timeout to prevent hanging
-            signal: AbortSignal.timeout(10000) // 10 second timeout
+        const fileContent = await readFile(filePath, 'utf-8')
+        console.log('📄 File read successfully, length:', fileContent.length)
+
+        const data: CryptoNewsData = JSON.parse(fileContent)
+        console.log('📊 Parsed data:', {
+            success: data.success,
+            dataLength: data.data?.length,
+            lastUpdated: data.lastUpdated
         })
 
-        console.log('📡 Response status:', response.status)
-        console.log('📡 Response ok:', response.ok)
-
-        if (!response.ok) {
-            console.error(`❌ HTTP error: ${response.status} ${response.statusText}`)
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        console.log('📊 Raw data received:', JSON.stringify(data, null, 2))
-
         if (data.success && data.data && data.data.length > 0) {
-            console.log(`✅ Loaded ${data.data.length} headlines from X-AI-Agent via HTTP`)
-            console.log(`📅 Data last updated: ${data.lastUpdated}`)
+            console.log(`✅ Loaded ${data.data.length} headlines from file`)
 
             return {
                 data: data.data,
-                lastUpdated: data.lastUpdated // Preserve the original timestamp
+                lastUpdated: data.lastUpdated,
+                success: true
             }
         } else {
-            console.log('⚠️ X-AI-Agent returned no headlines or empty data')
-            console.log('📊 Data structure:', {
-                success: data.success,
-                dataExists: !!data.data,
-                dataLength: data.data?.length,
-                lastUpdated: data.lastUpdated
-            })
+            console.log('⚠️ File contains no headlines or invalid structure')
 
             return {
                 data: [],
-                lastUpdated: data.lastUpdated || new Date().toISOString()
+                lastUpdated: data.lastUpdated || new Date().toISOString(),
+                success: false
             }
         }
 
     } catch (error) {
-        console.error('🌐 HTTP fetch from X-AI-Agent failed:', error)
+        console.error('📁 File read failed:', error)
 
         const errorDetails = {
             name: error instanceof Error ? error.name : 'Unknown',
             message: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined
+            code: (error as any)?.code,
+            path: (error as any)?.path
         }
         console.error('🔍 Error details:', errorDetails)
 
         // Return empty array instead of throwing
         return {
             data: [],
-            lastUpdated: new Date().toISOString()
+            lastUpdated: new Date().toISOString(),
+            success: false
         }
     }
 }
