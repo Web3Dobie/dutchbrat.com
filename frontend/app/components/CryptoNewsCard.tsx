@@ -166,7 +166,7 @@ export default function CryptoNewsCard() {
                 <div className="text-center py-4">
                     <p className="text-gray-500 mb-2">News fetch unavailable</p>
                     <p className="text-xs text-gray-600 mb-3">
-                        Hunter's news pipeline is taking a break 🐾
+                        Hunter is having a rest 🐾
                     </p>
                     <button
                         onClick={fetchCryptoNews}
@@ -213,7 +213,7 @@ export default function CryptoNewsCard() {
                     {isClient && (
                         <div className="pt-2 border-t border-gray-700">
                             <p className="text-xs text-gray-400 text-center">
-                                Powered by Hunter's AI News Pipeline 🐾
+                                Powered by Hunter's Nose for News 🐾
                                 {allNews.length > 1 && lastRotated && (
                                     <span className="block mt-1">
                                         Next rotation in ~{Math.max(0, 15 - Math.floor((Date.now() - new Date(lastRotated || lastFetched).getTime()) / (1000 * 60)))}min
