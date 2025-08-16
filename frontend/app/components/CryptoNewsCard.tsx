@@ -1,4 +1,4 @@
-// frontend/app/components/CryptoNewsCard.tsx - Improved with better fallbacks
+// frontend/app/components/CryptoNewsCard.tsx - Enhanced with dynamic text expansion
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -28,11 +28,17 @@ export default function CryptoNewsCard() {
     const [lastFetched, setLastFetched] = useState<string>('')
     const [lastRotated, setLastRotated] = useState<string>('')
     const [isClient, setIsClient] = useState(false)
+    const [isCommentExpanded, setIsCommentExpanded] = useState(false)
 
     // Fix hydration mismatch
     useEffect(() => {
         setIsClient(true)
     }, [])
+
+    // Reset expansion state when news item changes
+    useEffect(() => {
+        setIsCommentExpanded(false)
+    }, [currentNewsIndex])
 
     const fetchCryptoNews = async () => {
         try {
@@ -105,6 +111,34 @@ export default function CryptoNewsCard() {
         return text.substring(0, maxLength) + '...'
     }
 
+    // Enhanced function to handle hunter comment display
+    const renderHunterComment = (comment: string) => {
+        const CHARACTER_LIMIT = 120
+        const isTruncated = comment.length > CHARACTER_LIMIT
+
+        if (!isTruncated) {
+            return (
+                <p className="text-sm text-gray-300 italic leading-relaxed">
+                    {comment}
+                </p>
+            )
+        }
+
+        return (
+            <div className="space-y-1">
+                <p className="text-sm text-gray-300 italic leading-relaxed">
+                    {isCommentExpanded ? comment : truncateText(comment, CHARACTER_LIMIT)}
+                </p>
+                <button
+                    onClick={() => setIsCommentExpanded(!isCommentExpanded)}
+                    className="text-xs text-orange-400 hover:text-orange-300 transition-colors duration-200 font-medium"
+                >
+                    {isCommentExpanded ? 'Show less' : 'Show more'}
+                </button>
+            </div>
+        )
+    }
+
     const currentNews = allNews[currentNewsIndex]
     const rotationInfo = allNews.length > 1 ? `${currentNewsIndex + 1}/${allNews.length}` : ''
 
@@ -152,10 +186,8 @@ export default function CryptoNewsCard() {
                         {truncateText(currentNews.headline, 80)}
                     </Link>
 
-                    {/* Hunter's comment */}
-                    <p className="text-sm text-gray-300 italic leading-relaxed">
-                        {truncateText(currentNews.hunterComment, 120)}
-                    </p>
+                    {/* Enhanced Hunter's comment with expansion */}
+                    {renderHunterComment(currentNews.hunterComment)}
 
                     <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-700">
                         <span className="capitalize">{currentNews.source}</span>
