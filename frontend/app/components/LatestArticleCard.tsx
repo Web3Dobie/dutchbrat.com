@@ -8,8 +8,12 @@ interface Article {
     id: string
     headline: string
     summary: string
-    content?: string
-    publishedAt: string
+    file: string
+    date: string
+    link: string
+    tags: string[]
+    status: string
+    category?: string
 }
 
 export default function LatestArticleCard() {
@@ -37,8 +41,8 @@ export default function LatestArticleCard() {
             const allArticles: Article[] = await response.json()
             const sorted = allArticles.sort(
                 (a, b) =>
-                    new Date(b.publishedAt || 0).getTime() -
-                    new Date(a.publishedAt || 0).getTime()
+                    new Date(b.date || 0).getTime() -
+                    new Date(a.date || 0).getTime()
             )
             setArticle(sorted[0] || null)
         } catch (err) {
@@ -78,7 +82,7 @@ export default function LatestArticleCard() {
                 <p className="text-sm text-gray-400 font-semibold">📰 Latest Article</p>
                 {article && isClient && (
                     <p className="text-xs text-gray-500">
-                        {formatArticleDate(article.publishedAt)}
+                        {formatArticleDate(article.date)}
                     </p>
                 )}
             </div>
