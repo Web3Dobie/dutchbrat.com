@@ -33,15 +33,15 @@ class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) {
         return this.props.fallback;
       }
-      
+
       return (
         <div className="p-4 border border-red-500 rounded bg-red-50 text-red-700">
           <h2 className="font-bold mb-2">Something went wrong</h2>
           <p className="text-sm">
             {this.state.error?.message || 'An unexpected error occurred'}
           </p>
-          <button 
-            className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm"
+          <button
+            className="mt-2 px-3 py-1 bg-red-600 text-gray-900 dark:text-white rounded text-sm"
             onClick={() => window.location.reload()}
           >
             Refresh Page

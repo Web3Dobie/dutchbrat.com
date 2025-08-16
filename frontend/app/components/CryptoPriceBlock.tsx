@@ -439,7 +439,7 @@ function ChartModal({
                             className="w-8 h-8"
                         />
                         <div>
-                            <h3 className="text-xl font-bold text-white">{tokenConfig.ticker}</h3>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white">{tokenConfig.ticker}</h3>
                             <p className="text-gray-400 text-sm">
                                 ${tokenData.price.toLocaleString()}
                                 <span className={`ml-2 ${tokenData.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -450,7 +450,7 @@ function ChartModal({
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-white text-2xl"
+                        className="text-gray-400 hover:text-gray-900 dark:text-gray-900 dark:text-whitetext-2xl"
                     >
                         ×
                     </button>
@@ -463,8 +463,8 @@ function ChartModal({
                             key={tf}
                             onClick={() => setTimeframe(tf as TimeFrame)}
                             className={`px-3 py-1 rounded text-sm font-medium transition-colors ${timeframe === tf
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                ? 'bg-blue-600 text-gray-900 dark:text-white'
+                                : 'bg-gray-700 text-gray-600 dark:text-gray-600 dark:text-gray-600 dark:text-gray-600 dark:text-gray-300 hover:bg-gray-600'
                                 }`}
                         >
                             {config.label}
@@ -703,7 +703,7 @@ export default function CryptoPriceBlock() {
                                                     target.style.display = 'none'
                                                     target.parentElement?.insertAdjacentHTML(
                                                         'afterbegin',
-                                                        `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
+                                                        `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-600 dark:text-gray-600 dark:text-gray-300">${config.ticker}</div>`
                                                     )
                                                 }}
                                             />
@@ -719,7 +719,7 @@ export default function CryptoPriceBlock() {
                                                     target.style.display = 'none'
                                                     target.parentElement?.insertAdjacentHTML(
                                                         'afterbegin',
-                                                        `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">${config.ticker}</div>`
+                                                        `<div class="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-600 dark:text-gray-600 dark:text-gray-300">${config.ticker}</div>`
                                                     )
                                                 }}
                                             />
@@ -739,7 +739,7 @@ export default function CryptoPriceBlock() {
                                 </p>
 
                                 {/* Price */}
-                                <p className="text-xl font-bold text-white">
+                                <p className="text-xl font-bold text-gray-900 dark:text-white">
                                     ${formatPrice(data.price)}
                                 </p>
 

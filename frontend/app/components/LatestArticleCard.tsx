@@ -115,11 +115,11 @@ export default function LatestArticleCard() {
                 <div className="space-y-3">
                     <Link
                         href={`/articles?articleId=${article.id}`}
-                        className="text-base font-semibold text-white hover:text-gray-300 transition-colors leading-tight block"
+                        className="text-base font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:text-gray-300 transition-colors leading-tight block"
                     >
                         {truncateText(article.headline, 80)}
                     </Link>
-                    <p className="text-sm text-gray-300 leading-relaxed">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                         {truncateText(article.summary, 120)}
                     </p>
                     <Link

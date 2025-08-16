@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
       </head>
-      <body className="bg-gray-950 text-white">
+      <body className="bg-white dark:bg-gray-950 text-gray-900 dark:text-white transition-colors duration-300">
         <Navbar />
         <main className="px-6 py-10 min-h-screen">{children}</main>
       </body>

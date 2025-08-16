@@ -127,7 +127,7 @@ export default function LatestTweetCard() {
                 </div>
             ) : tweet ? (
                 <div className="space-y-3">
-                    <p className="text-sm text-white leading-relaxed">
+                    <p className="text-sm text-gray-900 dark:text-white leading-relaxed">
                         {truncateText(tweet.text, 160)}
                     </p>
 
