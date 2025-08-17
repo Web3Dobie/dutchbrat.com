@@ -1,4 +1,3 @@
-// frontend/app/components/LatestTweetCard.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -9,12 +8,23 @@ interface Tweet {
     text: string
     created_at: string
     public_metrics: {
-        retweet_count: number
         like_count: number
+        retweet_count: number
         reply_count: number
-        quote_count: number
     }
-    author_id: string
+    url?: string
+}
+
+interface TwitterData {
+    user: {
+        id: string
+        username: string
+        name: string
+    }
+    tweets: Tweet[]
+    source?: 'notion' | 'twitter'
+    fallback?: boolean
+    fallbackReason?: string
 }
 
 export default function LatestTweetCard() {
@@ -22,8 +32,8 @@ export default function LatestTweetCard() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isClient, setIsClient] = useState(false)
+    const [dataSource, setDataSource] = useState<'notion' | 'twitter'>('notion')
 
-    // Fix hydration mismatch by ensuring client-side rendering
     useEffect(() => {
         setIsClient(true)
     }, [])
@@ -33,17 +43,40 @@ export default function LatestTweetCard() {
             setLoading(true)
             setError(null)
 
-            const response = await fetch('/api/latest-tweet')
+            // Try Notion endpoint first (our primary source now)
+            const notionResponse = await fetch('/api/latest-tweet-notion')
 
-            if (!response.ok) {
-                throw new Error(`Tweet fetch failed: ${response.status}`)
+            if (notionResponse.ok) {
+                const data: TwitterData = await notionResponse.json()
+                const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
+                setTweet(latestTweet)
+                setDataSource('notion')
+
+                if (latestTweet) {
+                    console.log('✅ Successfully loaded tweet from Notion')
+                    return
+                }
             }
 
-            const data: any = await response.json()
+            // Fallback to Twitter API if Notion fails or has no data
+            console.log('🔄 Notion had no data, trying Twitter API as fallback...')
+            const twitterResponse = await fetch('/api/latest-tweet')
 
-            // Handle the response structure from your original API
-            const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
-            setTweet(latestTweet)
+            if (twitterResponse.ok) {
+                const data: TwitterData = await twitterResponse.json()
+                const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
+                setTweet(latestTweet)
+                setDataSource('twitter')
+
+                if (latestTweet) {
+                    console.log('✅ Successfully loaded tweet from Twitter API')
+                    return
+                }
+            }
+
+            // If both fail, show error
+            setError('Unable to load latest tweet')
+
         } catch (err) {
             console.error('Error fetching latest tweet:', err)
             setError('Failed to load latest tweet')
@@ -53,7 +86,10 @@ export default function LatestTweetCard() {
     }
 
     const getTweetUrl = (tweet: Tweet): string => {
-        // Assuming the author_id corresponds to Web3_Dobie account
+        // Use the stored URL if available (from Notion), otherwise construct it
+        if (tweet.url) {
+            return tweet.url
+        }
         return `https://x.com/Web3_Dobie/status/${tweet.id}`
     }
 
@@ -82,8 +118,8 @@ export default function LatestTweetCard() {
     useEffect(() => {
         fetchLatestTweet()
 
-        // Refresh data every 5 minutes
-        const interval = setInterval(fetchLatestTweet, 5 * 60 * 1000)
+        // Refresh data every 10 minutes (since we're using cached Notion data)
+        const interval = setInterval(fetchLatestTweet, 10 * 60 * 1000)
 
         return () => clearInterval(interval)
     }, [])
@@ -91,7 +127,18 @@ export default function LatestTweetCard() {
     return (
         <div className="p-4 border border-blue-700 rounded-xl bg-gray-900 hover:border-blue-600 transition-colors duration-200 w-full">
             <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
+                <div className="flex items-center gap-2">
+                    <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
+                    {/* Data source indicator */}
+                    {!loading && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${dataSource === 'notion'
+                                ? 'bg-green-900 text-green-300'
+                                : 'bg-blue-900 text-blue-300'
+                            }`}>
+                            {dataSource === 'notion' ? '📝' : '🐦'}
+                        </span>
+                    )}
+                </div>
                 {tweet && isClient && (
                     <p className="text-xs text-gray-500">
                         {formatTweetDate(tweet.created_at)}
@@ -107,7 +154,7 @@ export default function LatestTweetCard() {
                 </div>
             ) : error ? (
                 <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">Failed to load tweet</p>
+                    <p className="text-gray-500 mb-2">{error}</p>
                     <button
                         onClick={fetchLatestTweet}
                         className="text-sm text-blue-400 hover:underline transition-colors mb-2"
@@ -127,7 +174,7 @@ export default function LatestTweetCard() {
                 </div>
             ) : tweet ? (
                 <div className="space-y-3">
-                    <p className="text-sm text-gray-900 dark:text-white leading-relaxed">
+                    <p className="text-sm text-white leading-relaxed">
                         {truncateText(tweet.text, 160)}
                     </p>
 
@@ -158,7 +205,7 @@ export default function LatestTweetCard() {
                 </div>
             ) : (
                 <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">No tweet due to rate-limiting</p>
+                    <p className="text-gray-500 mb-2">No tweet available</p>
                     <a
                         href="https://x.com/@Web3_Dobie"
                         target="_blank"

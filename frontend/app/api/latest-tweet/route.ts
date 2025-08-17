@@ -1,17 +1,11 @@
-// app/api/latest-tweet/route.ts
-import { fetchTwitterData } from '../../../lib/twitterApi';
+// app/api/latest-tweet-notion/route.ts
+import { Client } from '@notionhq/client';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
-interface TwitterUser {
-  id: string;
-  username: string;
-  name: string;
-}
-
-interface TwitterTweet {
+interface NotionTweetResponse {
   id: string;
   text: string;
   created_at: string;
@@ -20,94 +14,129 @@ interface TwitterTweet {
     retweet_count: number;
     reply_count: number;
   };
+  url: string;
 }
 
-interface TwitterResponse {
-  user: TwitterUser;
-  tweets: TwitterTweet[];
-  fallback?: boolean;
-  fallbackReason?: string;
-}
-
-// Updated fallback response with account link
-const fallbackResponse: TwitterResponse = {
+interface ApiResponse {
   user: {
-    id: "fallback",
-    username: process.env.TWITTER_USERNAME || "Web3_Dobie",
-    name: "Web3 Dobie"
-  },
-  tweets: [], // Empty tweets array to trigger fallback display
-  fallback: true,
-  fallbackReason: "rate_limit"
-};
+    id: string;
+    username: string;
+    name: string;
+  };
+  tweets: NotionTweetResponse[];
+  source: 'notion';
+}
+
+// Initialize Notion client
+const notion = new Client({
+  auth: process.env.NOTION_API_KEY,
+});
+
+const NOTION_TWEET_LOG_DB = process.env.NOTION_TWEET_LOG_DB;
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
-    const { searchParams } = new URL(request.url);
-    const username = searchParams.get('username') || process.env.TWITTER_USERNAME;
-    
-    if (!username) {
+    if (!NOTION_TWEET_LOG_DB) {
+      console.error('NOTION_TWEET_LOG_DB environment variable not set');
       return NextResponse.json(
-        { error: 'Username is required' },
-        { status: 400 }
+        { error: 'Database configuration missing' },
+        { status: 500 }
       );
     }
-    
-    // Get user ID first (this is cached)
-    const userResponse = await fetchTwitterData('users/by/username/' + username);
-    
-    if (!userResponse.data) {
+
+    // Query Notion database for the latest tweets
+    // Sort by Date (descending) to get the most recent first
+    const response = await notion.databases.query({
+      database_id: NOTION_TWEET_LOG_DB,
+      sorts: [
+        {
+          property: 'Date',
+          direction: 'descending',
+        },
+      ],
+      page_size: 5, // Get last 5 tweets, we'll use the first one
+      filter: {
+        and: [
+          {
+            property: 'URL',
+            url: {
+              is_not_empty: true,
+            },
+          },
+          {
+            property: 'Type',
+            select: {
+              does_not_equal: 'reply', // Exclude replies if you want main tweets only
+            },
+          },
+        ],
+      },
+    });
+
+    if (!response.results || response.results.length === 0) {
       return NextResponse.json(
-        { error: 'User not found' },
+        { error: 'No tweets found in Notion database' },
         { status: 404 }
       );
     }
-    
-    const userId: string = userResponse.data.id;
-    
-    // Get recent tweets (this is also cached)
-    const tweetsResponse = await fetchTwitterData(`users/${userId}/tweets`, {
-      'max_results': '10',
-      'tweet.fields': 'created_at,public_metrics,text',
-      'exclude': 'retweets,replies'
+
+    // Map Notion data to Twitter-like format
+    const tweets: NotionTweetResponse[] = response.results.map((page: any) => {
+      const properties = page.properties;
+
+      // Extract data from Notion properties
+      const tweetId = properties['Tweet ID']?.title?.[0]?.text?.content || page.id;
+      const date = properties['Date']?.date?.start || page.created_time;
+      const url = properties['URL']?.url || `https://x.com/Web3_Dobie/status/${tweetId}`;
+      const likes = properties['Likes']?.number || 0;
+      const retweets = properties['Retweets']?.number || 0;
+      const replies = properties['Replies']?.number || 0;
+      const type = properties['Type']?.select?.name || 'tweet';
+
+      // For text, we'll need to construct it or store it separately
+      // Since you might not store the full text in Notion, we'll create a placeholder
+      // You might want to add a "Text" field to your Notion database for this
+      const text = properties['Text']?.rich_text?.[0]?.text?.content ||
+        `Latest ${type} from @Web3_Dobie`;
+
+      return {
+        id: tweetId,
+        text: text,
+        created_at: new Date(date).toISOString(),
+        public_metrics: {
+          like_count: likes,
+          retweet_count: retweets,
+          reply_count: replies,
+        },
+        url: url,
+      };
     });
-    
-    const response: TwitterResponse = {
-      user: userResponse.data,
-      tweets: tweetsResponse.data || []
+
+    const apiResponse: ApiResponse = {
+      user: {
+        id: process.env.X_BOT_USER_ID || "notion-fallback",
+        username: process.env.TWITTER_USERNAME || "Web3_Dobie",
+        name: "Web3 Dobie"
+      },
+      tweets: tweets,
+      source: 'notion'
     };
-    
-    return NextResponse.json(response);
-    
-  } catch (error) {
-    console.error('Twitter API route error:', error);
-    
-    if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
-      console.log('Rate limit exceeded, returning fallback data');
-      // Return fallback data instead of error
-      return NextResponse.json({
-        ...fallbackResponse,
-        fallbackReason: "rate_limit"
-      }, { 
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-cache',
-          'X-Twitter-Status': 'rate-limited'
-        }
-      });
-    }
-    
-    // For other errors, return fallback data too
-    console.log('Twitter API error, returning fallback data');
-    return NextResponse.json({
-      ...fallbackResponse,
-      fallbackReason: "api_error"
-    }, { 
-      status: 200,
+
+    return NextResponse.json(apiResponse, {
       headers: {
-        'Cache-Control': 'no-cache',
-        'X-Twitter-Status': 'error'
-      }
+        'Cache-Control': 'public, s-maxage=300', // Cache for 5 minutes
+      },
     });
+
+  } catch (error) {
+    console.error('Notion API route error:', error);
+
+    return NextResponse.json(
+      {
+        error: 'Failed to fetch tweets from Notion',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
   }
 }
