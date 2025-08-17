@@ -96,7 +96,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       // For text, we'll need to construct it or store it separately
       // Since you might not store the full text in Notion, we'll create a placeholder
       // You might want to add a "Text" field to your Notion database for this
-      const text = properties['Text']?.rich_text?.[0]?.text?.content ||
+      const text = properties['Text']?.plain_text?.[0]?.text?.content ||
         `Latest ${type} from @Web3_Dobie`;
 
       return {
