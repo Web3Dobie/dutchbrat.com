@@ -132,8 +132,8 @@ export default function LatestTweetCard() {
                     {/* Data source indicator */}
                     {!loading && (
                         <span className={`text-xs px-1.5 py-0.5 rounded ${dataSource === 'notion'
-                                ? 'bg-green-900 text-green-300'
-                                : 'bg-blue-900 text-blue-300'
+                            ? 'bg-green-900 text-green-300'
+                            : 'bg-blue-900 text-blue-300'
                             }`}>
                             {dataSource === 'notion' ? '📝' : '🐦'}
                         </span>
@@ -175,7 +175,7 @@ export default function LatestTweetCard() {
             ) : tweet ? (
                 <div className="space-y-3">
                     <p className="text-sm text-white leading-relaxed">
-                        {truncateText(tweet.text, 160)}
+                        {tweet.text}
                     </p>
 
                     {/* Engagement metrics */}
