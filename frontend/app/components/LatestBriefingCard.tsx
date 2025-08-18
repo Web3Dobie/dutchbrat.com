@@ -109,12 +109,10 @@ export default function LatestBriefingCard() {
 
                     <div className="flex gap-3">
                         <Link
-                            href={briefing.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            href={`/briefings?briefingId=${briefing.id}`}
                             className="inline-block text-sm text-blue-400 hover:underline transition-colors"
                         >
-                            📄 View PDF →
+                            📄 Read Briefing →
                         </Link>
 
                         {briefing.tweetUrl && (
