@@ -2,7 +2,7 @@
 import Image from 'next/image';
 import React from 'react';
 import DutchBrat from '../../public/images/dutchbrat.jpg';
-// import LatestBriefingCard from './LatestBriefingCard';
+import LatestBriefingCard from './LatestBriefingCard';
 
 export default function HeroIntro() {
     return (
