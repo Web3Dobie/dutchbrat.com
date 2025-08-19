@@ -1,107 +1,135 @@
-// frontend/app/briefings/BriefingsClient.tsx
-'use client';
+// BriefingsClient.tsx - Dark theme only version
+'use client'
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react'
 
-// Helper to get query param from URL
-function getBriefingIdFromQuery(): string | null {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('briefingId');
+interface Briefing {
+    id: string
+    title: string
+    date: string
+    period: string
+    pdfUrl: string
+    tweetUrl?: string
 }
 
-type Briefing = {
-    id: string;
-    title: string;
-    period: string;
-    date: string;
-    pdfUrl: string;
-    tweetUrl?: string;
-};
+type GroupedBriefings = {
+    [year: string]: {
+        [month: string]: Briefing[]
+    }
+}
+
+const formatPeriod = (period: string): string => {
+    const periodMap: { [key: string]: string } = {
+        'daily': 'Daily',
+        'weekly': 'Weekly',
+        'monthly': 'Monthly',
+        'special': 'Special'
+    }
+    return periodMap[period] || period
+}
 
 export default function BriefingsClient() {
-    const [briefings, setBriefings] = useState<Briefing[]>([]);
-    const [periods, setPeriods] = useState<string[]>([]);
-    const [selectedPeriod, setSelectedPeriod] = useState<string>('All');
-    const [expandedYears, setExpandedYears] = useState<Record<string, boolean>>({});
-    const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
-    const [openBriefings, setOpenBriefings] = useState<Record<string, boolean>>({});
+    const [briefings, setBriefings] = useState<Briefing[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [selectedPeriod, setSelectedPeriod] = useState<string>('All')
+    const [expandedYears, setExpandedYears] = useState<{ [key: string]: boolean }>({})
+    const [expandedMonths, setExpandedMonths] = useState<{ [key: string]: boolean }>({})
+    const [openBriefings, setOpenBriefings] = useState<{ [key: string]: boolean }>({})
 
-    // Fetch briefings
     useEffect(() => {
-        fetch('/api/briefings')
-            .then((res) => res.json())
-            .then((data: Briefing[]) => {
-                setBriefings(data);
-                const uniquePeriods = Array.from(
-                    new Set(data.map(b => b.period).filter((period): period is string => !!period))
-                );
-                setPeriods(uniquePeriods);
-            })
-            .catch((err) => console.error('Failed to load briefings:', err));
-    }, []);
+        fetchBriefings()
+    }, [])
 
-    // Auto-open briefing if ?briefingId=... in query string
-    useEffect(() => {
-        const briefingId = getBriefingIdFromQuery();
-        if (briefingId && briefings.length > 0 && !openBriefings[briefingId]) {
-            const briefing = briefings.find(b => b.id === briefingId);
-            if (briefing) {
-                // Auto-expand the year and month for this briefing
-                const date = new Date(briefing.date);
-                const year = date.getFullYear().toString();
-                const month = date.toLocaleString('default', { month: 'long' });
-                const monthKey = `${year}-${month}`;
+    const fetchBriefings = async () => {
+        try {
+            setLoading(true)
+            setError(null)
 
-                // Expand the year and month
-                setExpandedYears(prev => ({ ...prev, [year]: true }));
-                setExpandedMonths(prev => ({ ...prev, [monthKey]: true }));
+            const response = await fetch('/api/briefings')
 
-                // Open the briefing (show PDF)
-                setOpenBriefings(prev => ({ ...prev, [briefingId]: true }));
+            if (!response.ok) {
+                throw new Error(`Failed to fetch briefings: ${response.status}`)
             }
+
+            const data: Briefing[] = await response.json()
+            setBriefings(data)
+        } catch (err) {
+            console.error('Error fetching briefings:', err)
+            setError('Failed to load briefings')
+        } finally {
+            setLoading(false)
         }
-    }, [briefings, openBriefings]);
+    }
 
-    // Filtering/grouping logic
-    const filteredBriefings = selectedPeriod === 'All'
-        ? briefings
-        : briefings.filter(b => b.period === selectedPeriod);
+    const filteredBriefings = selectedPeriod === 'All' 
+        ? briefings 
+        : briefings.filter(b => b.period === selectedPeriod)
 
-    // Group by year and month
-    const groupedBriefings = filteredBriefings.reduce((acc, briefing) => {
-        const date = new Date(briefing.date);
-        const year = date.getFullYear().toString();
-        const month = date.toLocaleString('default', { month: 'long' });
+    const groupedBriefings: GroupedBriefings = filteredBriefings.reduce((acc, briefing) => {
+        const date = new Date(briefing.date)
+        const year = date.getFullYear().toString()
+        const month = date.toLocaleString('default', { month: 'long' })
+        
+        if (!acc[year]) acc[year] = {}
+        if (!acc[year][month]) acc[year][month] = []
+        acc[year][month].push(briefing)
+        
+        return acc
+    }, {} as GroupedBriefings)
 
-        if (!acc[year]) acc[year] = {};
-        if (!acc[year][month]) acc[year][month] = [];
-        acc[year][month].push(briefing);
-
-        return acc;
-    }, {} as Record<string, Record<string, Briefing[]>>);
+    const periods = Array.from(new Set(briefings.map(b => b.period)))
 
     const toggleYear = (year: string) => {
-        setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }));
-    };
+        setExpandedYears(prev => ({ ...prev, [year]: !prev[year] }))
+    }
 
     const toggleMonth = (year: string, month: string) => {
-        const monthKey = `${year}-${month}`;
-        setExpandedMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }));
-    };
+        const monthKey = `${year}-${month}`
+        setExpandedMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }))
+    }
 
     const toggleBriefing = (briefingId: string) => {
-        setOpenBriefings(prev => ({ ...prev, [briefingId]: !prev[briefingId] }));
-    };
+        setOpenBriefings(prev => ({ ...prev, [briefingId]: !prev[briefingId] }))
+    }
 
-    const formatPeriod = (period: string): string => {
-        return period.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-    };
+    if (loading) {
+        return (
+            <section className="max-w-5xl mx-auto px-4 py-8">
+                <div className="animate-pulse">
+                    <div className="h-8 bg-gray-700 rounded w-1/3 mb-4"></div>
+                    <div className="h-4 bg-gray-700 rounded w-2/3 mb-8"></div>
+                    <div className="space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="h-16 bg-gray-700 rounded"></div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+        )
+    }
+
+    if (error) {
+        return (
+            <section className="max-w-5xl mx-auto px-4 py-8">
+                <h1 className="text-3xl font-bold mb-6 text-white">📊 Market Briefings</h1>
+                <div className="text-center py-8">
+                    <p className="text-red-400 mb-4">{error}</p>
+                    <button 
+                        onClick={fetchBriefings}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                    >
+                        Try Again
+                    </button>
+                </div>
+            </section>
+        )
+    }
 
     return (
         <section className="max-w-5xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">📊 Market Briefings</h1>
-            <p className="text-gray-600 dark:text-gray-300 mb-8">
+            <h1 className="text-3xl font-bold mb-6 text-white">📊 Market Briefings</h1>
+            <p className="text-blue-400 mb-8">
                 Daily macro briefings with market analysis, equity updates, and economic insights.
             </p>
 
@@ -112,7 +140,7 @@ export default function BriefingsClient() {
                         onClick={() => setSelectedPeriod('All')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPeriod === 'All'
                                 ? 'bg-blue-600 text-white'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                : 'bg-gray-700 text-blue-400 hover:bg-gray-600'
                             }`}
                     >
                         All Periods
@@ -123,7 +151,7 @@ export default function BriefingsClient() {
                             onClick={() => setSelectedPeriod(period)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPeriod === period
                                     ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    : 'bg-gray-700 text-blue-400 hover:bg-gray-600'
                                 }`}
                         >
                             {formatPeriod(period)}
@@ -137,10 +165,10 @@ export default function BriefingsClient() {
                 {Object.keys(groupedBriefings)
                     .sort((a, b) => parseInt(b) - parseInt(a)) // Sort years descending
                     .map(year => (
-                        <div key={year} className="border border-gray-300 dark:border-gray-600 rounded-lg">
+                        <div key={year} className="border border-gray-600 rounded-lg">
                             <button
                                 onClick={() => toggleYear(year)}
-                                className="w-full px-4 py-3 text-left font-semibold text-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex justify-between items-center"
+                                className="w-full px-4 py-3 text-left font-semibold text-lg bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors flex justify-between items-center text-white"
                             >
                                 <span>{year}</span>
                                 <span className="text-gray-500">
@@ -162,7 +190,7 @@ export default function BriefingsClient() {
                                                 <div key={month}>
                                                     <button
                                                         onClick={() => toggleMonth(year, month)}
-                                                        className="w-full px-3 py-2 text-left font-medium bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors flex justify-between items-center"
+                                                        className="w-full px-3 py-2 text-left font-medium bg-gray-700 hover:bg-gray-600 rounded transition-colors flex justify-between items-center text-blue-400"
                                                     >
                                                         <span>{month} {year}</span>
                                                         <span className="text-gray-500 text-sm">
@@ -176,9 +204,9 @@ export default function BriefingsClient() {
                                                             {groupedBriefings[year][month].map(briefing => {
                                                                 const isOpen = openBriefings[briefing.id];
                                                                 return (
-                                                                    <div key={briefing.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-800">
+                                                                    <div key={briefing.id} className="border border-gray-600 rounded-lg p-4 bg-gray-800">
                                                                         <div className="flex justify-between items-start mb-2">
-                                                                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                                                                            <h3 className="font-semibold text-white">
                                                                                 {briefing.title}
                                                                             </h3>
                                                                             <div className="flex items-center gap-2">
