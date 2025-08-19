@@ -44,18 +44,21 @@ export default function LatestTweetCard() {
             setError(null)
 
             // Try Notion endpoint first (our primary source now)
+            console.log('🔍 Fetching latest tweet from Notion...')
             const notionResponse = await fetch('/api/latest-tweet-notion')
 
             if (notionResponse.ok) {
                 const data: TwitterData = await notionResponse.json()
                 const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
-                setTweet(latestTweet)
-                setDataSource('notion')
-
+                
                 if (latestTweet) {
-                    console.log('✅ Successfully loaded tweet from Notion')
+                    setTweet(latestTweet)
+                    setDataSource('notion')
+                    console.log('✅ Successfully loaded tweet from Notion:', latestTweet.text.substring(0, 50) + '...')
                     return
                 }
+            } else {
+                console.warn('⚠️ Notion API response not OK:', notionResponse.status, notionResponse.statusText)
             }
 
             // Fallback to Twitter API if Notion fails or has no data
@@ -65,17 +68,19 @@ export default function LatestTweetCard() {
             if (twitterResponse.ok) {
                 const data: TwitterData = await twitterResponse.json()
                 const latestTweet = data.tweets && data.tweets.length > 0 ? data.tweets[0] : null
-                setTweet(latestTweet)
-                setDataSource('twitter')
-
+                
                 if (latestTweet) {
+                    setTweet(latestTweet)
+                    setDataSource('twitter')
                     console.log('✅ Successfully loaded tweet from Twitter API')
                     return
                 }
+            } else {
+                console.warn('⚠️ Twitter API response not OK:', twitterResponse.status, twitterResponse.statusText)
             }
 
             // If both fail, show error
-            setError('Unable to load latest tweet')
+            setError('Unable to load latest tweet from any source')
 
         } catch (err) {
             console.error('Error fetching latest tweet:', err)
@@ -94,25 +99,42 @@ export default function LatestTweetCard() {
     }
 
     const formatTweetDate = (dateString: string): string => {
-        const date = new Date(dateString)
-        const now = new Date()
-        const diffMs = now.getTime() - date.getTime()
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-        const diffDays = Math.floor(diffHours / 24)
+        try {
+            const date = new Date(dateString)
+            const now = new Date()
+            const diffMs = now.getTime() - date.getTime()
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+            const diffDays = Math.floor(diffHours / 24)
 
-        if (diffHours < 1) {
-            const diffMins = Math.floor(diffMs / (1000 * 60))
-            return `${diffMins}m ago`
-        } else if (diffHours < 24) {
-            return `${diffHours}h ago`
-        } else {
-            return `${diffDays}d ago`
+            if (diffHours < 1) {
+                const diffMins = Math.floor(diffMs / (1000 * 60))
+                return `${diffMins}m ago`
+            } else if (diffHours < 24) {
+                return `${diffHours}h ago`
+            } else if (diffDays < 7) {
+                return `${diffDays}d ago`
+            } else {
+                return date.toLocaleDateString()
+            }
+        } catch (error) {
+            console.warn('Error formatting date:', dateString, error)
+            return 'recently'
         }
     }
 
     const truncateText = (text: string, maxLength: number): string => {
         if (text.length <= maxLength) return text
         return text.substring(0, maxLength) + '...'
+    }
+
+    // Enhanced: Detect if the tweet text looks like a fallback
+    const isFallbackText = (text: string): boolean => {
+        return text.includes('Latest') && text.includes('from @Web3_Dobie')
+    }
+
+    const shouldShowFullText = (text: string): boolean => {
+        // Show full text for real tweets, truncate only very long ones
+        return !isFallbackText(text) && text.length <= 280
     }
 
     useEffect(() => {
@@ -129,13 +151,19 @@ export default function LatestTweetCard() {
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                     <p className="text-sm text-blue-400 font-semibold">🐦 Latest Tweet</p>
-                    {/* Data source indicator */}
+                    {/* Enhanced data source indicator */}
                     {!loading && (
                         <span className={`text-xs px-1.5 py-0.5 rounded ${dataSource === 'notion'
                             ? 'bg-green-900 text-green-300'
                             : 'bg-blue-900 text-blue-300'
                             }`}>
                             {dataSource === 'notion' ? '📝' : '🐦'}
+                        </span>
+                    )}
+                    {/* Show warning if fallback text detected */}
+                    {tweet && isFallbackText(tweet.text) && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-900 text-yellow-300" title="Fallback content - original text may not be available">
+                            ⚠️
                         </span>
                     )}
                 </div>
@@ -174,9 +202,21 @@ export default function LatestTweetCard() {
                 </div>
             ) : tweet ? (
                 <div className="space-y-3">
-                    <p className="text-sm text-white leading-relaxed">
-                        {tweet.text}
-                    </p>
+                    {/* Enhanced tweet text display */}
+                    <div className="text-sm text-white leading-relaxed">
+                        {shouldShowFullText(tweet.text) ? (
+                            <p>{tweet.text}</p>
+                        ) : (
+                            <p>{truncateText(tweet.text, 200)}</p>
+                        )}
+                        
+                        {/* Show hint for fallback content */}
+                        {isFallbackText(tweet.text) && (
+                            <p className="text-xs text-gray-400 mt-2 italic">
+                                Content preview - click to view full tweet
+                            </p>
+                        )}
+                    </div>
 
                     {/* Engagement metrics */}
                     <div className="flex items-center gap-4 text-xs text-gray-400">
