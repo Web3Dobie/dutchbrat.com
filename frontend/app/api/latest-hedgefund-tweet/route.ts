@@ -29,22 +29,38 @@ function getDateValue(dateProperty: any): string {
   return dateProperty.date.start || '';
 }
 
-// Helper function to extract rich text OR plain text
+// Enhanced helper function to extract text content from any Notion text property
 function getTextContent(textProperty: any): string {
-  // Handle Rich Text property
-  if (textProperty && textProperty.rich_text) {
+  // Handle null/undefined
+  if (!textProperty) return '';
+  
+  // Handle Rich Text property (array of rich text objects)
+  if (textProperty.rich_text && Array.isArray(textProperty.rich_text)) {
     return textProperty.rich_text.map((item: any) => item.plain_text || '').join('');
   }
   
-  // Handle plain Text property  
-  if (textProperty && typeof textProperty === 'string') {
+  // Handle plain Text property (direct string value)
+  if (textProperty.plain_text && typeof textProperty.plain_text === 'string') {
+    return textProperty.plain_text;
+  }
+  
+  // Handle direct string (fallback)
+  if (typeof textProperty === 'string') {
     return textProperty;
   }
   
-  // Handle other text formats
-  if (textProperty && textProperty.plain_text) {
-    return textProperty.plain_text;
+  // Handle case where the text is stored directly in the property object
+  if (textProperty.text && typeof textProperty.text === 'string') {
+    return textProperty.text;
   }
+  
+  // Handle edge case where text might be in a different structure
+  if (textProperty.content && typeof textProperty.content === 'string') {
+    return textProperty.content;
+  }
+  
+  // Log the structure for debugging if needed (but don't fail)
+  console.warn('Unexpected text property structure:', JSON.stringify(textProperty, null, 2));
   
   return '';
 }
@@ -95,9 +111,13 @@ export async function GET(req: NextRequest) {
     const latestPage = response.results[0] as any
     const properties = latestPage.properties
 
+    // Extract text with enhanced function and provide fallback
+    const tweetText = getTextContent(properties['Text']) || 
+                     `Latest ${getSelectValue(properties['Type'])} from HedgeFund Agent`
+
     const tweet = {
       id: getTitle(properties['Tweet ID']) || latestPage.id,
-      text: getTextContent(properties['Text']) || `Latest ${getSelectValue(properties['Type'])} from HedgeFund Agent`,
+      text: tweetText,
       created_at: getDateValue(properties['Date']) || latestPage.created_time,
       public_metrics: {
         like_count: properties['Likes']?.number || 0,
@@ -109,7 +129,7 @@ export async function GET(req: NextRequest) {
       engagement_score: properties['Engagement Score']?.number || 0
     }
 
-    console.log(`Returning latest hedge fund tweet: ${tweet.id}`)
+    console.log(`Returning latest hedge fund tweet: ${tweet.id} with text: "${tweet.text.substring(0, 50)}..."`)
     
     return NextResponse.json({
       user: {
