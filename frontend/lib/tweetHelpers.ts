@@ -1,4 +1,4 @@
-// lib/tweetHelpers.ts
+// frontend/lib/tweetHelpers.ts
 import { Client } from '@notionhq/client'
 import { NextResponse } from 'next/server'
 
@@ -27,7 +27,7 @@ interface UserData {
 
 interface TweetResponse {
   user: UserData
-  tweet: TweetData
+  tweets: TweetData[]  // Changed from tweet to tweets (array)
   source: string
 }
 
@@ -166,7 +166,7 @@ export async function fetchLatestTweetFromNotion(config: TweetSourceConfig): Pro
     
     const responseData: TweetResponse = {
       user: config.user,
-      tweet: tweet,
+      tweets: [tweet],  // Wrap in array to match existing component expectations
       source: config.source
     }
 
