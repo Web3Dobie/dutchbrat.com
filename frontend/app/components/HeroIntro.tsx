@@ -3,6 +3,7 @@ import Image from 'next/image';
 import React from 'react';
 import DutchBrat from '../../public/images/dutchbrat.jpg';
 import LatestBriefingCard from './LatestBriefingCard';
+import LatestHedgeFundTweetCard from './LatestHedgeFundTweetCard';
 
 export default function HeroIntro() {
     return (
@@ -30,18 +31,16 @@ export default function HeroIntro() {
             {/* Cards section - 3-card layout for HedgeFund content */}
             <div className="max-w-4xl">
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {/* Latest Briefing Card */}
                     <LatestBriefingCard />
 
-                    <div className="p-4 border border-dashed border-gray-500 rounded-xl bg-gray-900/50">
-                        <div className="text-center py-8">
-                            <p className="text-gray-500 text-sm">Card 2</p>
-                            <p className="text-gray-600 text-xs">Coming Soon</p>
-                        </div>
-                    </div>
+                    {/* Latest HedgeFund Tweet Card */}
+                    <LatestHedgeFundTweetCard />
 
+                    {/* Placeholder for Third Card */}
                     <div className="p-4 border border-dashed border-gray-500 rounded-xl bg-gray-900/50">
                         <div className="text-center py-8">
-                            <p className="text-gray-500 text-sm">Card 3</p>
+                            <p className="text-gray-500 text-sm">Headlines Card</p>
                             <p className="text-gray-600 text-xs">Coming Soon</p>
                         </div>
                     </div>
