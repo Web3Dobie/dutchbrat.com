@@ -36,6 +36,7 @@ interface TweetSourceConfig {
   user: UserData
   source: string
   fallbackText?: string
+  typePropertyName?: string  // NEW: Configurable property name
 }
 
 // Helper function to extract title from Notion title property
@@ -114,7 +115,7 @@ export async function fetchLatestTweetFromNotion(config: TweetSourceConfig): Pro
         },
       ],
       page_size: 1, // We only want the latest tweet
-      filter: {
+              filter: {
         and: [
           {
             property: 'URL',
@@ -123,7 +124,7 @@ export async function fetchLatestTweetFromNotion(config: TweetSourceConfig): Pro
             },
           },
           {
-            property: 'Type',
+            property: config.typePropertyName || 'Type',  // Use configurable property name
             select: {
               does_not_equal: 'reply', // Exclude replies
             },
@@ -158,7 +159,7 @@ export async function fetchLatestTweetFromNotion(config: TweetSourceConfig): Pro
         reply_count: properties['Replies']?.number || 0,
       },
       url: getUrlValue(properties['URL']) || '',
-      type: getSelectValue(properties['Type']) || 'tweet',
+      type: getSelectValue(properties[config.typePropertyName || 'Type']) || 'tweet',
       engagement_score: properties['Engagement Score']?.number || 0
     }
 

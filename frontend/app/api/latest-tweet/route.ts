@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
       name: 'Web3 Dobie'
     },
     source: 'notion',
-    fallbackText: 'Latest tweet from Web3 Dobie'
+    fallbackText: 'Latest tweet from Web3 Dobie',
+    typePropertyName: 'Type'  // NEW: Main DB uses "Type"
   }
 
   return fetchLatestTweetFromNotion(config)

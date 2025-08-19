@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
       name: 'HedgeFund Agent'
     },
     source: 'hedgefund_notion',
-    fallbackText: 'Latest hedge fund commentary from HedgeFund Agent'
+    fallbackText: 'Latest hedge fund commentary from HedgeFund Agent',
+    typePropertyName: 'Category'  // NEW: HedgeFund DB uses "Category"
   }
 
   return fetchLatestTweetFromNotion(config)
