@@ -33,7 +33,7 @@ export default function HunterBlock() {
           <h2 className="text-3xl font-bold mb-4 text-emerald-400">
             Meet Hunter, the Alpha Dog 🐾
           </h2>
-          <p className="text-gray-600 dark:text-gray-300 text-lg leading-relaxed mb-6">
+          <p className="text-gray-300 text-lg leading-relaxed mb-6">
             Hunter is my trusted Web3 Doberman — part analyst, part watchdog.
             He helps sniff out alpha, barks at scams, and keeps this site running
             with daily insights on X, commentary, and briefings. Follow his
