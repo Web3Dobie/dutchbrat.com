@@ -29,10 +29,24 @@ function getDateValue(dateProperty: any): string {
   return dateProperty.date.start || '';
 }
 
-// Helper function to extract rich text
-function getRichText(richTextProperty: any): string {
-  if (!richTextProperty || !richTextProperty.rich_text) return '';
-  return richTextProperty.rich_text.map((item: any) => item.plain_text || '').join('');
+// Helper function to extract rich text OR plain text
+function getTextContent(textProperty: any): string {
+  // Handle Rich Text property
+  if (textProperty && textProperty.rich_text) {
+    return textProperty.rich_text.map((item: any) => item.plain_text || '').join('');
+  }
+  
+  // Handle plain Text property  
+  if (textProperty && typeof textProperty === 'string') {
+    return textProperty;
+  }
+  
+  // Handle other text formats
+  if (textProperty && textProperty.plain_text) {
+    return textProperty.plain_text;
+  }
+  
+  return '';
 }
 
 export async function GET(req: NextRequest) {
@@ -83,7 +97,7 @@ export async function GET(req: NextRequest) {
 
     const tweet = {
       id: getTitle(properties['Tweet ID']) || latestPage.id,
-      text: getRichText(properties['Text']) || `Latest ${getSelectValue(properties['Type'])} from HedgeFund Agent`,
+      text: getTextContent(properties['Text']) || `Latest ${getSelectValue(properties['Type'])} from HedgeFund Agent`,
       created_at: getDateValue(properties['Date']) || latestPage.created_time,
       public_metrics: {
         like_count: properties['Likes']?.number || 0,
