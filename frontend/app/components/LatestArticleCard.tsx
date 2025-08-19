@@ -95,7 +95,7 @@ export default function LatestArticleCard() {
                 </div>
             ) : error ? (
                 <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">Failed to load article</p>
+                    <p className="text-white mb-2">Failed to load article</p>
                     <button
                         onClick={fetchLatestArticle}
                         className="text-sm text-blue-400 hover:underline transition-colors mb-2"
@@ -119,7 +119,7 @@ export default function LatestArticleCard() {
                     >
                         {truncateText(article.headline, 80)}
                     </Link>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                    <p className="text-sm text-white leading-relaxed">
                         {truncateText(article.summary, 120)}
                     </p>
                     <Link

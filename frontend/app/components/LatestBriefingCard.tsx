@@ -103,7 +103,7 @@ export default function LatestBriefingCard() {
                         {briefing.title}
                     </div>
 
-                    <div className="text-sm text-gray-600 dark:text-gray-300">
+                    <div className="text-sm text-white">
                         {formatPeriod(briefing.period)} Market Analysis
                     </div>
 
