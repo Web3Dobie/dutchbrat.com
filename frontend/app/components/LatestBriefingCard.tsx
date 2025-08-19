@@ -61,6 +61,11 @@ export default function LatestBriefingCard() {
         return period.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
     }
 
+    const truncateText = (text: string, maxLength: number): string => {
+        if (text.length <= maxLength) return text
+        return text.substring(0, maxLength) + '...'
+    }
+
     useEffect(() => {
         fetchLatestBriefing()
 
@@ -99,11 +104,14 @@ export default function LatestBriefingCard() {
                 </div>
             ) : briefing ? (
                 <div className="space-y-3">
-                    <div className="text-base font-semibold text-gray-900 dark:text-white leading-tight">
-                        {briefing.title}
-                    </div>
+                    <Link
+                        href={`/briefings?briefingId=${briefing.id}`}
+                        className="text-base font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors leading-tight block"
+                    >
+                        {truncateText(briefing.title, 80)}
+                    </Link>
 
-                    <div className="text-sm text-white">
+                    <div className="text-sm text-blue-400">
                         {formatPeriod(briefing.period)} Market Analysis
                     </div>
 

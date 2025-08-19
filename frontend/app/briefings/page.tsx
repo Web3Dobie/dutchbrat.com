@@ -1,4 +1,4 @@
-// frontend/app/briefings/page.tsx
+// app/briefings/page.tsx - Identical to articles pattern
 'use client';
 
 import dynamic from 'next/dynamic';
@@ -6,7 +6,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 const BriefingsClient = dynamic(() => import('./BriefingsClient'), {
   ssr: false,
-  loading: () => <div className="text-center py-8">📊 Loading briefings...</div>
+  loading: () => <div className="text-center py-8">🟡 Loading briefings...</div>
 });
 
 BriefingsClient.displayName = "BriefingsClientDynamic";
