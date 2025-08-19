@@ -536,7 +536,7 @@ export default function CryptoPriceBlock() {
             return {
                 symbol,
                 price: parseFloat(data.lastPrice),
-                change24h: parseFloat(data.priceChangePercent),
+                change24h: parseFloat(data.priceChangePercent) * 100,
                 source: 'mexc' as const
             }
         })
