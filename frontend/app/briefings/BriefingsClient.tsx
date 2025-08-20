@@ -145,8 +145,8 @@ export default function BriefingsClient() {
             {/* Header */}
             <div className="flex flex-col items-center mb-12">
                 <img
-                    src="/images/hunter_reading.png"
-                    alt="Hunter reading briefings"
+                    src="/images/HTD_Research_Logo.jpg"
+                    alt="HTD Logo"
                     className="object-cover rounded-full border-4 border-blue-700 shadow-xl mb-6"
                     style={{ width: '16rem', height: '16rem' }}
                 />
@@ -165,8 +165,8 @@ export default function BriefingsClient() {
                     <button
                         onClick={() => setSelectedPeriod('All')}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPeriod === 'All'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                             }`}
                     >
                         All Periods
@@ -176,8 +176,8 @@ export default function BriefingsClient() {
                             key={period}
                             onClick={() => setSelectedPeriod(period)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPeriod === period
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                 }`}
                         >
                             {formatPeriod(period)}
