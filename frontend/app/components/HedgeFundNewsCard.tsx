@@ -82,15 +82,15 @@ export default function HedgeFundNewsCard() {
     useEffect(() => {
         fetchHedgeFundNews()
 
-        // Fetch new headlines every hour (to get top 4 from past 2 hours)
+        // Fetch new headlines every hour (to get top 10 from past 2 hours)
         const fetchInterval = setInterval(fetchHedgeFundNews, 60 * 60 * 1000)
 
         return () => clearInterval(fetchInterval)
     }, [])
 
     useEffect(() => {
-        // Rotate headlines every 20 minutes (vs 15 min for crypto)
-        const rotateInterval = setInterval(rotateToNextHeadline, 20 * 60 * 1000)
+        // Rotate headlines every 2 minutes (vs 20 min before)
+        const rotateInterval = setInterval(rotateToNextHeadline, 2 * 60 * 1000)
 
         return () => clearInterval(rotateInterval)
     }, [allNews])
@@ -269,7 +269,7 @@ export default function HedgeFundNewsCard() {
                                     Powered by DutchBrat's Market Analysis 🧠
                                     {allNews.length > 1 && lastRotated && (
                                         <span className="block mt-1">
-                                            Rotates every 20 minutes •
+                                            Rotates every 2 minutes •
                                             Last: {formatTimeAgo(lastRotated)}
                                         </span>
                                     )}

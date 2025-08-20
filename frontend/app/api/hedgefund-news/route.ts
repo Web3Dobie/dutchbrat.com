@@ -39,7 +39,7 @@ export async function GET() {
             data: result.data,
             lastUpdated: result.lastUpdated,
             categories: result.categories || ['macro', 'equity', 'political'],
-            rotationSchedule: "20min intervals"
+            rotationSchedule: "2min intervals"
         }, {
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
@@ -75,7 +75,7 @@ async function fetchTop4HedgeFundHeadlines(): Promise<{
         // Update this URL to match your HedgeFundAgent server IP/domain
         // X-AI-Agent runs on: http://74.241.128.114:3001/crypto-news-data  
         // HedgeFundAgent runs on: http://YOUR_HEDGEFUND_SERVER_IP:3002/hedgefund-news-data
-        const url = `http://4.223.120.60:3002/hedgefund-news-data`
+        const url = `http://YOUR_HEDGEFUND_SERVER_IP:3002/hedgefund-news-data`
 
         console.log('🔍 Attempting HTTP fetch from HedgeFundAgent:', url)
 
