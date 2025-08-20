@@ -11,6 +11,7 @@ interface Briefing {
     date: string
     pdfUrl: string
     tweetUrl?: string
+    marketSentiment?: string
 }
 
 export default function LatestBriefingCard() {
@@ -114,6 +115,18 @@ export default function LatestBriefingCard() {
                     <div className="text-sm text-blue-400">
                         {formatPeriod(briefing.period)} Market Analysis
                     </div>
+
+                    {/* Market Sentiment Section */}
+                    {briefing.marketSentiment && (
+                        <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mt-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-medium text-blue-400">💭 Market Sentiment</span>
+                            </div>
+                            <p className="text-sm text-gray-300 leading-relaxed">
+                                {truncateText(briefing.marketSentiment, 150)}
+                            </p>
+                        </div>
+                    )}
 
                     <div className="flex gap-3">
                         <Link

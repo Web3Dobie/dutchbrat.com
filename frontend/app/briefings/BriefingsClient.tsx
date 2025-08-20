@@ -16,6 +16,7 @@ type Briefing = {
     date: string;
     pdfUrl: string;
     tweetUrl?: string;
+    marketSentiment?: string; // Added market sentiment field
 };
 
 type GroupedBriefings = Record<string, Record<string, Briefing[]>>;
@@ -37,10 +38,10 @@ export default function BriefingsClient() {
                 setLoading(true);
                 const response = await fetch('/api/briefings');
                 if (!response.ok) throw new Error('Failed to fetch briefings');
-                
+
                 const data: Briefing[] = await response.json();
                 setBriefings(data);
-                
+
                 const uniquePeriods = Array.from(new Set(data.map(b => b.period).filter(Boolean)));
                 setPeriods(uniquePeriods);
 
@@ -52,14 +53,14 @@ export default function BriefingsClient() {
                         const date = new Date(briefing.date);
                         const year = date.getFullYear().toString();
                         const month = date.toLocaleString('default', { month: 'long' });
-                        
+
                         // Auto-expand the relevant year and month
                         setExpandedYears(prev => ({ ...prev, [year]: true }));
                         setExpandedMonths(prev => ({ ...prev, [`${year}-${month}`]: true }));
                         setOpenBriefings(prev => ({ ...prev, [briefingId]: true }));
                     }
                 }
-                
+
                 setLoading(false);
             } catch (err: any) {
                 setError(err.message || 'Failed to load briefings');
@@ -76,8 +77,8 @@ export default function BriefingsClient() {
     };
 
     // Filter briefings by selected period
-    const filteredBriefings = selectedPeriod === 'All' 
-        ? briefings 
+    const filteredBriefings = selectedPeriod === 'All'
+        ? briefings
         : briefings.filter(b => b.period === selectedPeriod);
 
     // Group briefings by year and month
@@ -85,11 +86,11 @@ export default function BriefingsClient() {
         const date = new Date(briefing.date);
         const year = date.getFullYear().toString();
         const month = date.toLocaleString('default', { month: 'long' });
-        
+
         if (!acc[year]) acc[year] = {};
         if (!acc[year][month]) acc[year][month] = [];
         acc[year][month].push(briefing);
-        
+
         return acc;
     }, {} as GroupedBriefings);
 
@@ -128,7 +129,7 @@ export default function BriefingsClient() {
                 <h1 className="text-3xl font-bold mb-6 text-white">📊 Market Briefings</h1>
                 <div className="text-center py-8">
                     <p className="text-red-400 mb-4">{error}</p>
-                    <button 
+                    <button
                         onClick={() => window.location.reload()}
                         className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                     >
@@ -163,11 +164,10 @@ export default function BriefingsClient() {
                 <div className="flex flex-wrap gap-2 justify-center">
                     <button
                         onClick={() => setSelectedPeriod('All')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            selectedPeriod === 'All'
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPeriod === 'All'
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        }`}
+                            }`}
                     >
                         All Periods
                     </button>
@@ -175,11 +175,10 @@ export default function BriefingsClient() {
                         <button
                             key={period}
                             onClick={() => setSelectedPeriod(period)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                selectedPeriod === period
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${selectedPeriod === period
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                            }`}
+                                }`}
                         >
                             {formatPeriod(period)}
                         </button>
@@ -208,7 +207,7 @@ export default function BriefingsClient() {
                                     {Object.keys(groupedBriefings[year])
                                         .sort((a, b) => {
                                             const months = ['January', 'February', 'March', 'April', 'May', 'June',
-                                                          'July', 'August', 'September', 'October', 'November', 'December'];
+                                                'July', 'August', 'September', 'October', 'November', 'December'];
                                             return months.indexOf(b) - months.indexOf(a); // Newest month first
                                         })
                                         .map(month => {
@@ -254,6 +253,18 @@ export default function BriefingsClient() {
                                                                                 })}
                                                                             </p>
 
+                                                                            {/* Market Sentiment Display */}
+                                                                            {briefing.marketSentiment && (
+                                                                                <div className="bg-gray-700 border border-gray-500 rounded-lg p-3 mb-3">
+                                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                                        <span className="text-xs font-medium text-blue-400">💭 Market Sentiment</span>
+                                                                                    </div>
+                                                                                    <p className="text-sm text-gray-300 leading-relaxed">
+                                                                                        {briefing.marketSentiment}
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
+
                                                                             <div className="flex gap-3 mb-3">
                                                                                 <button
                                                                                     onClick={() => toggleBriefing(briefing.id)}
@@ -261,7 +272,7 @@ export default function BriefingsClient() {
                                                                                 >
                                                                                     {isOpen ? '📄 Hide PDF' : '📄 View PDF'} →
                                                                                 </button>
-                                                                                
+
                                                                                 <a
                                                                                     href={briefing.pdfUrl}
                                                                                     target="_blank"
@@ -288,6 +299,9 @@ export default function BriefingsClient() {
                                                                                 <div className="mt-4 border border-gray-600 rounded-lg overflow-hidden">
                                                                                     <div className="bg-gray-700 px-4 py-2 text-sm text-gray-300">
                                                                                         📄 {briefing.title} - {formatPeriod(briefing.period)} Briefing
+                                                                                        {briefing.marketSentiment && (
+                                                                                            <span className="ml-2 text-blue-400">• Market sentiment included</span>
+                                                                                        )}
                                                                                     </div>
                                                                                     <iframe
                                                                                         src={`${briefing.pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
@@ -300,10 +314,10 @@ export default function BriefingsClient() {
                                                                                         }}
                                                                                     >
                                                                                         <p className="p-4 text-gray-400">
-                                                                                            Your browser doesn't support embedded PDFs. 
-                                                                                            <a 
-                                                                                                href={briefing.pdfUrl} 
-                                                                                                target="_blank" 
+                                                                                            Your browser doesn't support embedded PDFs.
+                                                                                            <a
+                                                                                                href={briefing.pdfUrl}
+                                                                                                target="_blank"
                                                                                                 rel="noopener noreferrer"
                                                                                                 className="text-blue-400 hover:underline ml-1"
                                                                                             >
@@ -330,7 +344,7 @@ export default function BriefingsClient() {
             {filteredBriefings.length === 0 && !loading && (
                 <div className="text-center py-12">
                     <p className="text-gray-400 text-lg">
-                        {selectedPeriod === 'All' 
+                        {selectedPeriod === 'All'
                             ? 'No briefings available yet.'
                             : `No ${formatPeriod(selectedPeriod)} briefings available.`
                         }

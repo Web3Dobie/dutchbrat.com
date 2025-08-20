@@ -5,6 +5,12 @@ import { Client } from '@notionhq/client'
 
 const notion = new Client({ auth: process.env.NOTION_API_KEY })
 
+// Helper function to extract plain text from Notion rich text
+function getPlainText(richText: any[]): string {
+    if (!richText || !Array.isArray(richText)) return '';
+    return richText.map(item => item.plain_text || '').join('');
+}
+
 // Helper function to extract title from Notion title property
 function getTitle(titleProperty: any): string {
     if (!titleProperty || !titleProperty.title) return '';
@@ -65,10 +71,11 @@ export async function GET(req: NextRequest) {
             period: getSelectValue(properties.Period),
             date: getDateValue(properties.Date),
             pdfUrl: getUrlValue(properties['PDF Link']),
-            tweetUrl: getUrlValue(properties['Tweet URL'])
+            tweetUrl: getUrlValue(properties['Tweet URL']),
+            marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || [])
         }
 
-        console.log(`Returning latest briefing: ${briefing.title}`)
+        console.log(`Returning latest briefing: ${briefing.title} with sentiment: ${briefing.marketSentiment ? 'Yes' : 'No'}`)
 
         return NextResponse.json(briefing)
     } catch (err: any) {
