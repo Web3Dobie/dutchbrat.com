@@ -147,8 +147,8 @@ export default function BriefingsClient() {
                 <img
                     src="/images/HTD_Research_Logo.jpg"
                     alt="HTD Logo"
-                    className="object-cover border-4 border-blue-700 shadow-xl mb-6"
-                    style={{ width: '16rem', height: 'auto' }}
+                    className="object-cover border-4 border-blue-700 shadow-xl mb-6 w-full max-w-2xl"
+                    style={{ height: 'auto' }}
                 />
                 <h1 className="text-4xl font-extrabold text-center tracking-tight text-white mb-4">
                     📊 Daily Market Briefings
