@@ -1,9 +1,10 @@
-// frontend/app/components/HeroIntro.tsx
+// frontend/app/components/HeroIntro.tsx - Updated with HedgeFundNewsCard
 import Image from 'next/image';
 import React from 'react';
 import DutchBrat from '../../public/images/dutchbrat.jpg';
 import LatestBriefingCard from './LatestBriefingCard';
 import LatestHedgeFundTweetCard from './LatestHedgeFundTweetCard';
+import HedgeFundNewsCard from './HedgeFundNewsCard';
 
 export default function HeroIntro() {
     return (
@@ -37,13 +38,8 @@ export default function HeroIntro() {
                     {/* Latest HedgeFund Tweet Card */}
                     <LatestHedgeFundTweetCard />
 
-                    {/* Placeholder for Third Card */}
-                    <div className="p-4 border border-dashed border-gray-500 rounded-xl bg-gray-900/50">
-                        <div className="text-center py-8">
-                            <p className="text-gray-500 text-sm">Headlines Card</p>
-                            <p className="text-gray-600 text-xs">Coming Soon</p>
-                        </div>
-                    </div>
+                    {/* HedgeFund News Card - Replacing the placeholder */}
+                    <HedgeFundNewsCard />
                 </div>
             </div>
         </section>
