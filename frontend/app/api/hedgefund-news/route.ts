@@ -74,8 +74,8 @@ async function fetchTop4HedgeFundHeadlines(): Promise<{
     try {
         // Update this URL to match your HedgeFundAgent server IP/domain
         // X-AI-Agent runs on: http://74.241.128.114:3001/crypto-news-data  
-        // HedgeFundAgent runs on: http://YOUR_HEDGEFUND_SERVER_IP:3002/hedgefund-news-data
-        const url = `http://4.223.120.60:3002/hedgefund-news-data`
+        // HedgeFundAgent runs on: http://74.241.128.114:3002/hedgefund-news-data
+        const url = `http://74.241.128.114:3002/hedgefund-news-data`
 
         console.log('🔍 Attempting HTTP fetch from HedgeFundAgent:', url)
 
