@@ -1,7 +1,7 @@
 // frontend/app/components/HeroIntro.tsx - Updated with HedgeFundNewsCard
 import Image from 'next/image';
 import React from 'react';
-import DutchBrat from '../../public/images/dutchbrat.jpg';
+import DutchBrat from '../../public/images/DB_AI.jpg';
 import LatestBriefingCard from './LatestBriefingCard';
 import LatestHedgeFundTweetCard from './LatestHedgeFundTweetCard';
 import HedgeFundNewsCard from './HedgeFundNewsCard';
