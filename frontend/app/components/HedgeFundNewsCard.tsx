@@ -204,9 +204,9 @@ export default function HedgeFundNewsCard() {
                     </div>
                 ) : error ? (
                     <div className="text-center py-4">
-                        <p className="text-gray-500 mb-2">Market intel unavailable</p>
+                        <p className="text-gray-500 mb-2">Scanning for Important News</p>
                         <p className="text-xs text-gray-600 mb-3">
-                            DutchBrat is analyzing markets 🧠
+                            We are analyzing markets for you
                         </p>
                         <button
                             onClick={fetchHedgeFundNews}
