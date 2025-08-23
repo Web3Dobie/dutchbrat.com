@@ -39,7 +39,7 @@ export async function GET() {
             data: result.data,
             lastUpdated: result.lastUpdated,
             categories: result.categories || ['macro', 'equity', 'political'],
-            rotationSchedule: "2min intervals"
+            rotationSchedule: "5min  - correct API"
         }, {
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
