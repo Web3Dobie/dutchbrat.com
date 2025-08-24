@@ -177,10 +177,10 @@ export default function HedgeFundNewsCard() {
         <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-purple-600 transition-colors duration-200 w-full">
             {/* Header - Updated to match CryptoNewsCard pattern */}
             <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-purple-400 font-semibold">📊 Important Headlines</p>
+                <p className="text-sm text-purple-400 font-semibold">Breaking Headlines</p>
                 <div className="text-xs text-gray-500 text-right">
-                    {rotationInfo && isClient && (
-                        <div className="mb-1">Headlines {rotationInfo}</div>
+                    {allNews.length > 1 && isClient && (
+                        <div className="mb-1">Headlines {currentNewsIndex + 1}/{allNews.length}</div>
                     )}
                     {lastFetched && isClient && (
                         <div>Fetched {formatTimeAgo(lastFetched)}</div>
@@ -271,7 +271,7 @@ export default function HedgeFundNewsCard() {
                 </div>
             ) : (
                 <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">No headlines available</p>
+                    <p className="text-gray-500 mb-2">Scanning for important news</p>
                     <p className="text-xs text-gray-600">
                         HTD Research is analyzing market conditions 📊
                     </p>
