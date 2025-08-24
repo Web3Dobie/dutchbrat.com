@@ -262,7 +262,7 @@ export default function HedgeFundNewsCard() {
                                 HTD Research - AI Driven Institutional Analysis 📈
                                 {allNews.length > 1 && lastRotated && (
                                     <span className="block mt-1">
-                                        Next headline in {Math.ceil((5 * 60 * 1000 - (Date.now() - new Date(lastRotated).getTime())) / 60000)}m
+                                        Next rotation in ~{Math.max(0, 5 - Math.floor((Date.now() - new Date(lastRotated || lastFetched).getTime()) / (1000 * 60)))}min
                                     </span>
                                 )}
                             </p>
@@ -271,7 +271,7 @@ export default function HedgeFundNewsCard() {
                 </div>
             ) : (
                 <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">Waiting for important news to break</p>
+                    <p className="text-gray-500 mb-2">No headlines available</p>
                     <p className="text-xs text-gray-600">
                         HTD Research is analyzing market conditions 📊
                     </p>
