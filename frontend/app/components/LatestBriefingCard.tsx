@@ -9,7 +9,7 @@ interface Briefing {
     title: string
     period: string
     date: string
-    pdfUrl: string
+    pageUrl: string // Changed from pdfUrl
     tweetUrl?: string
     marketSentiment?: string
 }
