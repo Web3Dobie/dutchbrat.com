@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import NotionBlockRenderer from '../components/NotionBlockRenderer';
 
 // Helper to get query param from URL (Next.js 13/14 compatible)
 function getBriefingIdFromQuery(): string | null {
@@ -9,17 +10,34 @@ function getBriefingIdFromQuery(): string | null {
     return params.get('briefingId');
 }
 
+type NotionBlock = {
+    id: string;
+    type: string;
+    hasChildren: boolean;
+    content: any;
+};
+
 type Briefing = {
     id: string;
     title: string;
     period: string;
     date: string;
-    pdfUrl: string;
+    pageUrl: string; // Updated from pdfUrl
     tweetUrl?: string;
-    marketSentiment?: string; // Added market sentiment field
+    marketSentiment?: string;
+    content: NotionBlock[]; // Added rich content
 };
 
 type GroupedBriefings = Record<string, Record<string, Briefing[]>>;
+
+// API Response structure
+interface BriefingsResponse {
+    data: Briefing[];
+    pagination: {
+        hasMore: boolean;
+        nextCursor?: string;
+    };
+}
 
 export default function BriefingsClient() {
     const [briefings, setBriefings] = useState<Briefing[]>([]);
@@ -39,7 +57,8 @@ export default function BriefingsClient() {
                 const response = await fetch('/api/briefings');
                 if (!response.ok) throw new Error('Failed to fetch briefings');
 
-                const data: Briefing[] = await response.json();
+                const apiResponse: BriefingsResponse = await response.json();
+                const data = apiResponse.data;
                 setBriefings(data);
 
                 const uniquePeriods = Array.from(new Set(data.map(b => b.period).filter(Boolean)));
@@ -145,8 +164,8 @@ export default function BriefingsClient() {
             {/* Header */}
             <div className="flex flex-col items-center mb-12">
                 <img
-                    src="/images/HTD_Research_Logo.jpg"
-                    alt="HTD Logo"
+                    src="/images/HTD_Research_Banner.jpg"
+                    alt="HTD Banner"
                     className="object-cover border-4 border-blue-700 shadow-xl mb-6 w-full max-w-2xl"
                     style={{ height: 'auto' }}
                 />
@@ -270,16 +289,16 @@ export default function BriefingsClient() {
                                                                                     onClick={() => toggleBriefing(briefing.id)}
                                                                                     className="text-sm text-blue-400 hover:underline transition-colors"
                                                                                 >
-                                                                                    {isOpen ? '📄 Hide PDF' : '📄 View PDF'} →
+                                                                                    {isOpen ? '📄 Hide Content' : '📄 View Content'} →
                                                                                 </button>
 
                                                                                 <a
-                                                                                    href={briefing.pdfUrl}
+                                                                                    href={briefing.pageUrl}
                                                                                     target="_blank"
                                                                                     rel="noopener noreferrer"
                                                                                     className="text-sm text-blue-400 hover:underline transition-colors"
                                                                                 >
-                                                                                    📥 Download PDF →
+                                                                                    🔗 Open in Notion →
                                                                                 </a>
 
                                                                                 {briefing.tweetUrl && (
@@ -294,8 +313,8 @@ export default function BriefingsClient() {
                                                                                 )}
                                                                             </div>
 
-                                                                            {/* PDF Viewer (when open) */}
-                                                                            {isOpen && briefing.pdfUrl && (
+                                                                            {/* Rich Notion Content Viewer (when open) */}
+                                                                            {isOpen && briefing.content && (
                                                                                 <div className="mt-4 border border-gray-600 rounded-lg overflow-hidden">
                                                                                     <div className="bg-gray-700 px-4 py-2 text-sm text-gray-300">
                                                                                         📄 {briefing.title} - {formatPeriod(briefing.period)} Briefing
@@ -303,28 +322,12 @@ export default function BriefingsClient() {
                                                                                             <span className="ml-2 text-blue-400">• Market sentiment included</span>
                                                                                         )}
                                                                                     </div>
-                                                                                    <iframe
-                                                                                        src={`${briefing.pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
-                                                                                        width="100%"
-                                                                                        height="600"
-                                                                                        style={{ border: 'none' }}
-                                                                                        title={`${briefing.title} PDF`}
-                                                                                        onError={() => {
-                                                                                            console.error('PDF load error for:', briefing.pdfUrl);
-                                                                                        }}
-                                                                                    >
-                                                                                        <p className="p-4 text-gray-400">
-                                                                                            Your browser doesn't support embedded PDFs.
-                                                                                            <a
-                                                                                                href={briefing.pdfUrl}
-                                                                                                target="_blank"
-                                                                                                rel="noopener noreferrer"
-                                                                                                className="text-blue-400 hover:underline ml-1"
-                                                                                            >
-                                                                                                Download the PDF instead
-                                                                                            </a>
-                                                                                        </p>
-                                                                                    </iframe>
+                                                                                    <div className="p-6 bg-gray-900 max-h-96 overflow-y-auto">
+                                                                                        <NotionBlockRenderer 
+                                                                                            blocks={briefing.content}
+                                                                                            className="prose prose-invert max-w-none"
+                                                                                        />
+                                                                                    </div>
                                                                                 </div>
                                                                             )}
                                                                         </div>

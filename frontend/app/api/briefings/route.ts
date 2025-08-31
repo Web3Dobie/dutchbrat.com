@@ -35,6 +35,230 @@ function getDateValue(dateProperty: any): string {
     return dateProperty.date.start || '';
 }
 
+// Parse Notion rich text to our format
+function parseRichText(richText: any[]): any[] {
+    if (!richText || !Array.isArray(richText)) return [];
+    
+    return richText.map(item => ({
+        type: 'text',
+        text: item.plain_text || '',
+        annotations: {
+            bold: item.annotations?.bold || false,
+            italic: item.annotations?.italic || false,
+            strikethrough: item.annotations?.strikethrough || false,
+            underline: item.annotations?.underline || false,
+            code: item.annotations?.code || false,
+            color: item.annotations?.color || 'default'
+        },
+        href: item.href || null
+    }));
+}
+
+// Parse Notion blocks recursively
+async function parseNotionBlocks(pageId: string): Promise<any[]> {
+    try {
+        const blocks = await notion.blocks.children.list({
+            block_id: pageId,
+            page_size: 100
+        });
+
+        const parsedBlocks: any[] = [];
+
+        for (const block of blocks.results) {
+            const parsedBlock = await parseBlock(block as any);
+            if (parsedBlock) {
+                parsedBlocks.push(parsedBlock);
+            }
+        }
+
+        return parsedBlocks;
+    } catch (error) {
+        console.error('Error parsing Notion blocks:', error);
+        return [];
+    }
+}
+
+// Parse individual Notion block
+async function parseBlock(block: any): Promise<any | null> {
+    const baseBlock = {
+        id: block.id,
+        type: block.type,
+        hasChildren: block.has_children
+    };
+
+    switch (block.type) {
+        case 'paragraph':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.paragraph.rich_text)
+                }
+            };
+
+        case 'heading_1':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.heading_1.rich_text)
+                }
+            };
+
+        case 'heading_2':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.heading_2.rich_text)
+                }
+            };
+
+        case 'heading_3':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.heading_3.rich_text)
+                }
+            };
+
+        case 'bulleted_list_item':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.bulleted_list_item.rich_text)
+                }
+            };
+
+        case 'numbered_list_item':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.numbered_list_item.rich_text)
+                }
+            };
+
+        case 'to_do':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.to_do.rich_text),
+                    checked: block.to_do.checked
+                }
+            };
+
+        case 'toggle':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.toggle.rich_text)
+                }
+            };
+
+        case 'code':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.code.rich_text),
+                    language: block.code.language
+                }
+            };
+
+        case 'quote':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.quote.rich_text)
+                }
+            };
+
+        case 'callout':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.callout.rich_text),
+                    icon: block.callout.icon
+                }
+            };
+
+        case 'divider':
+            return {
+                ...baseBlock,
+                content: {}
+            };
+
+        case 'table':
+            return {
+                ...baseBlock,
+                content: {
+                    tableWidth: block.table.table_width,
+                    hasColumnHeader: block.table.has_column_header,
+                    hasRowHeader: block.table.has_row_header
+                }
+            };
+
+        case 'table_row':
+            return {
+                ...baseBlock,
+                content: {
+                    cells: block.table_row.cells.map((cell: any) => parseRichText(cell))
+                }
+            };
+
+        case 'image':
+            return {
+                ...baseBlock,
+                content: {
+                    url: block.image.file?.url || block.image.external?.url,
+                    caption: parseRichText(block.image.caption || [])
+                }
+            };
+
+        case 'video':
+            return {
+                ...baseBlock,
+                content: {
+                    url: block.video.file?.url || block.video.external?.url,
+                    caption: parseRichText(block.video.caption || [])
+                }
+            };
+
+        case 'file':
+            return {
+                ...baseBlock,
+                content: {
+                    url: block.file.file?.url || block.file.external?.url,
+                    caption: parseRichText(block.file.caption || [])
+                }
+            };
+
+        case 'bookmark':
+            return {
+                ...baseBlock,
+                content: {
+                    url: block.bookmark.url,
+                    caption: parseRichText(block.bookmark.caption || [])
+                }
+            };
+
+        case 'embed':
+            return {
+                ...baseBlock,
+                content: {
+                    url: block.embed.url,
+                    caption: parseRichText(block.embed.caption || [])
+                }
+            };
+
+        default:
+            // For unsupported block types, return basic info
+            return {
+                ...baseBlock,
+                content: {
+                    unsupported: true,
+                    originalType: block.type
+                }
+            };
+    }
+}
+
 export async function GET(req: NextRequest) {
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!
@@ -42,6 +266,11 @@ export async function GET(req: NextRequest) {
         if (!databaseId) {
             throw new Error('NOTION_PDF_DATABASE_ID environment variable not set')
         }
+
+        // Get URL search parameters
+        const { searchParams } = new URL(req.url);
+        const pageSize = parseInt(searchParams.get('pageSize') || '10');
+        const startCursor = searchParams.get('cursor') || undefined;
 
         const response = await notion.databases.query({
             database_id: databaseId,
@@ -51,28 +280,60 @@ export async function GET(req: NextRequest) {
                     direction: 'descending',
                 },
             ],
+            page_size: pageSize,
+            start_cursor: startCursor
         })
 
-        // Transform Notion pages to Briefing objects
-        const briefings = response.results.map((page: any) => {
+        // Check if we have results
+        if (!response.results || response.results.length === 0) {
+            return NextResponse.json({
+                data: [],
+                pagination: {
+                    hasMore: false,
+                    nextCursor: null
+                }
+            });
+        }
+
+        // Transform each page one by one to avoid Promise.all type issues
+        const briefings: any[] = [];
+        
+        for (const result of response.results) {
+            const page = result as any;
+            if (!page.properties) continue;
+            
             const properties = page.properties;
 
-            return {
+            // Parse the full page content
+            const content = await parseNotionBlocks(page.id);
+
+            const briefing = {
                 id: page.id,
                 title: getTitle(properties.Name),
                 period: getSelectValue(properties.Period),
                 date: getDateValue(properties.Date),
-                pdfUrl: getUrlValue(properties['PDF Link']),
+                pageUrl: getUrlValue(properties['PDF Link']), // Renamed from pdfUrl
                 tweetUrl: getUrlValue(properties['Tweet URL']),
-                marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || [])
+                marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || []),
+                content: content // Rich Notion content
             };
+
+            briefings.push(briefing);
+        }
+
+        console.log(`Returning ${briefings.length} briefings with full content`);
+
+        // Return with pagination info
+        return NextResponse.json({
+            data: briefings,
+            pagination: {
+                hasMore: response.has_more,
+                nextCursor: response.next_cursor
+            }
         });
 
-        console.log(`Returning ${briefings.length} briefings with market sentiment`);
-
-        return NextResponse.json(briefings)
     } catch (err: any) {
-        console.error('Error fetching briefings:', err)
+        console.error('Error fetching briefings with content:', err)
         return NextResponse.json(
             { error: err.message || 'Unknown error' },
             { status: 500 }
