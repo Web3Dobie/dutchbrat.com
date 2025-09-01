@@ -38,7 +38,7 @@ function getDateValue(dateProperty: any): string {
 // Parse Notion rich text to our format
 function parseRichText(richText: any[]): any[] {
     if (!richText || !Array.isArray(richText)) return [];
-    
+
     return richText.map(item => ({
         type: 'text',
         text: item.plain_text || '',
@@ -65,6 +65,15 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
         const parsedBlocks: any[] = [];
 
         for (const block of blocks.results) {
+            // Debug logging to see what we're getting
+            if ((block as any).type === 'table' || (block as any).type === 'table_row') {
+                console.log('Table block found:', {
+                    type: (block as any).type,
+                    id: (block as any).id,
+                    content: JSON.stringify((block as any), null, 2)
+                });
+            }
+
             const parsedBlock = await parseBlock(block as any);
             if (parsedBlock) {
                 parsedBlocks.push(parsedBlock);
@@ -297,11 +306,11 @@ export async function GET(req: NextRequest) {
 
         // Transform each page one by one to avoid Promise.all type issues
         const briefings: any[] = [];
-        
+
         for (const result of response.results) {
             const page = result as any;
             if (!page.properties) continue;
-            
+
             const properties = page.properties;
 
             // Parse the full page content
