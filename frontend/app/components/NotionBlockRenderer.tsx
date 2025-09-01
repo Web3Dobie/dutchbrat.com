@@ -29,7 +29,7 @@ interface NotionBlockRendererProps {
 }
 
 // Render rich text with formatting
-function renderRichText(richText: RichText[]): JSX.Element {
+function renderRichText(richText: RichText[]): JSX.Element | null {
     return (
         <>
             {richText.map((text, index) => {
@@ -105,7 +105,7 @@ function getColorClass(color: string): string {
 }
 
 // Render individual block
-function renderBlock(block: NotionBlock): JSX.Element {
+function renderBlock(block: NotionBlock): JSX.Element | null {
     const { type, content, id } = block;
 
     switch (type) {
@@ -138,22 +138,9 @@ function renderBlock(block: NotionBlock): JSX.Element {
             );
 
         case 'bulleted_list_item':
-            return (
-                <ul key={id} className="mb-2">
-                    <li className="text-gray-300 leading-relaxed ml-6 list-disc">
-                        {renderRichText(content.richText || [])}
-                    </li>
-                </ul>
-            );
-
         case 'numbered_list_item':
-            return (
-                <ol key={id} className="mb-2">
-                    <li className="text-gray-300 leading-relaxed ml-6 list-decimal">
-                        {renderRichText(content.richText || [])}
-                    </li>
-                </ol>
-            );
+            // These are now fully handled by the grouping logic.
+            return null;
 
         case 'to_do':
             return (
@@ -226,8 +213,11 @@ function renderBlock(block: NotionBlock): JSX.Element {
         case 'table':
             return (
                 <div key={id} className="mb-4 overflow-x-auto">
-                    <table className="min-w-full border border-gray-600 rounded-lg bg-gray-800">
-                        {/* Table rows will be rendered separately by table_row blocks */}
+                    <table className="min-w-full border-collapse border border-gray-600 rounded-lg bg-gray-800">
+                        <tbody>
+                            {/* This is the crucial part: map over children and render them */}
+                            {block.children?.map(child => renderBlock(child))}
+                        </tbody>
                     </table>
                 </div>
             );
@@ -309,9 +299,57 @@ function renderBlock(block: NotionBlock): JSX.Element {
 }
 
 export default function NotionBlockRenderer({ blocks, className = '' }: NotionBlockRendererProps) {
+    // Explicitly type the array to hold JSX Elements. This is the key fix.
+    const renderedElements: (JSX.Element | null)[] = [];
+
+    let i = 0;
+    while (i < blocks.length) {
+        const block = blocks[i];
+
+        if (block.type === 'bulleted_list_item' || block.type === 'numbered_list_item') {
+            const listType = block.type; // 'bulleted_list_item' or 'numbered_list_item'
+
+            // Explicitly type the listItems array.
+            const listItems: NotionBlock[] = [];
+
+            // Group all consecutive items of the same list type
+            let j = i;
+            while (j < blocks.length && blocks[j].type === listType) {
+                listItems.push(blocks[j]);
+                j++;
+            }
+
+            if (listType === 'bulleted_list_item') {
+                renderedElements.push(
+                    <ul key={block.id} className="list-disc space-y-1 pl-6 mb-4">
+                        {listItems.map(item => (
+                            <li key={item.id} className="text-gray-300 leading-relaxed">
+                                {renderRichText(item.content.richText || [])}
+                            </li>
+                        ))}
+                    </ul>
+                );
+            } else { // This will be 'numbered_list_item'
+                renderedElements.push(
+                    <ol key={block.id} className="list-decimal space-y-1 pl-6 mb-4">
+                        {listItems.map(item => (
+                            <li key={item.id} className="text-gray-300 leading-relaxed">
+                                {renderRichText(item.content.richText || [])}
+                            </li>
+                        ))}
+                    </ol>
+                );
+            }
+            i = j; // Move the index past the list items we just processed
+        } else {
+            renderedElements.push(renderBlock(block));
+            i++;
+        }
+    }
+
     return (
         <div className={`notion-content ${className}`}>
-            {blocks.map(block => renderBlock(block))}
+            {renderedElements}
         </div>
     );
 }
