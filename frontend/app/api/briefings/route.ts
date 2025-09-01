@@ -133,7 +133,7 @@ async function parseBlock(block: any): Promise<any | null> {
 
             // Parse children (but don't recursively fetch their children to avoid deep nesting)
             for (const child of childrenResponse.results) {
-                const parsedChild = parseBlockSimple(child as any);
+                const parsedChild = await parseBlock(child as any); // Use the full parser
                 if (parsedChild) {
                     children.push(parsedChild);
                 }
