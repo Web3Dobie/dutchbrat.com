@@ -97,6 +97,27 @@ async function parseBlock(block: any): Promise<any | null> {
         hasChildren: block.has_children
     };
 
+    // If block has children, fetch them
+    let children: any[] = [];
+    if (block.has_children) {
+        try {
+            const childrenResponse = await notion.blocks.children.list({
+                block_id: block.id,
+                page_size: 100
+            });
+
+            // Parse children recursively
+            for (const child of childrenResponse.results) {
+                const parsedChild = await parseBlock(child as any);
+                if (parsedChild) {
+                    children.push(parsedChild);
+                }
+            }
+        } catch (error) {
+            console.error(`Error fetching children for block ${block.id}:`, error);
+        }
+    }
+
     switch (block.type) {
         case 'paragraph':
             return {
@@ -202,7 +223,8 @@ async function parseBlock(block: any): Promise<any | null> {
                     tableWidth: block.table.table_width,
                     hasColumnHeader: block.table.has_column_header,
                     hasRowHeader: block.table.has_row_header
-                }
+                },
+                children: children // Include the table_row children
             };
 
         case 'table_row':
