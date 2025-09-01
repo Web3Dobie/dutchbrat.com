@@ -54,6 +54,42 @@ function parseRichText(richText: any[]): any[] {
     }));
 }
 
+// Simple parser for children blocks (non-recursive to improve performance)
+function parseBlockSimple(block: any): any | null {
+    const baseBlock = {
+        id: block.id,
+        type: block.type,
+        hasChildren: block.has_children
+    };
+
+    switch (block.type) {
+        case 'table_row':
+            return {
+                ...baseBlock,
+                content: {
+                    cells: block.table_row?.cells || []
+                }
+            };
+
+        case 'paragraph':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.paragraph?.rich_text || [])
+                }
+            };
+
+        default:
+            return {
+                ...baseBlock,
+                content: {
+                    unsupported: true,
+                    originalType: block.type
+                }
+            };
+    }
+}
+
 // Parse Notion blocks recursively
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
     try {
@@ -97,18 +133,18 @@ async function parseBlock(block: any): Promise<any | null> {
         hasChildren: block.has_children
     };
 
-    // If block has children, fetch them
+    // Only fetch children for specific block types that need them (like tables and toggles)
     let children: any[] = [];
-    if (block.has_children) {
+    if (block.has_children && (block.type === 'table' || block.type === 'toggle')) {
         try {
             const childrenResponse = await notion.blocks.children.list({
                 block_id: block.id,
                 page_size: 100
             });
 
-            // Parse children recursively
+            // Parse children (but don't recursively fetch their children to avoid deep nesting)
             for (const child of childrenResponse.results) {
-                const parsedChild = await parseBlock(child as any);
+                const parsedChild = parseBlockSimple(child as any);
                 if (parsedChild) {
                     children.push(parsedChild);
                 }
@@ -181,7 +217,8 @@ async function parseBlock(block: any): Promise<any | null> {
                 ...baseBlock,
                 content: {
                     richText: parseRichText(block.toggle.rich_text)
-                }
+                },
+                children: children
             };
 
         case 'code':
@@ -224,22 +261,14 @@ async function parseBlock(block: any): Promise<any | null> {
                     hasColumnHeader: block.table.has_column_header,
                     hasRowHeader: block.table.has_row_header
                 },
-                children: children // Include the table_row children
+                children: children
             };
 
         case 'table_row':
-            const cells = block.table_row?.cells || [];
-            console.log('Raw table_row block:', JSON.stringify(block.table_row, null, 2));
-
             return {
                 ...baseBlock,
                 content: {
-                    cells: cells.map((cell: any, index: number) => {
-                        console.log(`Raw cell ${index}:`, JSON.stringify(cell, null, 2));
-                        const parsed = parseRichText(cell);
-                        console.log(`Parsed cell ${index}:`, parsed);
-                        return parsed;
-                    })
+                    cells: block.table_row?.cells || []
                 }
             };
 
@@ -289,7 +318,6 @@ async function parseBlock(block: any): Promise<any | null> {
             };
 
         default:
-            // For unsupported block types, return basic info
             return {
                 ...baseBlock,
                 content: {
@@ -355,10 +383,10 @@ export async function GET(req: NextRequest) {
                 title: getTitle(properties.Name),
                 period: getSelectValue(properties.Period),
                 date: getDateValue(properties.Date),
-                pageUrl: getUrlValue(properties['PDF Link']), // Renamed from pdfUrl
+                pageUrl: getUrlValue(properties['PDF Link']),
                 tweetUrl: getUrlValue(properties['Tweet URL']),
                 marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || []),
-                content: content // Rich Notion content
+                content: content
             };
 
             briefings.push(briefing);
@@ -366,7 +394,6 @@ export async function GET(req: NextRequest) {
 
         console.log(`Returning ${briefings.length} briefings with full content`);
 
-        // Return with pagination info
         return NextResponse.json({
             data: briefings,
             pagination: {
