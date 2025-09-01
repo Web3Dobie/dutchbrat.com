@@ -12,9 +12,9 @@ function EconomicCalendarWidget() {
             script.type = 'text/javascript';
             script.async = true;
             script.innerHTML = JSON.stringify({
-                // --- THIS IS THE FIX ---
-                "colorTheme": "light", // Changed from "dark" to "light" for visibility
-                "isTransparent": true,
+                "colorTheme": "light",
+                // --- FIX #1: Force the widget to draw its own background ---
+                "isTransparent": false,
                 "width": "100%",
                 "height": "600",
                 "locale": "en",
@@ -32,8 +32,11 @@ function EconomicCalendarWidget() {
     }, []);
 
     return (
-        <div className="tradingview-widget-container" ref={container} style={{ minHeight: '600px' }}>
-            <div className="tradingview-widget-container__widget"></div>
+        // --- FIX #2: Wrap the widget in a styled container to create the "sandbox" ---
+        <div className="bg-white rounded-lg p-2">
+            <div className="tradingview-widget-container" ref={container}>
+                <div className="tradingview-widget-container__widget"></div>
+            </div>
         </div>
     );
 }
