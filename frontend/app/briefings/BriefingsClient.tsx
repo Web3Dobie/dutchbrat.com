@@ -292,15 +292,6 @@ export default function BriefingsClient() {
                                                                                     {isOpen ? '📄 Hide Content' : '📄 View Content'} →
                                                                                 </button>
 
-                                                                                <a
-                                                                                    href={briefing.pageUrl}
-                                                                                    target="_blank"
-                                                                                    rel="noopener noreferrer"
-                                                                                    className="text-sm text-blue-400 hover:underline transition-colors"
-                                                                                >
-                                                                                    🔗 Open in Notion →
-                                                                                </a>
-
                                                                                 {briefing.tweetUrl && (
                                                                                     <a
                                                                                         href={briefing.tweetUrl}

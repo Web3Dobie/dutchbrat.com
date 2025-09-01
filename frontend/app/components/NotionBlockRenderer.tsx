@@ -60,10 +60,10 @@ function renderRichText(richText: RichText[]): JSX.Element {
                 // Apply link
                 if (text.href) {
                     element = (
-                        <a 
-                            key={index} 
-                            href={text.href} 
-                            target="_blank" 
+                        <a
+                            key={index}
+                            href={text.href}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-400 hover:underline"
                         >
@@ -225,17 +225,17 @@ function renderBlock(block: NotionBlock): JSX.Element {
         case 'table':
             return (
                 <div key={id} className="mb-4 overflow-x-auto">
-                    <table className="min-w-full border border-gray-600 rounded-lg">
-                        {/* Table content would be built from table_row blocks */}
+                    <table className="min-w-full border border-gray-600 rounded-lg bg-gray-800">
+                        {/* Table rows will be rendered separately by table_row blocks */}
                     </table>
                 </div>
             );
 
         case 'table_row':
             return (
-                <tr key={id}>
+                <tr key={id} className="border-b border-gray-600">
                     {content.cells?.map((cell: RichText[], cellIndex: number) => (
-                        <td key={cellIndex} className="border border-gray-600 px-3 py-2 text-gray-300">
+                        <td key={cellIndex} className="border-r border-gray-600 px-3 py-2 text-gray-300 last:border-r-0">
                             {renderRichText(cell)}
                         </td>
                     ))}
@@ -245,8 +245,8 @@ function renderBlock(block: NotionBlock): JSX.Element {
         case 'image':
             return (
                 <div key={id} className="mb-4">
-                    <img 
-                        src={content.url} 
+                    <img
+                        src={content.url}
                         alt="Image"
                         className="max-w-full rounded-lg"
                     />
@@ -261,8 +261,8 @@ function renderBlock(block: NotionBlock): JSX.Element {
         case 'video':
             return (
                 <div key={id} className="mb-4">
-                    <video 
-                        src={content.url} 
+                    <video
+                        src={content.url}
                         controls
                         className="max-w-full rounded-lg"
                     />
@@ -277,7 +277,7 @@ function renderBlock(block: NotionBlock): JSX.Element {
         case 'bookmark':
             return (
                 <div key={id} className="mb-4 border border-gray-600 rounded-lg p-3 bg-gray-800">
-                    <a 
+                    <a
                         href={content.url}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -308,9 +308,89 @@ function renderBlock(block: NotionBlock): JSX.Element {
 }
 
 export default function NotionBlockRenderer({ blocks, className = '' }: NotionBlockRendererProps) {
+    // Group table blocks with their rows
+    const processedBlocks: any[] = [];
+    let i = 0;
+
+    while (i < blocks.length) {
+        const block = blocks[i];
+
+        if (block.type === 'table') {
+            // Find all consecutive table_row blocks
+            const tableRows: any[] = [];
+            let j = i + 1;
+
+            while (j < blocks.length && blocks[j].type === 'table_row') {
+                tableRows.push(blocks[j]);
+                j++;
+            }
+
+            // Create a combined table block
+            processedBlocks.push({
+                ...block,
+                tableRows: tableRows
+            });
+
+            i = j; // Skip past all the table rows we just processed
+        } else if (block.type === 'table_row') {
+            // Skip standalone table_row blocks (they should be handled by table blocks)
+            i++;
+        } else {
+            processedBlocks.push(block);
+            i++;
+        }
+    }
+
     return (
         <div className={`notion-content ${className}`}>
-            {blocks.map(block => renderBlock(block))}
+            {processedBlocks.map(block => renderProcessedBlock(block))}
+        </div>
+    );
+}
+
+// Render processed blocks (including combined tables)
+function renderProcessedBlock(block: any): JSX.Element {
+    if (block.type === 'table' && block.tableRows) {
+        return renderTable(block, block.tableRows);
+    }
+    return renderBlock(block);
+}
+
+// Render table with rows
+function renderTable(tableBlock: NotionBlock, tableRows: NotionBlock[]): JSX.Element {
+    const { content } = tableBlock;
+
+    return (
+        <div key={tableBlock.id} className="mb-6 overflow-x-auto">
+            <table className="min-w-full border border-gray-600 rounded-lg bg-gray-800">
+                <tbody>
+                    {tableRows.map((row, rowIndex) => (
+                        <tr key={row.id} className={`border-b border-gray-600 ${rowIndex === 0 && content.hasColumnHeader
+                                ? 'bg-gray-700 font-semibold'
+                                : 'hover:bg-gray-750'
+                            }`}>
+                            {row.content.cells?.map((cell: any[], cellIndex: number) => {
+                                const isHeaderCell = (rowIndex === 0 && content.hasColumnHeader) ||
+                                    (cellIndex === 0 && content.hasRowHeader);
+
+                                const CellTag = isHeaderCell ? 'th' : 'td';
+
+                                return (
+                                    <CellTag
+                                        key={cellIndex}
+                                        className={`border-r border-gray-600 px-3 py-2 text-left last:border-r-0 ${isHeaderCell
+                                                ? 'text-white font-semibold bg-gray-700'
+                                                : 'text-gray-300'
+                                            }`}
+                                    >
+                                        {renderRichText(cell)}
+                                    </CellTag>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }
