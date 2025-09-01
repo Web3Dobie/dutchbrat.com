@@ -103,19 +103,8 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
         console.log('Total blocks received:', blocks.results.length);
         console.log('Block types:', blocks.results.map((b: any) => b.type));
 
-        const parsedBlocks: any[] = [];
-
-        for (const block of blocks.results) {
-            console.log('Processing block:', {
-                type: (block as any).type,
-                id: (block as any).id
-            });
-
-            const parsedBlock = await parseBlock(block as any);
-            if (parsedBlock) {
-                parsedBlocks.push(parsedBlock);
-            }
-        }
+        const parsedBlocksPromises = blocks.results.map(block => parseBlock(block as any));
+        const parsedBlocks = (await Promise.all(parsedBlocksPromises)).filter(Boolean);
 
         console.log('Parsed blocks count:', parsedBlocks.length);
         return parsedBlocks;
@@ -135,7 +124,7 @@ async function parseBlock(block: any): Promise<any | null> {
 
     // Only fetch children for tables (not toggles) to improve performance
     let children: any[] = [];
-    if (block.has_children && block.type === 'table') {
+    if (block.has_children && (block.type === 'table' || block.type === 'toggle')) {
         try {
             const childrenResponse = await notion.blocks.children.list({
                 block_id: block.id,
@@ -367,18 +356,14 @@ export async function GET(req: NextRequest) {
         }
 
         // Transform each page one by one to avoid Promise.all type issues
-        const briefings: any[] = [];
-
-        for (const result of response.results) {
+        const briefingsPromises = response.results.map(async (result) => {
             const page = result as any;
-            if (!page.properties) continue;
+            if (!page.properties) return null;
 
             const properties = page.properties;
-
-            // Parse the full page content
             const content = await parseNotionBlocks(page.id);
 
-            const briefing = {
+            return {
                 id: page.id,
                 title: getTitle(properties.Name),
                 period: getSelectValue(properties.Period),
@@ -388,9 +373,9 @@ export async function GET(req: NextRequest) {
                 marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || []),
                 content: content
             };
+        });
 
-            briefings.push(briefing);
-        }
+        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean); // .filter(Boolean) removes any nulls
 
         console.log(`Returning ${briefings.length} briefings with full content`);
 
