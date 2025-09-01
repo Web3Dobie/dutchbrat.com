@@ -67,7 +67,7 @@ function parseBlockSimple(block: any): any | null {
             return {
                 ...baseBlock,
                 content: {
-                    cells: block.table_row?.cells || []
+                    cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || []
                 }
             };
 
@@ -268,7 +268,7 @@ async function parseBlock(block: any): Promise<any | null> {
             return {
                 ...baseBlock,
                 content: {
-                    cells: block.table_row?.cells || []
+                    cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || []
                 }
             };
 
