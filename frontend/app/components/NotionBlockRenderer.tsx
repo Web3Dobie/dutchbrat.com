@@ -199,6 +199,8 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
             const richText = content.richText || [];
             const triggerText = richText.map((t: RichText) => t.text).join('');
 
+            console.log("Checking callout text:", `|${triggerText.trim()}|`);
+
             // Using .trim() to make the check more robust
             if (triggerText.trim() === 'ECONOMIC_CALENDAR_WIDGET') {
                 // If it matches, render the live widget
