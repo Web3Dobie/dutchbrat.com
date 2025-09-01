@@ -41,7 +41,7 @@ function parseRichText(richText: any[]): any[] {
 
     return richText.map(item => ({
         type: 'text',
-        text: item.plain_text || '',
+        text: item.plain_text || item.text?.content || '',  // Handle both formats
         annotations: {
             bold: item.annotations?.bold || false,
             italic: item.annotations?.italic || false,
@@ -50,7 +50,7 @@ function parseRichText(richText: any[]): any[] {
             code: item.annotations?.code || false,
             color: item.annotations?.color || 'default'
         },
-        href: item.href || null
+        href: item.href || item.text?.link?.url || null
     }));
 }
 
@@ -133,9 +133,9 @@ async function parseBlock(block: any): Promise<any | null> {
         hasChildren: block.has_children
     };
 
-    // Only fetch children for specific block types that need them (like tables and toggles)
+    // Only fetch children for tables (not toggles) to improve performance
     let children: any[] = [];
-    if (block.has_children && (block.type === 'table' || block.type === 'toggle')) {
+    if (block.has_children && block.type === 'table') {
         try {
             const childrenResponse = await notion.blocks.children.list({
                 block_id: block.id,
