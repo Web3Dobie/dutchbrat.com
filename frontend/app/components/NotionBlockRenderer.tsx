@@ -196,16 +196,16 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
             );
 
         case 'callout': {
-            // Check if the callout contains our magic trigger phrase
             const richText = content.richText || [];
             const triggerText = richText.map((t: RichText) => t.text).join('');
 
-            if (triggerText === 'ECONOMIC_CALENDAR_WIDGET') {
-                // If it does, render the live widget instead of the callout
+            // Using .trim() to make the check more robust
+            if (triggerText.trim() === 'ECONOMIC_CALENDAR_WIDGET') {
+                // If it matches, render the live widget
                 return <EconomicCalendarWidget key={id} />;
             }
 
-            // Otherwise, render the callout normally
+            // Otherwise, render the callout normally (which will be invisible if empty)
             return (
                 <div key={id} className="mb-4 bg-blue-900 border border-blue-600 rounded-lg p-4">
                     <div className="flex items-start gap-3">
