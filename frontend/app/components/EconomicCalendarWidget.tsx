@@ -6,14 +6,14 @@ function EconomicCalendarWidget() {
     const container = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Ensure the container is available and hasn't been filled yet
         if (container.current && container.current.children.length === 0) {
             const script = document.createElement('script');
             script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
             script.type = 'text/javascript';
             script.async = true;
             script.innerHTML = JSON.stringify({
-                "colorTheme": "dark",
+                // --- THIS IS THE FIX ---
+                "colorTheme": "light", // Changed from "dark" to "light" for visibility
                 "isTransparent": true,
                 "width": "100%",
                 "height": "600",
@@ -24,15 +24,12 @@ function EconomicCalendarWidget() {
             container.current.appendChild(script);
         }
 
-        // This is the crucial cleanup function.
-        // It runs when the component unmounts. In Strict Mode, this happens once
-        // before the component mounts for the final time.
         return () => {
             if (container.current) {
                 container.current.innerHTML = '';
             }
         };
-    }, []); // The empty dependency array ensures this effect runs only on mount/unmount
+    }, []);
 
     return (
         <div className="tradingview-widget-container" ref={container} style={{ minHeight: '600px' }}>
