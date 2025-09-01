@@ -195,7 +195,17 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
                 </blockquote>
             );
 
-        case 'callout':
+        case 'callout': {
+            // Check if the callout contains our magic trigger phrase
+            const richText = content.richText || [];
+            const triggerText = richText.map((t: RichText) => t.text).join('');
+
+            if (triggerText === 'ECONOMIC_CALENDAR_WIDGET') {
+                // If it does, render the live widget instead of the callout
+                return <EconomicCalendarWidget key={id} />;
+            }
+
+            // Otherwise, render the callout normally
             return (
                 <div key={id} className="mb-4 bg-blue-900 border border-blue-600 rounded-lg p-4">
                     <div className="flex items-start gap-3">
@@ -205,11 +215,12 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
                             </span>
                         )}
                         <div className="text-gray-300 leading-relaxed">
-                            {renderRichText(content.richText || [])}
+                            {renderRichText(richText)}
                         </div>
                     </div>
                 </div>
             );
+        }
 
         case 'divider':
             return (
