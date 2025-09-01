@@ -79,6 +79,15 @@ function parseBlockSimple(block: any): any | null {
                 }
             };
 
+        case 'embed':
+            return {
+                ...baseBlock,
+                content: {
+                    url: block.embed.url,
+                    caption: parseRichText(block.embed.caption || [])
+                }
+            };
+
         default:
             return {
                 ...baseBlock,
