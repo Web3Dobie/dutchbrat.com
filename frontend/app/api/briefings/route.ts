@@ -88,6 +88,15 @@ function parseBlockSimple(block: any): any | null {
                 }
             };
 
+        case 'callout':
+            return {
+                ...baseBlock,
+                content: {
+                    richText: parseRichText(block.callout.rich_text),
+                    icon: block.callout.icon
+                }
+            };
+
         default:
             return {
                 ...baseBlock,
