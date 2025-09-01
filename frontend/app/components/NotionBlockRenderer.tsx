@@ -1,5 +1,6 @@
 // frontend/app/components/NotionBlockRenderer.tsx
 import React from 'react';
+import EconomicCalendarWidget from './EconomicCalendarWidget';
 
 interface RichText {
     type: 'text';
@@ -141,6 +142,11 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
         case 'numbered_list_item':
             // These are now fully handled by the grouping logic.
             return null;
+
+        case 'embed':
+            // We'll assume any 'embed' is our economic calendar for now
+            // and render our reliable custom component instead of the broken URL.
+            return <EconomicCalendarWidget key={id} />;
 
         case 'to_do':
             return (
