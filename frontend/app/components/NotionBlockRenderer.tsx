@@ -163,8 +163,8 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
                     <summary className="cursor-pointer text-gray-300 font-medium">
                         {renderRichText(content.richText || [])}
                     </summary>
-                    <div className="mt-2 pl-4">
-                        {/* Children would be rendered here if implemented */}
+                    <div className="mt-2 pl-4 pt-2 border-t border-gray-700">
+                        {block.children?.map(child => renderBlock(child))}
                     </div>
                 </details>
             );
