@@ -57,22 +57,23 @@ function parseRichText(richText: any[]): any[] {
 // Parse Notion blocks recursively
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
     try {
+        console.log('Fetching blocks for page:', pageId);
+
         const blocks = await notion.blocks.children.list({
             block_id: pageId,
             page_size: 100
         });
 
+        console.log('Total blocks received:', blocks.results.length);
+        console.log('Block types:', blocks.results.map((b: any) => b.type));
+
         const parsedBlocks: any[] = [];
 
         for (const block of blocks.results) {
-            // Debug logging to see what we're getting
-            if ((block as any).type === 'table' || (block as any).type === 'table_row') {
-                console.log('Table block found:', {
-                    type: (block as any).type,
-                    id: (block as any).id,
-                    content: JSON.stringify((block as any), null, 2)
-                });
-            }
+            console.log('Processing block:', {
+                type: (block as any).type,
+                id: (block as any).id
+            });
 
             const parsedBlock = await parseBlock(block as any);
             if (parsedBlock) {
@@ -80,6 +81,7 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
             }
         }
 
+        console.log('Parsed blocks count:', parsedBlocks.length);
         return parsedBlocks;
     } catch (error) {
         console.error('Error parsing Notion blocks:', error);
