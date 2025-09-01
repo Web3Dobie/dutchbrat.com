@@ -164,7 +164,7 @@ export default function BriefingsClient() {
             {/* Header */}
             <div className="flex flex-col items-center mb-12">
                 <img
-                    src="/images/HTD_Research_Banner.jpg"
+                    src="/images/HTD_Research_Banner.png"
                     alt="HTD Banner"
                     className="object-cover border-4 border-blue-700 shadow-xl mb-6 w-full max-w-2xl"
                     style={{ height: 'auto' }}
@@ -314,7 +314,7 @@ export default function BriefingsClient() {
                                                                                         )}
                                                                                     </div>
                                                                                     <div className="p-6 bg-gray-900 max-h-96 overflow-y-auto">
-                                                                                        <NotionBlockRenderer 
+                                                                                        <NotionBlockRenderer
                                                                                             blocks={briefing.content}
                                                                                             className="prose prose-invert max-w-none"
                                                                                         />

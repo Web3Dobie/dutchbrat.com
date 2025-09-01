@@ -206,19 +206,18 @@ async function parseBlock(block: any): Promise<any | null> {
             };
 
         case 'table_row':
-            console.log('Parsing table_row:', {
-                id: block.id,
-                cells: block.table_row?.cells,
-                cellCount: block.table_row?.cells?.length
-            });
+            const cells = block.table_row?.cells || [];
+            console.log('Raw table_row block:', JSON.stringify(block.table_row, null, 2));
 
             return {
                 ...baseBlock,
                 content: {
-                    cells: block.table_row?.cells?.map((cell: any, index: number) => {
-                        console.log(`Cell ${index}:`, cell);
-                        return parseRichText(cell);
-                    }) || []
+                    cells: cells.map((cell: any, index: number) => {
+                        console.log(`Raw cell ${index}:`, JSON.stringify(cell, null, 2));
+                        const parsed = parseRichText(cell);
+                        console.log(`Parsed cell ${index}:`, parsed);
+                        return parsed;
+                    })
                 }
             };
 
