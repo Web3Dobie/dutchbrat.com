@@ -279,6 +279,8 @@ async function parseBlock(block: any): Promise<any | null> {
 }
 
 export async function GET(req: NextRequest) {
+    console.log('🚀 NEW BRIEFINGS API CALLED - with content parsing');
+
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!
 
