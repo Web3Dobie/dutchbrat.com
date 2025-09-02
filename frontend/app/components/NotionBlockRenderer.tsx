@@ -318,6 +318,10 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
 }
 
 export default function NotionBlockRenderer({ blocks, className = '' }: NotionBlockRendererProps) {
+    if (!blocks || !Array.isArray(blocks)) {
+        return null; // Don't render anything if blocks is not a valid array
+    }
+    const validBlocks = blocks.filter(Boolean);
     // Explicitly type the array to hold JSX Elements. This is the key fix.
     const renderedElements: (JSX.Element | null)[] = [];
 
