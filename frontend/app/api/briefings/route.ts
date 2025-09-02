@@ -140,18 +140,22 @@ async function parseBlock(block: any): Promise<any | null> {
         hasChildren: block.has_children
     };
 
-    // Only fetch children for tables (not toggles) to improve performance
+    // Update this to also fetch children for columns
     let children: any[] = [];
-    if (block.has_children && (block.type === 'table' || block.type === 'toggle')) {
+    if (block.has_children && (
+        block.type === 'table' || 
+        block.type === 'toggle' || 
+        block.type === 'column_list' || // <-- Add this
+        block.type === 'column'        // <-- Add this
+    )) {
         try {
             const childrenResponse = await notion.blocks.children.list({
                 block_id: block.id,
                 page_size: 100
             });
 
-            // Parse children (but don't recursively fetch their children to avoid deep nesting)
             for (const child of childrenResponse.results) {
-                const parsedChild = await parseBlock(child as any); // Use the full parser
+                const parsedChild = await parseBlock(child as any);
                 if (parsedChild) {
                     children.push(parsedChild);
                 }
@@ -322,6 +326,18 @@ async function parseBlock(block: any): Promise<any | null> {
                     url: block.embed.url,
                     caption: parseRichText(block.embed.caption || [])
                 }
+            };
+        
+        case 'column_list':
+            return {
+                ...baseBlock,
+                children: children // The children will be the individual 'column' blocks
+            };
+
+        case 'column':
+            return {
+                ...baseBlock,
+                children: children // The children will be the content inside the column (headings, tables, etc.)
             };
 
         default:
