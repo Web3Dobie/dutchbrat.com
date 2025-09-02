@@ -34,9 +34,22 @@ function renderRichText(richText: RichText[]): JSX.Element | null {
     return (
         <>
             {richText.map((text, index) => {
-                let element = <span key={index}>{text.text}</span>;
+                // FIXED: Convert line breaks to React elements
+                const textWithBreaks = text.text.split('\n\n').map((paragraph, pIndex, paragraphs) => (
+                    <React.Fragment key={`${index}-${pIndex}`}>
+                        {paragraph}
+                        {pIndex < paragraphs.length - 1 && (
+                            <>
+                                <br />
+                                <br />
+                            </>
+                        )}
+                    </React.Fragment>
+                ));
 
-                // Apply formatting
+                let element = <span key={index}>{textWithBreaks}</span>;
+
+                // Apply formatting (unchanged)
                 if (text.annotations.bold) {
                     element = <strong key={index}>{element}</strong>;
                 }
@@ -53,13 +66,13 @@ function renderRichText(richText: RichText[]): JSX.Element | null {
                     element = <code key={index} className="bg-gray-800 text-gray-300 px-1 py-0.5 rounded text-sm">{element}</code>;
                 }
 
-                // Apply color
+                // Apply color (unchanged)
                 if (text.annotations.color !== 'default') {
                     const colorClass = getColorClass(text.annotations.color);
                     element = <span key={index} className={colorClass}>{element}</span>;
                 }
 
-                // Apply link
+                // Apply link (unchanged)
                 if (text.href) {
                     element = (
                         <a
