@@ -63,28 +63,37 @@ export default function BriefingsClient() {
                 const uniquePeriods = Array.from(new Set(data.map(b => b.period).filter(Boolean)));
                 setPeriods(uniquePeriods);
 
-                // Handle which briefing to show on load
+                // --- START OF FIX ---
+
+                // Correctly type the variable to hold a Briefing or null
+                let briefingToShow: Briefing | null = null;
+
                 const briefingIdFromQuery = getBriefingIdFromQuery();
                 if (briefingIdFromQuery) {
-                    const briefing = data.find(b => b.id === briefingIdFromQuery);
-                    if (briefing) {
-                        const date = new Date(briefing.date);
-                        const year = date.getFullYear().toString();
-                        const month = date.toLocaleString('default', { month: 'long' });
-                        setExpandedYears(prev => ({ ...prev, [year]: true }));
-                        setExpandedMonths(prev => ({ ...prev, [`${year}-${month}`]: true }));
-                        setSelectedBriefingId(briefingIdFromQuery);
+                    // .find() returns Briefing or undefined, so we handle the undefined case
+                    const foundBriefing = data.find(b => b.id === briefingIdFromQuery);
+                    if (foundBriefing) {
+                        briefingToShow = foundBriefing;
+                    } else {
+                        console.warn(`Briefing with ID ${briefingIdFromQuery} not found. Defaulting to most recent.`);
+                        briefingToShow = data.length > 0 ? data[0] : null;
                     }
                 } else if (data.length > 0) {
-                    // Default to showing the most recent briefing
-                    const mostRecentBriefing = data[0];
-                    const date = new Date(mostRecentBriefing.date);
+                    briefingToShow = data[0];
+                }
+
+                if (briefingToShow) {
+                    const date = new Date(briefingToShow.date);
                     const year = date.getFullYear().toString();
                     const month = date.toLocaleString('default', { month: 'long' });
                     setExpandedYears(prev => ({ ...prev, [year]: true }));
                     setExpandedMonths(prev => ({ ...prev, [`${year}-${month}`]: true }));
-                    setSelectedBriefingId(mostRecentBriefing.id);
+                    setSelectedBriefingId(briefingToShow.id);
+                } else {
+                    setSelectedBriefingId(null);
                 }
+                
+                // --- END OF FIX ---
 
                 setLoading(false);
             } catch (err: any) {
