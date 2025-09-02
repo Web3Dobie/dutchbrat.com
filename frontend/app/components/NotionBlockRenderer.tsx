@@ -303,6 +303,24 @@ function renderBlock(block: NotionBlock): JSX.Element | null {
                 </div>
             );
 
+        case 'column_list':
+            // This will be the container for the columns, using Flexbox
+            return (
+                <div key={id} className="flex flex-col md:flex-row gap-4 mb-4">
+                    {/* Recursively render the children, which will be the 'column' blocks */}
+                    {block.children?.map(child => renderBlock(child))}
+                </div>
+            );
+
+        case 'column':
+            // This is the individual column
+            return (
+                <div key={id} className="w-full md:w-1/2">
+                    {/* Recursively render the content of the column */}
+                    {block.children?.map(child => renderBlock(child))}
+                </div>
+            );
+
         default:
             if (content.unsupported) {
                 return (
