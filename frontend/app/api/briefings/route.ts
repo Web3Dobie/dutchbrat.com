@@ -64,18 +64,24 @@ function parseRichText(richText: any[]): any[] {
 }
 
 /**
- * Sorts the rows of a parsed table block based on the performance column (e.g., % change or bps change),
- * by automatically detecting the presence of a header row.
- * @param tableBlock A parsed table block with its children (rows).
- * @returns The same table block with its children sorted.
+ * Sorts the rows of a parsed table block based on a performance column (e.g., % or bps change),
+ * using the reliable `hasColumnHeader` property from the Notion API.
+ * @param tableBlock A parsed table block object from our parser.
+ * @returns The same table block with its children (rows) sorted.
  */
 function sortTableByPerformance(tableBlock: any): any {
     if (!tableBlock || tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
         return tableBlock;
     }
 
-    let changeColumnIndex = -1;
-    let headerDetected = false;
+    // Use the reliable boolean provided by the Notion API, which we've already parsed.
+    const hasHeader = tableBlock.content?.hasColumnHeader;
+    const dataRowsStartIndex = hasHeader ? 1 : 0;
+
+    // If there are no data rows to sort (e.g., an empty table or header-only), exit.
+    if (tableBlock.children.length <= dataRowsStartIndex) {
+        return tableBlock;
+    }
 
     const findPerfColumn = (row: any): number => {
         const cells = row?.content?.cells;
@@ -96,46 +102,30 @@ function sortTableByPerformance(tableBlock: any): any {
         return parseFloat(cleanedText);
     };
 
-    // Heuristic to find the performance column and detect a header
-    if (tableBlock.children.length >= 2) {
-        // Assume the second row (index 1) is the first data row and find the column there
-        changeColumnIndex = findPerfColumn(tableBlock.children[1]);
+    // Find the performance column by looking at the *first actual data row*.
+    const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
 
-        if (changeColumnIndex !== -1) {
-            // Now check the first row in that same column. If it's not a number, it's a header.
-            const firstRowValue = cleanAndParse(tableBlock.children[0]?.content?.cells[changeColumnIndex]);
-            if (isNaN(firstRowValue)) {
-                headerDetected = true;
-            }
-        }
-    }
-    
-    // Fallback for tables with no header (or only one row)
-    if (changeColumnIndex === -1 && tableBlock.children.length > 0) {
-        changeColumnIndex = findPerfColumn(tableBlock.children[0]);
-        headerDetected = false; 
-    }
-
-    // If we still can't find a performance column, give up and return the original table.
+    // If no performance column is found in the data, we can't sort.
     if (changeColumnIndex === -1) {
         return tableBlock;
     }
 
-    // Separate header from data rows, sort the data rows, then recombine.
-    const headerRow = headerDetected ? tableBlock.children.slice(0, 1) : [];
-    const dataRows = headerDetected ? tableBlock.children.slice(1) : tableBlock.children;
+    // Separate header (if it exists) from the data rows.
+    const headerRow = hasHeader ? tableBlock.children.slice(0, 1) : [];
+    const dataRows = tableBlock.children.slice(dataRowsStartIndex);
 
+    // Sort the data rows based on the performance column.
     dataRows.sort((rowA: any, rowB: any) => {
         const valueA = cleanAndParse(rowA?.content?.cells[changeColumnIndex]);
         const valueB = cleanAndParse(rowB?.content?.cells[changeColumnIndex]);
-        
+
         if (isNaN(valueA) || isNaN(valueB)) {
-            return 0;
+            return 0; // Keep original order if a value isn't a number
         }
-        // Sort descending (highest value first)
-        return valueB - valueA;
+        return valueB - valueA; // Sort descending (highest first)
     });
-    
+
+    // Recombine the header with the newly sorted data rows.
     tableBlock.children = [...headerRow, ...dataRows];
     return tableBlock;
 }
@@ -226,14 +216,8 @@ async function parseBlock(block: any): Promise<any | null> {
         hasChildren: block.has_children
     };
 
-    // Update this to also fetch children for columns
     let children: any[] = [];
-    if (block.has_children && (
-        block.type === 'table' ||
-        block.type === 'toggle' ||
-        block.type === 'column_list' || // <-- Add this
-        block.type === 'column'        // <-- Add this
-    )) {
+    if (block.has_children) {
         try {
             const childrenResponse = await notion.blocks.children.list({
                 block_id: block.id,
