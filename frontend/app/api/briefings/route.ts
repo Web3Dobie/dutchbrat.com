@@ -63,6 +63,60 @@ function parseRichText(richText: any[]): any[] {
     }));
 }
 
+/**
+ * Sorts the rows of a parsed table block based on the percentage change column.
+ * @param tableBlock A parsed table block with its children (rows).
+ * @returns The same table block with its children sorted.
+ */
+function sortTableByPerformance(tableBlock: any): any {
+    if (!tableBlock || tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length === 0) {
+        return tableBlock;
+    }
+
+    let changeColumnIndex = -1;
+
+    // Heuristic to find the '% Change' or similar column.
+    // We check the first row's cells for a percentage sign.
+    const firstRowCells = tableBlock.children[0]?.content?.cells;
+    if (firstRowCells) {
+        for (let i = 0; i < firstRowCells.length; i++) {
+            const cellText = getPlainText(firstRowCells[i]);
+            if (cellText.includes('%')) {
+                changeColumnIndex = i;
+                break;
+            }
+        }
+    }
+
+    // If we didn't find a percentage column, return the table as is.
+    if (changeColumnIndex === -1) {
+        return tableBlock;
+    }
+
+    // Now, sort the children (table_row blocks) based on the value in that column.
+    tableBlock.children.sort((rowA: any, rowB: any) => {
+        const cellsA = rowA.content?.cells;
+        const cellsB = rowB.content?.cells;
+
+        if (!cellsA || !cellsB || !cellsA[changeColumnIndex] || !cellsB[changeColumnIndex]) {
+            return 0; // Can't compare, keep original order
+        }
+
+        const valueA = parseFloat(getPlainText(cellsA[changeColumnIndex]).replace('%', ''));
+        const valueB = parseFloat(getPlainText(cellsB[changeColumnIndex]).replace('%', ''));
+        
+        // Handle cases where parsing fails
+        if (isNaN(valueA) || isNaN(valueB)) {
+            return 0;
+        }
+
+        // Sort descending (highest percentage first)
+        return valueB - valueA;
+    });
+
+    return tableBlock;
+}
+
 // Simple parser for children blocks (non-recursive to improve performance)
 function parseBlockSimple(block: any): any | null {
     const baseBlock = {
@@ -274,15 +328,17 @@ async function parseBlock(block: any): Promise<any | null> {
             };
 
         case 'table':
-            return {
+            const table = {
                 ...baseBlock,
                 content: {
                     tableWidth: block.table.table_width,
                     hasColumnHeader: block.table.has_column_header,
                     hasRowHeader: block.table.has_row_header
                 },
-                children: children
+                children: children // These are the table_row blocks
             };
+            // --- MODIFICATION: Sort the table before returning ---
+            return sortTableByPerformance(table);
 
         case 'table_row':
             return {
