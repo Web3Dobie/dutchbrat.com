@@ -65,7 +65,7 @@ function parseRichText(richText: any[]): any[] {
 
 /**
  * Sorts the rows of a parsed table block based on the performance column (e.g., % change or bps change),
- * correctly handling tables with header rows.
+ * by automatically detecting the presence of a header row.
  * @param tableBlock A parsed table block with its children (rows).
  * @returns The same table block with its children sorted.
  */
@@ -74,69 +74,69 @@ function sortTableByPerformance(tableBlock: any): any {
         return tableBlock;
     }
 
-    const hasHeader = tableBlock.content?.hasColumnHeader;
-    // If there's a header, we need at least one data row to sort.
-    if (hasHeader && tableBlock.children.length < 2) {
-        return tableBlock;
-    }
-
     let changeColumnIndex = -1;
+    let headerDetected = false;
 
-    // Determine which row to inspect for the sortable column. If there's a header, we check the first data row (index 1).
-    const inspectionRowIndex = hasHeader ? 1 : 0;
-    const inspectionRow = tableBlock.children[inspectionRowIndex];
-    const inspectionCells = inspectionRow?.content?.cells;
-
-    if (inspectionCells) {
-        for (let i = 0; i < inspectionCells.length; i++) {
-            const cellText = getPlainText(inspectionCells[i]).toLowerCase();
-            // --- MODIFICATION: Look for '%' OR 'bps' ---
+    const findPerfColumn = (row: any): number => {
+        const cells = row?.content?.cells;
+        if (!cells) return -1;
+        for (let i = 0; i < cells.length; i++) {
+            const cellText = getPlainText(cells[i]).toLowerCase();
             if (cellText.includes('%') || cellText.includes('bps')) {
-                changeColumnIndex = i;
-                break;
+                return i;
+            }
+        }
+        return -1;
+    };
+
+    const cleanAndParse = (cell: any): number => {
+        if (!cell) return NaN;
+        const text = getPlainText(cell);
+        const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
+        return parseFloat(cleanedText);
+    };
+
+    // Heuristic to find the performance column and detect a header
+    if (tableBlock.children.length >= 2) {
+        // Assume the second row (index 1) is the first data row and find the column there
+        changeColumnIndex = findPerfColumn(tableBlock.children[1]);
+
+        if (changeColumnIndex !== -1) {
+            // Now check the first row in that same column. If it's not a number, it's a header.
+            const firstRowValue = cleanAndParse(tableBlock.children[0]?.content?.cells[changeColumnIndex]);
+            if (isNaN(firstRowValue)) {
+                headerDetected = true;
             }
         }
     }
+    
+    // Fallback for tables with no header (or only one row)
+    if (changeColumnIndex === -1 && tableBlock.children.length > 0) {
+        changeColumnIndex = findPerfColumn(tableBlock.children[0]);
+        headerDetected = false; 
+    }
 
-    // If we didn't find a performance column, return the table as is.
+    // If we still can't find a performance column, give up and return the original table.
     if (changeColumnIndex === -1) {
         return tableBlock;
     }
 
     // Separate header from data rows, sort the data rows, then recombine.
-    const headerRow = hasHeader ? tableBlock.children.slice(0, 1) : [];
-    const dataRows = hasHeader ? tableBlock.children.slice(1) : tableBlock.children;
+    const headerRow = headerDetected ? tableBlock.children.slice(0, 1) : [];
+    const dataRows = headerDetected ? tableBlock.children.slice(1) : tableBlock.children;
 
     dataRows.sort((rowA: any, rowB: any) => {
-        const cellsA = rowA.content?.cells;
-        const cellsB = rowB.content?.cells;
-
-        if (!cellsA || !cellsB || !cellsA[changeColumnIndex] || !cellsB[changeColumnIndex]) {
-            return 0; // Can't compare, keep original order
-        }
-        
-        // --- MODIFICATION: Clean both '%' and 'bps' before parsing ---
-        const cleanAndParse = (cell: any) => {
-            const text = getPlainText(cell);
-            // Remove percent, bps (case-insensitive), and trim whitespace
-            const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
-            return parseFloat(cleanedText);
-        };
-
-        const valueA = cleanAndParse(cellsA[changeColumnIndex]);
-        const valueB = cleanAndParse(cellsB[changeColumnIndex]);
+        const valueA = cleanAndParse(rowA?.content?.cells[changeColumnIndex]);
+        const valueB = cleanAndParse(rowB?.content?.cells[changeColumnIndex]);
         
         if (isNaN(valueA) || isNaN(valueB)) {
             return 0;
         }
-
         // Sort descending (highest value first)
         return valueB - valueA;
     });
     
-    // Rebuild the children array with the header first, followed by the sorted data.
     tableBlock.children = [...headerRow, ...dataRows];
-
     return tableBlock;
 }
 
