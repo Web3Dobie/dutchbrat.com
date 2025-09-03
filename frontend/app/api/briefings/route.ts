@@ -64,55 +64,78 @@ function parseRichText(richText: any[]): any[] {
 }
 
 /**
- * Sorts the rows of a parsed table block based on the percentage change column.
+ * Sorts the rows of a parsed table block based on the performance column (e.g., % change or bps change),
+ * correctly handling tables with header rows.
  * @param tableBlock A parsed table block with its children (rows).
  * @returns The same table block with its children sorted.
  */
 function sortTableByPerformance(tableBlock: any): any {
-    if (!tableBlock || tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length === 0) {
+    if (!tableBlock || tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
+        return tableBlock;
+    }
+
+    const hasHeader = tableBlock.content?.hasColumnHeader;
+    // If there's a header, we need at least one data row to sort.
+    if (hasHeader && tableBlock.children.length < 2) {
         return tableBlock;
     }
 
     let changeColumnIndex = -1;
 
-    // Heuristic to find the '% Change' or similar column.
-    // We check the first row's cells for a percentage sign.
-    const firstRowCells = tableBlock.children[0]?.content?.cells;
-    if (firstRowCells) {
-        for (let i = 0; i < firstRowCells.length; i++) {
-            const cellText = getPlainText(firstRowCells[i]);
-            if (cellText.includes('%')) {
+    // Determine which row to inspect for the sortable column. If there's a header, we check the first data row (index 1).
+    const inspectionRowIndex = hasHeader ? 1 : 0;
+    const inspectionRow = tableBlock.children[inspectionRowIndex];
+    const inspectionCells = inspectionRow?.content?.cells;
+
+    if (inspectionCells) {
+        for (let i = 0; i < inspectionCells.length; i++) {
+            const cellText = getPlainText(inspectionCells[i]).toLowerCase();
+            // --- MODIFICATION: Look for '%' OR 'bps' ---
+            if (cellText.includes('%') || cellText.includes('bps')) {
                 changeColumnIndex = i;
                 break;
             }
         }
     }
 
-    // If we didn't find a percentage column, return the table as is.
+    // If we didn't find a performance column, return the table as is.
     if (changeColumnIndex === -1) {
         return tableBlock;
     }
 
-    // Now, sort the children (table_row blocks) based on the value in that column.
-    tableBlock.children.sort((rowA: any, rowB: any) => {
+    // Separate header from data rows, sort the data rows, then recombine.
+    const headerRow = hasHeader ? tableBlock.children.slice(0, 1) : [];
+    const dataRows = hasHeader ? tableBlock.children.slice(1) : tableBlock.children;
+
+    dataRows.sort((rowA: any, rowB: any) => {
         const cellsA = rowA.content?.cells;
         const cellsB = rowB.content?.cells;
 
         if (!cellsA || !cellsB || !cellsA[changeColumnIndex] || !cellsB[changeColumnIndex]) {
             return 0; // Can't compare, keep original order
         }
-
-        const valueA = parseFloat(getPlainText(cellsA[changeColumnIndex]).replace('%', ''));
-        const valueB = parseFloat(getPlainText(cellsB[changeColumnIndex]).replace('%', ''));
         
-        // Handle cases where parsing fails
+        // --- MODIFICATION: Clean both '%' and 'bps' before parsing ---
+        const cleanAndParse = (cell: any) => {
+            const text = getPlainText(cell);
+            // Remove percent, bps (case-insensitive), and trim whitespace
+            const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
+            return parseFloat(cleanedText);
+        };
+
+        const valueA = cleanAndParse(cellsA[changeColumnIndex]);
+        const valueB = cleanAndParse(cellsB[changeColumnIndex]);
+        
         if (isNaN(valueA) || isNaN(valueB)) {
             return 0;
         }
 
-        // Sort descending (highest percentage first)
+        // Sort descending (highest value first)
         return valueB - valueA;
     });
+    
+    // Rebuild the children array with the header first, followed by the sorted data.
+    tableBlock.children = [...headerRow, ...dataRows];
 
     return tableBlock;
 }
