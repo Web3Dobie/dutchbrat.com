@@ -2,8 +2,17 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
+import { Pool } from 'pg'; // <-- NEW: Import the PostgreSQL client
 
 const notion = new Client({ auth: process.env.NOTION_API_KEY })
+
+// --- NEW: Setup connection pool to your PostgreSQL database ---
+// It's recommended to use environment variables for your database connection details
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL, // e.g., postgres://user:password@host:port/database
+});
+// --- END NEW ---
+
 
 // Helper function to extract plain text from Notion rich text
 function getPlainText(richText: any[]): string {
@@ -143,8 +152,8 @@ async function parseBlock(block: any): Promise<any | null> {
     // Update this to also fetch children for columns
     let children: any[] = [];
     if (block.has_children && (
-        block.type === 'table' || 
-        block.type === 'toggle' || 
+        block.type === 'table' ||
+        block.type === 'toggle' ||
         block.type === 'column_list' || // <-- Add this
         block.type === 'column'        // <-- Add this
     )) {
@@ -327,7 +336,7 @@ async function parseBlock(block: any): Promise<any | null> {
                     caption: parseRichText(block.embed.caption || [])
                 }
             };
-        
+
         case 'column_list':
             return {
                 ...baseBlock,
@@ -352,7 +361,35 @@ async function parseBlock(block: any): Promise<any | null> {
 }
 
 export async function GET(req: NextRequest) {
-    console.log('🚀 NEW BRIEFINGS API CALLED - with content parsing');
+    console.log('🚀 NEW BRIEFINGS API CALLED');
+
+    // Get URL search parameters
+    const { searchParams } = new URL(req.url);
+    const briefingId = searchParams.get('briefingId');
+
+    // --- NEW LOGIC: Check for a specific briefingId to fetch from cache ---
+    if (briefingId) {
+        try {
+            // 1. First, try to fetch the fast, pre-rendered JSON from your PostgreSQL database
+            const result = await pool.query(
+                'SELECT json_content FROM briefings WHERE id = $1',
+                [briefingId]
+            );
+
+            if (result.rows.length > 0 && result.rows[0].json_content) {
+                console.log('✅ Returning fast response from DATABASE CACHE for briefing:', briefingId);
+                // The content is already parsed, so just return it
+                // We wrap it in a 'data' array to match the original structure for a single item
+                return NextResponse.json({ data: [result.rows[0].json_content] });
+            }
+        } catch (e) {
+            console.warn('Database cache fetch failed, falling back to Notion API:', e);
+        }
+    }
+    // --- END NEW LOGIC ---
+
+    // 2. If the cache is empty or this is a general request, run the SLOW Notion API call
+    console.log('⚠️ Cache miss or browsing all briefings. Using slow Notion API call.');
 
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!
@@ -361,8 +398,6 @@ export async function GET(req: NextRequest) {
             throw new Error('NOTION_PDF_DATABASE_ID environment variable not set')
         }
 
-        // Get URL search parameters
-        const { searchParams } = new URL(req.url);
         const pageSize = parseInt(searchParams.get('pageSize') || '10');
         const startCursor = searchParams.get('cursor') || undefined;
 
@@ -389,7 +424,7 @@ export async function GET(req: NextRequest) {
             });
         }
 
-        // Transform each page one by one to avoid Promise.all type issues
+        // Transform each page one by one
         const briefingsPromises = response.results.map(async (result) => {
             const page = result as any;
             if (!page.properties) return null;
@@ -409,9 +444,9 @@ export async function GET(req: NextRequest) {
             };
         });
 
-        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean); // .filter(Boolean) removes any nulls
+        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean);
 
-        console.log(`Returning ${briefings.length} briefings with full content`);
+        console.log(`Returning ${briefings.length} briefings with full content from Notion`);
 
         return NextResponse.json({
             data: briefings,
