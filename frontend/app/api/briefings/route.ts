@@ -2,485 +2,214 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
-import { Pool } from 'pg'; // <-- NEW: Import the PostgreSQL client
+import { Pool } from 'pg';
 
 const notion = new Client({ auth: process.env.NOTION_API_KEY })
+const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
-// --- NEW: Setup connection pool to your PostgreSQL database ---
-// It's recommended to use environment variables for your database connection details
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL, // e.g., postgres://user:password@host:port/database
-});
-// --- END NEW ---
-
-
-// Helper function to extract plain text from Notion rich text
+// --- HELPER FUNCTIONS (UNCHANGED) ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
 }
-
-// Helper function to extract title from Notion title property
 function getTitle(titleProperty: any): string {
     if (!titleProperty || !titleProperty.title) return '';
     return titleProperty.title.map((item: any) => item.plain_text || '').join('');
 }
-
-// Helper function to extract select property value
 function getSelectValue(selectProperty: any): string {
     if (!selectProperty || !selectProperty.select) return '';
     return selectProperty.select.name || '';
 }
-
-// Helper function to extract URL property value
 function getUrlValue(urlProperty: any): string {
     if (!urlProperty || !urlProperty.url) return '';
     return urlProperty.url;
 }
-
-// Helper function to extract date property value
 function getDateValue(dateProperty: any): string {
     if (!dateProperty || !dateProperty.date) return '';
     return dateProperty.date.start || '';
 }
-
-// Parse Notion rich text to our format
 function parseRichText(richText: any[]): any[] {
     if (!richText || !Array.isArray(richText)) return [];
-
     return richText.map(item => ({
         type: 'text',
-        text: item.plain_text || item.text?.content || '',  // Handle both formats
-        annotations: {
-            bold: item.annotations?.bold || false,
-            italic: item.annotations?.italic || false,
-            strikethrough: item.annotations?.strikethrough || false,
-            underline: item.annotations?.underline || false,
-            code: item.annotations?.code || false,
-            color: item.annotations?.color || 'default'
-        },
+        text: item.plain_text || item.text?.content || '',
+        annotations: item.annotations || {},
         href: item.href || item.text?.link?.url || null
     }));
 }
-
-/**
- * Sorts the rows of a parsed table block based on a performance column (e.g., % or bps change),
- * using the reliable `hasColumnHeader` property from the Notion API.
- * @param tableBlock A parsed table block object from our parser.
- * @returns The same table block with its children (rows) sorted.
- */
 function sortTableByPerformance(tableBlock: any): any {
-    if (!tableBlock || tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
+    if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 2) {
         return tableBlock;
     }
+    // Check for header row by looking at its content, not just the Notion property
+    const potentialHeaderRow = tableBlock.children[0];
+    let hasHeader = !getPlainText(potentialHeaderRow.content.cells).match(/(\d+%|\d+bps)/);
 
-    // Use the reliable boolean provided by the Notion API, which we've already parsed.
-    const hasHeader = tableBlock.content?.hasColumnHeader;
-    const dataRowsStartIndex = hasHeader ? 1 : 0;
+    const dataRows = hasHeader ? tableBlock.children.slice(1) : tableBlock.children;
+    const referenceRow = hasHeader ? potentialHeaderRow : dataRows[0];
 
-    // If there are no data rows to sort (e.g., an empty table or header-only), exit.
-    if (tableBlock.children.length <= dataRowsStartIndex) {
-        return tableBlock;
-    }
-
-    const findPerfColumn = (row: any): number => {
-        const cells = row?.content?.cells;
-        if (!cells) return -1;
-        for (let i = 0; i < cells.length; i++) {
-            const cellText = getPlainText(cells[i]).toLowerCase();
-            if (cellText.includes('%') || cellText.includes('bps')) {
-                return i;
-            }
+    let changeColumnIndex = -1;
+    for (let i = 0; i < referenceRow.content.cells.length; i++) {
+        const cellText = getPlainText(referenceRow.content.cells[i]);
+        if (cellText.includes('%') || cellText.toLowerCase().includes('bps')) {
+            changeColumnIndex = i;
+            break;
         }
-        return -1;
-    };
+    }
 
-    const cleanAndParse = (cell: any): number => {
-        if (!cell) return NaN;
-        const text = getPlainText(cell);
-        const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
-        return parseFloat(cleanedText);
-    };
-
-    // Find the performance column by looking at the *first actual data row*.
-    const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
-
-    // If no performance column is found in the data, we can't sort.
     if (changeColumnIndex === -1) {
         return tableBlock;
     }
 
-    // Separate header (if it exists) from the data rows.
-    const headerRow = hasHeader ? tableBlock.children.slice(0, 1) : [];
-    const dataRows = tableBlock.children.slice(dataRowsStartIndex);
-
-    // Sort the data rows based on the performance column.
     dataRows.sort((rowA: any, rowB: any) => {
-        const valueA = cleanAndParse(rowA?.content?.cells[changeColumnIndex]);
-        const valueB = cleanAndParse(rowB?.content?.cells[changeColumnIndex]);
-
-        if (isNaN(valueA) || isNaN(valueB)) {
-            return 0; // Keep original order if a value isn't a number
-        }
-        return valueB - valueA; // Sort descending (highest first)
+        const valueA = parseFloat(getPlainText(rowA.content.cells[changeColumnIndex]).replace(/%|bps/g, '').trim());
+        const valueB = parseFloat(getPlainText(rowB.content.cells[changeColumnIndex]).replace(/%|bps/g, '').trim());
+        if (isNaN(valueA) || isNaN(valueB)) return 0;
+        return valueB - valueA;
     });
 
-    // Recombine the header with the newly sorted data rows.
-    tableBlock.children = [...headerRow, ...dataRows];
+    tableBlock.children = hasHeader ? [potentialHeaderRow, ...dataRows] : dataRows;
     return tableBlock;
 }
 
-// Simple parser for children blocks (non-recursive to improve performance)
-function parseBlockSimple(block: any): any | null {
-    const baseBlock = {
-        id: block.id,
-        type: block.type,
-        hasChildren: block.has_children
-    };
-
-    switch (block.type) {
-        case 'table_row':
-            return {
-                ...baseBlock,
-                content: {
-                    cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || []
-                }
-            };
-
-        case 'paragraph':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.paragraph?.rich_text || [])
-                }
-            };
-
-        case 'embed':
-            return {
-                ...baseBlock,
-                content: {
-                    url: block.embed.url,
-                    caption: parseRichText(block.embed.caption || [])
-                }
-            };
-
-        case 'callout':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.callout.rich_text),
-                    icon: block.callout.icon
-                }
-            };
-
-        default:
-            return {
-                ...baseBlock,
-                content: {
-                    unsupported: true,
-                    originalType: block.type
-                }
-            };
-    }
-}
-
-// Parse Notion blocks recursively
-async function parseNotionBlocks(pageId: string): Promise<any[]> {
+// --- OPTIMIZED PARSING LOGIC ---
+async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
-        console.log('Fetching blocks for page:', pageId);
-
-        const blocks = await notion.blocks.children.list({
-            block_id: pageId,
-            page_size: 100
-        });
-
-        console.log('Total blocks received:', blocks.results.length);
-        console.log('Block types:', blocks.results.map((b: any) => b.type));
-
-        const parsedBlocksPromises = blocks.results.map(block => parseBlock(block as any));
-        const parsedBlocks = (await Promise.all(parsedBlocksPromises)).filter(Boolean);
-
-        console.log('Parsed blocks count:', parsedBlocks.length);
-        return parsedBlocks;
+        const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
+        return response.results;
     } catch (error) {
-        console.error('Error parsing Notion blocks:', error);
+        console.error(`Failed to fetch children for block ${blockId}:`, error);
         return [];
     }
 }
-
-// Parse individual Notion block
-async function parseBlock(block: any): Promise<any | null> {
-    const baseBlock = {
-        id: block.id,
-        type: block.type,
-        hasChildren: block.has_children
-    };
-
-    let children: any[] = [];
-    if (block.has_children) {
-        try {
-            const childrenResponse = await notion.blocks.children.list({
-                block_id: block.id,
-                page_size: 100
-            });
-
-            for (const child of childrenResponse.results) {
-                const parsedChild = await parseBlock(child as any);
-                if (parsedChild) {
-                    children.push(parsedChild);
-                }
-            }
-        } catch (error) {
-            console.error(`Error fetching children for block ${block.id}:`, error);
+function parseBlockContent(block: any): any {
+    const type = block.type;
+    if (block[type]) {
+        const content = { ...block[type] };
+        if (content.rich_text) {
+            content.richText = parseRichText(content.rich_text);
+            delete content.rich_text;
+        }
+        if (content.caption) {
+            content.caption = parseRichText(content.caption);
+        }
+        if (type === 'table_row' && content.cells) {
+            content.cells = content.cells.map((cell: any[]) => parseRichText(cell));
+        }
+        return content;
+    }
+    return {};
+}
+async function parseNotionBlocks(pageId: string): Promise<any[]> {
+    const topLevelBlocks = await fetchBlockChildren(pageId);
+    const childFetchPromises: Promise<any>[] = [];
+    const blocksWithChildrenIds: string[] = [];
+    for (const block of topLevelBlocks) {
+        if (block.has_children) {
+            childFetchPromises.push(fetchBlockChildren(block.id));
+            blocksWithChildrenIds.push(block.id);
         }
     }
-
-    switch (block.type) {
-        case 'paragraph':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.paragraph.rich_text)
-                }
+    const allChildrenResults = await Promise.all(childFetchPromises);
+    const childrenMap: { [key: string]: any[] } = {};
+    blocksWithChildrenIds.forEach((id, index) => {
+        childrenMap[id] = allChildrenResults[index];
+    });
+    const parseAndAssemble = (blocks: any[]): any[] => {
+        return blocks.map(block => {
+            const parsedBlock: any = {
+                id: block.id,
+                type: block.type,
+                hasChildren: block.has_children,
+                content: parseBlockContent(block),
+                children: [],
             };
-
-        case 'heading_1':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.heading_1.rich_text)
-                }
-            };
-
-        case 'heading_2':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.heading_2.rich_text)
-                }
-            };
-
-        case 'heading_3':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.heading_3.rich_text)
-                }
-            };
-
-        case 'bulleted_list_item':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.bulleted_list_item.rich_text)
-                }
-            };
-
-        case 'numbered_list_item':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.numbered_list_item.rich_text)
-                }
-            };
-
-        case 'to_do':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.to_do.rich_text),
-                    checked: block.to_do.checked
-                }
-            };
-
-        case 'toggle':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.toggle.rich_text)
-                },
-                children: children
-            };
-
-        case 'code':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.code.rich_text),
-                    language: block.code.language
-                }
-            };
-
-        case 'quote':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.quote.rich_text)
-                }
-            };
-
-        case 'callout':
-            return {
-                ...baseBlock,
-                content: {
-                    richText: parseRichText(block.callout.rich_text),
-                    icon: block.callout.icon
-                }
-            };
-
-        case 'divider':
-            return {
-                ...baseBlock,
-                content: {}
-            };
-
-        case 'table':
-            const table = {
-                ...baseBlock,
-                content: {
-                    tableWidth: block.table.table_width,
-                    hasColumnHeader: block.table.has_column_header,
-                    hasRowHeader: block.table.has_row_header
-                },
-                children: children // These are the table_row blocks
-            };
-            // --- MODIFICATION: Sort the table before returning ---
-            return sortTableByPerformance(table);
-
-        case 'table_row':
-            return {
-                ...baseBlock,
-                content: {
-                    cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || []
-                }
-            };
-
-        case 'image':
-            return {
-                ...baseBlock,
-                content: {
-                    url: block.image.file?.url || block.image.external?.url,
-                    caption: parseRichText(block.image.caption || [])
-                }
-            };
-
-        case 'video':
-            return {
-                ...baseBlock,
-                content: {
-                    url: block.video.file?.url || block.video.external?.url,
-                    caption: parseRichText(block.video.caption || [])
-                }
-            };
-
-        case 'file':
-            return {
-                ...baseBlock,
-                content: {
-                    url: block.file.file?.url || block.file.external?.url,
-                    caption: parseRichText(block.file.caption || [])
-                }
-            };
-
-        case 'bookmark':
-            return {
-                ...baseBlock,
-                content: {
-                    url: block.bookmark.url,
-                    caption: parseRichText(block.bookmark.caption || [])
-                }
-            };
-
-        case 'embed':
-            return {
-                ...baseBlock,
-                content: {
-                    url: block.embed.url,
-                    caption: parseRichText(block.embed.caption || [])
-                }
-            };
-
-        case 'column_list':
-            return {
-                ...baseBlock,
-                children: children // The children will be the individual 'column' blocks
-            };
-
-        case 'column':
-            return {
-                ...baseBlock,
-                children: children // The children will be the content inside the column (headings, tables, etc.)
-            };
-
-        default:
-            return {
-                ...baseBlock,
-                content: {
-                    unsupported: true,
-                    originalType: block.type
-                }
-            };
-    }
+            if (childrenMap[block.id]) {
+                parsedBlock.children = parseAndAssemble(childrenMap[block.id]);
+            }
+            if (parsedBlock.type === 'table') {
+                return sortTableByPerformance(parsedBlock);
+            }
+            return parsedBlock;
+        });
+    };
+    return parseAndAssemble(topLevelBlocks);
 }
 
+// --- UNIFIED GET METHOD ---
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
-    const briefingId = searchParams.get('briefingId');
+    const briefingIdParam = searchParams.get('briefingId');
 
-    // --- CASE 1: A SPECIFIC BRIEFING ID IS PROVIDED ---
-    // This is used by the Python caching script and when linking to a specific briefing.
-    if (briefingId) {
-        console.log(`🚀 API called for specific briefingId: ${briefingId}`);
+    if (briefingIdParam) {
+        console.log(`🚀 API called for specific briefingId: ${briefingIdParam}`);
+        let dbId: number | null = null;
+        let notionId: string | null = null;
+        let briefingRecord: any = null;
 
-        // 1. Try to fetch from the database cache first
-        try {
-            const result = await pool.query(
-                // IMPORTANT: Ensure your table has a 'notion_page_id' column
-                'SELECT json_content FROM briefings WHERE notion_page_id = $1', 
-                [briefingId]
-            );
-
-            if (result.rows.length > 0 && result.rows[0].json_content) {
-                console.log(`✅ Returning fast response from DATABASE CACHE for briefing: ${briefingId}`);
-                return NextResponse.json({ data: [result.rows[0].json_content] });
+        if (!isNaN(parseInt(briefingIdParam))) {
+            dbId = parseInt(briefingIdParam);
+            console.log(`Identifier is a Database ID: ${dbId}`);
+            try {
+                const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
+                if (res.rows.length > 0) {
+                    briefingRecord = res.rows[0];
+                    notionId = briefingRecord.notion_page_id;
+                }
+            } catch (e) {
+                console.error(`Database error fetching record for DB ID ${dbId}:`, e);
+                return NextResponse.json({ error: 'Database error' }, { status: 500 });
             }
-        } catch (e) {
-            console.warn('Database cache fetch failed, falling back to Notion API:', e);
+        } else {
+            notionId = briefingIdParam;
+            console.log(`Identifier is a Notion ID: ${notionId}`);
+            try {
+                const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
+                if (res.rows.length > 0) {
+                    briefingRecord = res.rows[0];
+                }
+            } catch (e) {
+                console.warn(`Could not find a DB record for Notion ID ${notionId}, proceeding without cache.`);
+            }
         }
 
-        // 2. If not in cache, fetch this specific page from Notion and parse it on-demand.
-        console.log(`⚠️ Cache miss for ${briefingId}. Fetching from Notion.`);
+        if (!notionId) {
+            console.error(`Could not resolve a Notion Page ID from the provided identifier: ${briefingIdParam}`);
+            return NextResponse.json({ error: 'Briefing not found' }, { status: 404 });
+        }
+
+        if (briefingRecord && briefingRecord.json_content) {
+            console.log(`✅ Returning fast response from DATABASE CACHE for Notion ID: ${notionId}`);
+            return NextResponse.json({ data: [briefingRecord.json_content] });
+        }
+
+        console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
         try {
-            const content = await parseNotionBlocks(briefingId);
-            const pageResponse = await notion.pages.retrieve({ page_id: briefingId });
+            const pageResponse = await notion.pages.retrieve({ page_id: notionId });
             const page = pageResponse as any;
-
             if (!page.properties) {
-                throw new Error(`Could not retrieve properties for Notion page ${briefingId}`);
+                throw new Error(`Could not retrieve properties for Notion page ${notionId}`);
             }
+            const content = await parseNotionBlocks(notionId);
 
-            const properties = page.properties;
             const singleBriefing = {
-                id: page.id,
-                title: getTitle(properties.Name),
-                period: getSelectValue(properties.Period),
-                date: getDateValue(properties.Date),
-                pageUrl: getUrlValue(properties['PDF Link']),
-                tweetUrl: getUrlValue(properties['Tweet URL']),
-                marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || []),
+                id: briefingRecord?.id || page.id,
+                title: getTitle(page.properties.Name),
+                period: getSelectValue(page.properties.Period),
+                date: getDateValue(page.properties.Date),
+                pageUrl: getUrlValue(page.properties['PDF Link']),
+                tweetUrl: getUrlValue(page.properties['Tweet URL']),
+                marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
                 content: content
             };
-
             return NextResponse.json({ data: [singleBriefing] });
 
         } catch (err: any) {
-             console.error(`Error fetching specific briefing ${briefingId} from Notion:`, err)
-             return NextResponse.json({ error: err.message }, { status: 500 });
+            console.error(`Error fetching specific briefing from Notion (${notionId}):`, err)
+            return NextResponse.json({ error: err.message }, { status: 404, statusText: 'Not Found in Notion' });
         }
     }
 
-    // --- CASE 2: NO BRIEFING ID IS PROVIDED ---
-    // This is the general case for browsing the main briefings page.
     console.log('🚀 API called for list of briefings');
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
@@ -510,7 +239,6 @@ export async function GET(req: NextRequest) {
         });
 
         const briefings = (await Promise.all(briefingsPromises)).filter(Boolean);
-
         return NextResponse.json({
             data: briefings,
             pagination: { hasMore: response.has_more, nextCursor: response.next_cursor }
@@ -521,3 +249,4 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+
