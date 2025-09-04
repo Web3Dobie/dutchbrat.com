@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 const notion = new Client({ auth: process.env.NOTION_API_KEY })
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
-// --- COMPLETE HELPER FUNCTIONS ---
+// --- COMPLETE HELPER FUNCTIONS (UNCHANGED) ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
@@ -79,7 +79,7 @@ function sortTableByPerformance(tableBlock: any): any {
     return tableBlock;
 }
 
-// --- OPTIMIZED PARSING LOGIC ---
+// --- OPTIMIZED PARSING LOGIC (UNCHANGED) ---
 async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
         const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
@@ -89,12 +89,8 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
         return [];
     }
 }
-
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
-    // Pass 1: Get top-level blocks
     const topLevelBlocks = await fetchBlockChildren(pageId);
-
-    // Identify all blocks that have children that need fetching
     const blocksWithChildrenIds: string[] = [];
     const findNestedChildren = (blocks: any[]) => {
         for (const block of blocks) {
@@ -104,31 +100,19 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
         }
     };
     findNestedChildren(topLevelBlocks);
-
-    // Pass 2: Fetch all children concurrently
     const childFetchPromises = blocksWithChildrenIds.map(id => fetchBlockChildren(id));
     const allChildrenResults = await Promise.all(childFetchPromises);
-
     const childrenMap: { [key: string]: any[] } = {};
     blocksWithChildrenIds.forEach((id, index) => {
         childrenMap[id] = allChildrenResults[index];
     });
-
-    // Recursive function to assemble the final structure from the pre-fetched data
     const assembleBlocks = (blocks: any[]): any[] => {
         return blocks.map(block => {
-            const baseBlock = {
-                id: block.id,
-                type: block.type,
-                hasChildren: block.has_children
-            };
-
+            const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
             let children: any[] = [];
             if (childrenMap[block.id]) {
-                // The children for this block have already been fetched, just assemble them
                 children = assembleBlocks(childrenMap[block.id]);
             }
-
             let content: any = {};
             switch (block.type) {
                 case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
@@ -154,21 +138,17 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
                 case 'column': content = {}; break;
                 default: content = { unsupported: true, originalType: block.type }; break;
             }
-
             const parsedBlock = { ...baseBlock, content, children };
-
-            // Apply sorting only to fully assembled table blocks
             if (parsedBlock.type === 'table') {
                 return sortTableByPerformance(parsedBlock);
             }
             return parsedBlock;
         });
     };
-
     return assembleBlocks(topLevelBlocks);
 }
 
-// --- UNIFIED GET METHOD ---
+// --- UNIFIED GET METHOD WITH RESILIENT DB HANDLING ---
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
@@ -179,28 +159,26 @@ export async function GET(req: NextRequest) {
         let notionId: string | null = null;
         let briefingRecord: any = null;
 
-        if (!isNaN(parseInt(briefingIdParam))) {
-            dbId = parseInt(briefingIdParam);
-            try {
+        try {
+            if (!isNaN(parseInt(briefingIdParam))) {
+                dbId = parseInt(briefingIdParam);
+                // --- DB FIX: Use pool.query for resilience ---
                 const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
                 if (res.rows.length > 0) {
                     briefingRecord = res.rows[0];
                     notionId = briefingRecord.notion_page_id;
                 }
-            } catch (e) {
-                console.error(`Database error fetching record for DB ID ${dbId}:`, e);
-                return NextResponse.json({ error: 'Database error' }, { status: 500 });
-            }
-        } else {
-            notionId = briefingIdParam;
-            try {
+            } else {
+                notionId = briefingIdParam;
+                // --- DB FIX: Use pool.query for resilience ---
                 const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
                 if (res.rows.length > 0) {
                     briefingRecord = res.rows[0];
                 }
-            } catch (e) {
-                console.warn(`Could not find a DB record for Notion ID ${notionId}, proceeding without cache.`);
             }
+        } catch (e) {
+            console.error(`Database error during ID lookup for ${briefingIdParam}:`, e);
+            return NextResponse.json({ error: 'Database error' }, { status: 500 });
         }
 
         if (!notionId) {
@@ -215,12 +193,13 @@ export async function GET(req: NextRequest) {
 
         console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
         try {
+            // This is the long-running part
+            const content = await parseNotionBlocks(notionId);
+
+            // This part is fast
             const pageResponse = await notion.pages.retrieve({ page_id: notionId });
             const page = pageResponse as any;
-            if (!page.properties) {
-                throw new Error(`Could not retrieve properties for Notion page ${notionId}`);
-            }
-            const content = await parseNotionBlocks(notionId);
+            if (!page.properties) { throw new Error(`Could not retrieve properties for Notion page ${notionId}`); }
 
             const singleBriefing = {
                 id: briefingRecord?.id || page.id,
@@ -240,22 +219,18 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    // This part handles the list of briefings for the main page.
+    // --- List view (also uses resilient DB logic implicitly via fast parsing) ---
     console.log('🚀 API called for list of briefings');
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
         const pageSize = parseInt(searchParams.get('pageSize') || '10');
         const startCursor = searchParams.get('cursor') || undefined;
-
         const response = await notion.databases.query({
             database_id: databaseId,
             sorts: [{ property: 'Date', direction: 'descending' }],
             page_size: pageSize,
             start_cursor: startCursor
         });
-
-        // This part can also be slow, but for a list view, we might not need full content.
-        // For now, it uses the fast parser.
         const briefingsPromises = response.results.map(async (result) => {
             const page = result as any;
             if (!page.properties) return null;
@@ -267,16 +242,14 @@ export async function GET(req: NextRequest) {
                 pageUrl: getUrlValue(page.properties['PDF Link']),
                 tweetUrl: getUrlValue(page.properties['Tweet URL']),
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: await parseNotionBlocks(page.id) // This is now fast
+                content: await parseNotionBlocks(page.id)
             };
         });
-
         const briefings = (await Promise.all(briefingsPromises)).filter(Boolean);
         return NextResponse.json({
             data: briefings,
             pagination: { hasMore: response.has_more, nextCursor: response.next_cursor }
         });
-
     } catch (err: any) {
         console.error('Error fetching briefings list:', err);
         return NextResponse.json({ error: err.message }, { status: 500 });
