@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
-// --- COMPLETE HELPER FUNCTIONS ---
+// --- COMPLETE HELPER FUNCTIONS (UNCHANGED) ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
@@ -79,7 +79,7 @@ function sortTableByPerformance(tableBlock: any): any {
     return tableBlock;
 }
 
-// --- START OF FINAL, OPTIMIZED PARSING LOGIC ---
+// --- START OF NEW, CORRECTED, AND OPTIMIZED PARSING LOGIC ---
 async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
         const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
@@ -90,80 +90,63 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
     }
 }
 
-async function parseNotionBlocks(pageId: string): Promise<any[]> {
-    const topLevelBlocks = await fetchBlockChildren(pageId);
-    if (topLevelBlocks.length === 0) return [];
+async function parseBlock(block: any): Promise<any | null> {
+    if (!block) return null;
 
-    const childrenMap: { [key: string]: any[] } = {};
-    const blocksWithChildrenIds = new Set<string>();
+    const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
+    let children: any[] = [];
 
-    const findChildrenRecursively = (blocks: any[]) => {
-        for (const block of blocks) {
-            if (block.has_children) {
-                blocksWithChildrenIds.add(block.id);
-            }
-        }
-    };
-    findChildrenRecursively(topLevelBlocks);
-
-    let currentLevelIds = Array.from(blocksWithChildrenIds);
-    while (currentLevelIds.length > 0) {
-        const childFetchPromises = currentLevelIds.map(id => fetchBlockChildren(id));
-        const results = await Promise.all(childFetchPromises);
-
-        const nextLevelIds = new Set<string>();
-        results.forEach((children, index) => {
-            const parentId = currentLevelIds[index];
-            childrenMap[parentId] = children;
-            findChildrenRecursively(children);
-        });
-
-        const fetchedIds = new Set(Object.keys(childrenMap));
-        currentLevelIds = Array.from(blocksWithChildrenIds).filter(id => !fetchedIds.has(id));
+    if (block.has_children) {
+        const childBlocks = await fetchBlockChildren(block.id);
+        // This is the optimization: parse all children of this block in parallel
+        const childParsingPromises = childBlocks.map(child => parseBlock(child as any));
+        children = (await Promise.all(childParsingPromises)).filter(Boolean); // Filter out any nulls
     }
 
-    const assembleBlocks = (blocks: any[]): any[] => {
-        return blocks.map(block => {
-            const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
-            let children: any[] = [];
-            if (childrenMap[block.id]) {
-                children = assembleBlocks(childrenMap[block.id]);
-            }
-            let content: any = {};
-            switch (block.type) {
-                case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
-                case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
-                case 'heading_2': content = { richText: parseRichText(block.heading_2.rich_text) }; break;
-                case 'heading_3': content = { richText: parseRichText(block.heading_3.rich_text) }; break;
-                case 'bulleted_list_item': content = { richText: parseRichText(block.bulleted_list_item.rich_text) }; break;
-                case 'numbered_list_item': content = { richText: parseRichText(block.numbered_list_item.rich_text) }; break;
-                case 'to_do': content = { richText: parseRichText(block.to_do.rich_text), checked: block.to_do.checked }; break;
-                case 'toggle': content = { richText: parseRichText(block.toggle.rich_text) }; break;
-                case 'code': content = { richText: parseRichText(block.code.rich_text), language: block.code.language }; break;
-                case 'quote': content = { richText: parseRichText(block.quote.rich_text) }; break;
-                case 'callout': content = { richText: parseRichText(block.callout.rich_text), icon: block.callout.icon }; break;
-                case 'divider': content = {}; break;
-                case 'table': content = { tableWidth: block.table.table_width, hasColumnHeader: block.table.has_column_header, hasRowHeader: block.table.has_row_header }; break;
-                case 'table_row': content = { cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || [] }; break;
-                case 'image': content = { url: block.image.file?.url || block.image.external?.url, caption: parseRichText(block.image.caption || []) }; break;
-                case 'video': content = { url: block.video.file?.url || block.video.external?.url, caption: parseRichText(block.video.caption || []) }; break;
-                case 'file': content = { url: block.file.file?.url || block.file.external?.url, caption: parseRichText(block.file.caption || []) }; break;
-                case 'bookmark': content = { url: block.bookmark.url, caption: parseRichText(block.bookmark.caption || []) }; break;
-                case 'embed': content = { url: block.embed.url, caption: parseRichText(block.embed.caption || []) }; break;
-                case 'column_list': content = {}; break;
-                case 'column': content = {}; break;
-                default: content = { unsupported: true, originalType: block.type }; break;
-            }
-            const parsedBlock = { ...baseBlock, content, children };
-            if (parsedBlock.type === 'table') {
-                return sortTableByPerformance(parsedBlock);
-            }
-            return parsedBlock;
-        });
-    };
-    return assembleBlocks(topLevelBlocks);
+    let content: any = {};
+    switch (block.type) {
+        case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
+        case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
+        case 'heading_2': content = { richText: parseRichText(block.heading_2.rich_text) }; break;
+        case 'heading_3': content = { richText: parseRichText(block.heading_3.rich_text) }; break;
+        case 'bulleted_list_item': content = { richText: parseRichText(block.bulleted_list_item.rich_text) }; break;
+        case 'numbered_list_item': content = { richText: parseRichText(block.numbered_list_item.rich_text) }; break;
+        case 'to_do': content = { richText: parseRichText(block.to_do.rich_text), checked: block.to_do.checked }; break;
+        case 'toggle': content = { richText: parseRichText(block.toggle.rich_text) }; break;
+        case 'code': content = { richText: parseRichText(block.code.rich_text), language: block.code.language }; break;
+        case 'quote': content = { richText: parseRichText(block.quote.rich_text) }; break;
+        case 'callout': content = { richText: parseRichText(block.callout.rich_text), icon: block.callout.icon }; break;
+        case 'divider': content = {}; break;
+        case 'table': content = { tableWidth: block.table.table_width, hasColumnHeader: block.table.has_column_header, hasRowHeader: block.table.has_row_header }; break;
+        case 'table_row': content = { cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || [] }; break;
+        case 'image': content = { url: block.image.file?.url || block.image.external?.url, caption: parseRichText(block.image.caption || []) }; break;
+        case 'video': content = { url: block.video.file?.url || block.video.external?.url, caption: parseRichText(block.video.caption || []) }; break;
+        case 'file': content = { url: block.file.file?.url || block.file.external?.url, caption: parseRichText(block.file.caption || []) }; break;
+        case 'bookmark': content = { url: block.bookmark.url, caption: parseRichText(block.bookmark.caption || []) }; break;
+        case 'embed': content = { url: block.embed.url, caption: parseRichText(block.embed.caption || []) }; break;
+        case 'column_list': content = {}; break;
+        case 'column': content = {}; break;
+        default: content = { unsupported: true, originalType: block.type }; break;
+    }
+
+    const parsedBlock = { ...baseBlock, content, children };
+    if (parsedBlock.type === 'table') {
+        return sortTableByPerformance(parsedBlock);
+    }
+    return parsedBlock;
+}
+
+
+async function parseNotionBlocks(pageId: string): Promise<any[]> {
+    const topLevelBlocks = await fetchBlockChildren(pageId);
+    if (!topLevelBlocks || topLevelBlocks.length === 0) return [];
+
+    // Parse all top-level blocks in parallel. The recursion is handled inside parseBlock.
+    const parsingPromises = topLevelBlocks.map(block => parseBlock(block as any));
+    return (await Promise.all(parsingPromises)).filter(Boolean); // Filter out any nulls
 }
 // --- END OF FINAL PARSING LOGIC ---
+
 
 // UNIFIED GET METHOD
 export async function GET(req: NextRequest) {
@@ -274,3 +257,4 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+
