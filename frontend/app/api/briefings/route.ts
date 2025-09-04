@@ -79,7 +79,7 @@ function sortTableByPerformance(tableBlock: any): any {
     return tableBlock;
 }
 
-// --- START OF OPTIMIZED PARSING LOGIC ---
+// --- START OF FINAL, OPTIMIZED PARSING LOGIC ---
 async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
         const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
@@ -91,13 +91,9 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
 }
 
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
-    // 1. Fetch the top-level blocks for the page.
     const topLevelBlocks = await fetchBlockChildren(pageId);
-    if (topLevelBlocks.length === 0) {
-        return []; // Return early if the page is empty or deleted.
-    }
+    if (topLevelBlocks.length === 0) return [];
 
-    // 2. Recursively find all block IDs that have children.
     const childrenMap: { [key: string]: any[] } = {};
     const blocksWithChildrenIds = new Set<string>();
 
@@ -110,7 +106,6 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
     };
     findChildrenRecursively(topLevelBlocks);
 
-    // 3. Fetch all children concurrently.
     let currentLevelIds = Array.from(blocksWithChildrenIds);
     while (currentLevelIds.length > 0) {
         const childFetchPromises = currentLevelIds.map(id => fetchBlockChildren(id));
@@ -120,51 +115,61 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
         results.forEach((children, index) => {
             const parentId = currentLevelIds[index];
             childrenMap[parentId] = children;
-            findChildrenRecursively(children); // Find grandchildren
+            findChildrenRecursively(children);
         });
 
-        // Prepare for the next loop if there are more nested children
         const fetchedIds = new Set(Object.keys(childrenMap));
         currentLevelIds = Array.from(blocksWithChildrenIds).filter(id => !fetchedIds.has(id));
     }
 
-    // 4. Assemble the final nested structure from the pre-fetched children.
     const assembleBlocks = (blocks: any[]): any[] => {
         return blocks.map(block => {
+            const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
             let children: any[] = [];
             if (childrenMap[block.id]) {
                 children = assembleBlocks(childrenMap[block.id]);
             }
-
             let content: any = {};
-            const type = block.type;
-            if (block[type]) {
-                content = { ...block[type] }; // Copy content to avoid mutation
-                if (content.rich_text) { content.richText = parseRichText(content.rich_text); delete content.rich_text; }
-                if (content.caption) { content.caption = parseRichText(content.caption); }
-                if (type === 'table_row' && content.cells) { content.cells = content.cells.map((cell: any[]) => parseRichText(cell)); }
-            } else {
-                content = { unsupported: true, originalType: type };
+            switch (block.type) {
+                case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
+                case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
+                case 'heading_2': content = { richText: parseRichText(block.heading_2.rich_text) }; break;
+                case 'heading_3': content = { richText: parseRichText(block.heading_3.rich_text) }; break;
+                case 'bulleted_list_item': content = { richText: parseRichText(block.bulleted_list_item.rich_text) }; break;
+                case 'numbered_list_item': content = { richText: parseRichText(block.numbered_list_item.rich_text) }; break;
+                case 'to_do': content = { richText: parseRichText(block.to_do.rich_text), checked: block.to_do.checked }; break;
+                case 'toggle': content = { richText: parseRichText(block.toggle.rich_text) }; break;
+                case 'code': content = { richText: parseRichText(block.code.rich_text), language: block.code.language }; break;
+                case 'quote': content = { richText: parseRichText(block.quote.rich_text) }; break;
+                case 'callout': content = { richText: parseRichText(block.callout.rich_text), icon: block.callout.icon }; break;
+                case 'divider': content = {}; break;
+                case 'table': content = { tableWidth: block.table.table_width, hasColumnHeader: block.table.has_column_header, hasRowHeader: block.table.has_row_header }; break;
+                case 'table_row': content = { cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || [] }; break;
+                case 'image': content = { url: block.image.file?.url || block.image.external?.url, caption: parseRichText(block.image.caption || []) }; break;
+                case 'video': content = { url: block.video.file?.url || block.video.external?.url, caption: parseRichText(block.video.caption || []) }; break;
+                case 'file': content = { url: block.file.file?.url || block.file.external?.url, caption: parseRichText(block.file.caption || []) }; break;
+                case 'bookmark': content = { url: block.bookmark.url, caption: parseRichText(block.bookmark.caption || []) }; break;
+                case 'embed': content = { url: block.embed.url, caption: parseRichText(block.embed.caption || []) }; break;
+                case 'column_list': content = {}; break;
+                case 'column': content = {}; break;
+                default: content = { unsupported: true, originalType: block.type }; break;
             }
-
-            const parsedBlock = { id: block.id, type, hasChildren: block.has_children, content, children };
-
+            const parsedBlock = { ...baseBlock, content, children };
             if (parsedBlock.type === 'table') {
                 return sortTableByPerformance(parsedBlock);
             }
             return parsedBlock;
         });
     };
-
     return assembleBlocks(topLevelBlocks);
 }
-// --- END OF OPTIMIZED PARSING LOGIC ---
+// --- END OF FINAL PARSING LOGIC ---
 
 // UNIFIED GET METHOD
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
-    let client; // Declare client outside try block
+    let client;
 
     if (briefingIdParam) {
         try {
@@ -189,7 +194,6 @@ export async function GET(req: NextRequest) {
             }
 
             if (!notionId) {
-                console.error(`Could not resolve a Notion Page ID from: ${briefingIdParam}`);
                 return NextResponse.json({ error: 'Briefing not found' }, { status: 404 });
             }
 
@@ -220,12 +224,10 @@ export async function GET(req: NextRequest) {
 
         } catch (err: any) {
             console.error(`Error processing specific briefing (${briefingIdParam}):`, err);
-            // Check for Notion's specific "not found" error code
             if (err.code === 'object_not_found') {
                 return NextResponse.json({ error: 'Not Found in Notion' }, { status: 404 });
             }
-            // Check if it's a database-related error
-            if (err.message.includes('database')) {
+            if (err.message.includes('database') || err.message.includes('pool')) {
                 return NextResponse.json({ error: 'Database connection error' }, { status: 500 });
             }
             return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -247,7 +249,7 @@ export async function GET(req: NextRequest) {
             start_cursor: startCursor
         });
 
-        // This list view doesn't fetch full content, so it's already fast.
+        // List view does not fetch full content, making it fast.
         const briefings = response.results.map((result) => {
             const page = result as any;
             if (!page.properties) return null;
@@ -259,7 +261,7 @@ export async function GET(req: NextRequest) {
                 pageUrl: getUrlValue(page.properties['PDF Link']),
                 tweetUrl: getUrlValue(page.properties['Tweet URL']),
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: [] // No content for list view
+                content: []
             };
         }).filter(Boolean);
 
@@ -272,4 +274,3 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
-
