@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 const notion = new Client({ auth: process.env.NOTION_API_KEY })
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
-// --- HELPER FUNCTIONS (UNCHANGED) ---
+// --- COMPLETE HELPER FUNCTIONS ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
@@ -33,42 +33,49 @@ function parseRichText(richText: any[]): any[] {
     return richText.map(item => ({
         type: 'text',
         text: item.plain_text || item.text?.content || '',
-        annotations: item.annotations || {},
+        annotations: item.annotations || { bold: false, italic: false, strikethrough: false, underline: false, code: false, color: 'default' },
         href: item.href || item.text?.link?.url || null
     }));
 }
 function sortTableByPerformance(tableBlock: any): any {
-    if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 2) {
+    if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
         return tableBlock;
     }
-    // Check for header row by looking at its content, not just the Notion property
-    const potentialHeaderRow = tableBlock.children[0];
-    let hasHeader = !getPlainText(potentialHeaderRow.content.cells).match(/(\d+%|\d+bps)/);
-
-    const dataRows = hasHeader ? tableBlock.children.slice(1) : tableBlock.children;
-    const referenceRow = hasHeader ? potentialHeaderRow : dataRows[0];
-
-    let changeColumnIndex = -1;
-    for (let i = 0; i < referenceRow.content.cells.length; i++) {
-        const cellText = getPlainText(referenceRow.content.cells[i]);
-        if (cellText.includes('%') || cellText.toLowerCase().includes('bps')) {
-            changeColumnIndex = i;
-            break;
-        }
+    const hasHeader = tableBlock.content?.hasColumnHeader;
+    const dataRowsStartIndex = hasHeader ? 1 : 0;
+    if (tableBlock.children.length <= dataRowsStartIndex) {
+        return tableBlock;
     }
-
+    const findPerfColumn = (row: any): number => {
+        const cells = row?.content?.cells;
+        if (!cells) return -1;
+        for (let i = 0; i < cells.length; i++) {
+            const cellText = getPlainText(cells[i]).toLowerCase();
+            if (cellText.includes('%') || cellText.includes('bps')) {
+                return i;
+            }
+        }
+        return -1;
+    };
+    const cleanAndParse = (cell: any): number => {
+        if (!cell) return NaN;
+        const text = getPlainText(cell);
+        const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
+        return parseFloat(cleanedText);
+    };
+    const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
     if (changeColumnIndex === -1) {
         return tableBlock;
     }
-
+    const headerRow = hasHeader ? tableBlock.children.slice(0, 1) : [];
+    const dataRows = tableBlock.children.slice(dataRowsStartIndex);
     dataRows.sort((rowA: any, rowB: any) => {
-        const valueA = parseFloat(getPlainText(rowA.content.cells[changeColumnIndex]).replace(/%|bps/g, '').trim());
-        const valueB = parseFloat(getPlainText(rowB.content.cells[changeColumnIndex]).replace(/%|bps/g, '').trim());
+        const valueA = cleanAndParse(rowA?.content?.cells[changeColumnIndex]);
+        const valueB = cleanAndParse(rowB?.content?.cells[changeColumnIndex]);
         if (isNaN(valueA) || isNaN(valueB)) return 0;
         return valueB - valueA;
     });
-
-    tableBlock.children = hasHeader ? [potentialHeaderRow, ...dataRows] : dataRows;
+    tableBlock.children = [...headerRow, ...dataRows];
     return tableBlock;
 }
 
@@ -82,58 +89,83 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
         return [];
     }
 }
-function parseBlockContent(block: any): any {
-    const type = block.type;
-    if (block[type]) {
-        const content = { ...block[type] };
-        if (content.rich_text) {
-            content.richText = parseRichText(content.rich_text);
-            delete content.rich_text;
-        }
-        if (content.caption) {
-            content.caption = parseRichText(content.caption);
-        }
-        if (type === 'table_row' && content.cells) {
-            content.cells = content.cells.map((cell: any[]) => parseRichText(cell));
-        }
-        return content;
-    }
-    return {};
-}
+
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
+    // Pass 1: Get top-level blocks
     const topLevelBlocks = await fetchBlockChildren(pageId);
-    const childFetchPromises: Promise<any>[] = [];
+
+    // Identify all blocks that have children that need fetching
     const blocksWithChildrenIds: string[] = [];
-    for (const block of topLevelBlocks) {
-        if (block.has_children) {
-            childFetchPromises.push(fetchBlockChildren(block.id));
-            blocksWithChildrenIds.push(block.id);
+    const findNestedChildren = (blocks: any[]) => {
+        for (const block of blocks) {
+            if (block.has_children) {
+                blocksWithChildrenIds.push(block.id);
+            }
         }
-    }
+    };
+    findNestedChildren(topLevelBlocks);
+
+    // Pass 2: Fetch all children concurrently
+    const childFetchPromises = blocksWithChildrenIds.map(id => fetchBlockChildren(id));
     const allChildrenResults = await Promise.all(childFetchPromises);
+
     const childrenMap: { [key: string]: any[] } = {};
     blocksWithChildrenIds.forEach((id, index) => {
         childrenMap[id] = allChildrenResults[index];
     });
-    const parseAndAssemble = (blocks: any[]): any[] => {
+
+    // Recursive function to assemble the final structure from the pre-fetched data
+    const assembleBlocks = (blocks: any[]): any[] => {
         return blocks.map(block => {
-            const parsedBlock: any = {
+            const baseBlock = {
                 id: block.id,
                 type: block.type,
-                hasChildren: block.has_children,
-                content: parseBlockContent(block),
-                children: [],
+                hasChildren: block.has_children
             };
+
+            let children: any[] = [];
             if (childrenMap[block.id]) {
-                parsedBlock.children = parseAndAssemble(childrenMap[block.id]);
+                // The children for this block have already been fetched, just assemble them
+                children = assembleBlocks(childrenMap[block.id]);
             }
+
+            let content: any = {};
+            switch (block.type) {
+                case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
+                case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
+                case 'heading_2': content = { richText: parseRichText(block.heading_2.rich_text) }; break;
+                case 'heading_3': content = { richText: parseRichText(block.heading_3.rich_text) }; break;
+                case 'bulleted_list_item': content = { richText: parseRichText(block.bulleted_list_item.rich_text) }; break;
+                case 'numbered_list_item': content = { richText: parseRichText(block.numbered_list_item.rich_text) }; break;
+                case 'to_do': content = { richText: parseRichText(block.to_do.rich_text), checked: block.to_do.checked }; break;
+                case 'toggle': content = { richText: parseRichText(block.toggle.rich_text) }; break;
+                case 'code': content = { richText: parseRichText(block.code.rich_text), language: block.code.language }; break;
+                case 'quote': content = { richText: parseRichText(block.quote.rich_text) }; break;
+                case 'callout': content = { richText: parseRichText(block.callout.rich_text), icon: block.callout.icon }; break;
+                case 'divider': content = {}; break;
+                case 'table': content = { tableWidth: block.table.table_width, hasColumnHeader: block.table.has_column_header, hasRowHeader: block.table.has_row_header }; break;
+                case 'table_row': content = { cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || [] }; break;
+                case 'image': content = { url: block.image.file?.url || block.image.external?.url, caption: parseRichText(block.image.caption || []) }; break;
+                case 'video': content = { url: block.video.file?.url || block.video.external?.url, caption: parseRichText(block.video.caption || []) }; break;
+                case 'file': content = { url: block.file.file?.url || block.file.external?.url, caption: parseRichText(block.file.caption || []) }; break;
+                case 'bookmark': content = { url: block.bookmark.url, caption: parseRichText(block.bookmark.caption || []) }; break;
+                case 'embed': content = { url: block.embed.url, caption: parseRichText(block.embed.caption || []) }; break;
+                case 'column_list': content = {}; break;
+                case 'column': content = {}; break;
+                default: content = { unsupported: true, originalType: block.type }; break;
+            }
+
+            const parsedBlock = { ...baseBlock, content, children };
+
+            // Apply sorting only to fully assembled table blocks
             if (parsedBlock.type === 'table') {
                 return sortTableByPerformance(parsedBlock);
             }
             return parsedBlock;
         });
     };
-    return parseAndAssemble(topLevelBlocks);
+
+    return assembleBlocks(topLevelBlocks);
 }
 
 // --- UNIFIED GET METHOD ---
@@ -149,7 +181,6 @@ export async function GET(req: NextRequest) {
 
         if (!isNaN(parseInt(briefingIdParam))) {
             dbId = parseInt(briefingIdParam);
-            console.log(`Identifier is a Database ID: ${dbId}`);
             try {
                 const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
                 if (res.rows.length > 0) {
@@ -162,7 +193,6 @@ export async function GET(req: NextRequest) {
             }
         } else {
             notionId = briefingIdParam;
-            console.log(`Identifier is a Notion ID: ${notionId}`);
             try {
                 const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
                 if (res.rows.length > 0) {
@@ -210,6 +240,7 @@ export async function GET(req: NextRequest) {
         }
     }
 
+    // This part handles the list of briefings for the main page.
     console.log('🚀 API called for list of briefings');
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
@@ -223,6 +254,8 @@ export async function GET(req: NextRequest) {
             start_cursor: startCursor
         });
 
+        // This part can also be slow, but for a list view, we might not need full content.
+        // For now, it uses the fast parser.
         const briefingsPromises = response.results.map(async (result) => {
             const page = result as any;
             if (!page.properties) return null;
@@ -234,7 +267,7 @@ export async function GET(req: NextRequest) {
                 pageUrl: getUrlValue(page.properties['PDF Link']),
                 tweetUrl: getUrlValue(page.properties['Tweet URL']),
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: await parseNotionBlocks(page.id)
+                content: await parseNotionBlocks(page.id) // This is now fast
             };
         });
 
