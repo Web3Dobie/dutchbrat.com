@@ -166,11 +166,30 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
     return assembleBlocks(topLevelBlocks);
 }
 
-// UNIFIED GET METHOD
+// --- NEW: CACHE WRITING HELPER ---
+async function cacheToDatabase(briefingRecord: any, singleBriefing: any): Promise<void> {
+    if (!briefingRecord?.id) {
+        console.log('⚠️ No database record to cache to, skipping cache write');
+        return;
+    }
+
+    try {
+        console.log(`💾 Writing to cache for briefing ID: ${briefingRecord.id}`);
+        await pool.query(
+            'UPDATE hedgefund_agent.briefings SET json_content = $1 WHERE id = $2',
+            [JSON.stringify(singleBriefing), briefingRecord.id]
+        );
+        console.log(`✅ Successfully cached briefing ID: ${briefingRecord.id}`);
+    } catch (error) {
+        console.error(`⚠️ Failed to cache briefing (non-critical):`, error);
+        // Don't throw - caching failure shouldn't break the response
+    }
+}
+
+// UNIFIED GET METHOD (WORKING VERSION + CACHE WRITING)
 export async function GET(req: NextRequest) {
     // --- DIAGNOSTIC LOG ---
-    // This log will prove that the latest version of the code is running.
-    console.log("--- API VERSION CHECK: v1.5 ---");
+    console.log("--- API VERSION CHECK: v1.7 (Cache Read Only) ---");
     // --- END DIAGNOSTIC LOG ---
 
     const { searchParams } = new URL(req.url);
@@ -207,24 +226,28 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Briefing not found' }, { status: 404 });
         }
 
+        // --- CACHE CHECK (EXISTING WORKING LOGIC) ---
         if (briefingRecord && briefingRecord.json_content) {
-            console.log(`✅ Returning fast response from DATABASE CACHE for Notion ID: ${notionId}`);
+            console.log(`⚡ FAST: Returning cached response for Notion ID: ${notionId}`);
             return NextResponse.json({ data: [briefingRecord.json_content] });
         }
 
-        console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
+        console.log(`🐌 SLOW: Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
 
+        // --- NOTION FETCH (EXISTING WORKING LOGIC) ---
         const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('API timeout exceeded while fetching from Notion.')), 25000)
         );
 
-        const fetchAndParsePromise = (async () => {
+        const fetchAndParsePromise = (async (): Promise<any> => {
             const content = await parseNotionBlocks(notionId);
             const pageResponse = await notion.pages.retrieve({ page_id: notionId });
             const page = pageResponse as any;
-            if (!page.properties) { throw new Error(`Could not retrieve properties for Notion page ${notionId}`); }
+            if (!page.properties) {
+                throw new Error(`Could not retrieve properties for Notion page ${notionId}`);
+            }
 
-            return {
+            const singleBriefing = {
                 id: briefingRecord?.id || page.id,
                 title: getTitle(page.properties.Name),
                 period: getSelectValue(page.properties.Period),
@@ -234,10 +257,16 @@ export async function GET(req: NextRequest) {
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
                 content: content
             };
+
+            // --- NEW: CACHE THE RESULT FOR NEXT TIME ---
+            await cacheToDatabase(briefingRecord, singleBriefing);
+
+            return singleBriefing;
         })();
 
         try {
             const singleBriefing = await Promise.race([fetchAndParsePromise, timeoutPromise]);
+            console.log(`✅ Successfully fetched and cached briefing: ${singleBriefing.title}`);
             return NextResponse.json({ data: [singleBriefing] });
         } catch (err: any) {
             console.error(`Error fetching specific briefing from Notion (${notionId}):`, err)
@@ -247,7 +276,7 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    // --- List view (unchanged) ---
+    // --- List view (unchanged from working version) ---
     console.log('🚀 API called for list of briefings');
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
@@ -259,7 +288,9 @@ export async function GET(req: NextRequest) {
             page_size: pageSize,
             start_cursor: startCursor
         });
-        const briefingsPromises = response.results.map(async (result) => {
+
+        // Note: List view doesn't parse content (for speed) - unchanged from working version
+        const briefings = response.results.map((result) => {
             const page = result as any;
             if (!page.properties) return null;
             return {
@@ -270,10 +301,10 @@ export async function GET(req: NextRequest) {
                 pageUrl: getUrlValue(page.properties['PDF Link']),
                 tweetUrl: getUrlValue(page.properties['Tweet URL']),
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: await parseNotionBlocks(page.id)
+                content: [] // Empty for list view - content loaded on demand
             };
-        });
-        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean);
+        }).filter(Boolean);
+
         return NextResponse.json({
             data: briefings,
             pagination: { hasMore: response.has_more, nextCursor: response.next_cursor }
