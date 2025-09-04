@@ -4,14 +4,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
 import { Pool } from 'pg';
 
-const notion = new Client({
-    auth: process.env.NOTION_API_KEY,
-    timeoutMs: 20000
-});
-
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
-// --- COMPLETE HELPER FUNCTIONS (UNCHANGED) ---
+// --- COMPLETE HELPER FUNCTIONS ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
@@ -83,7 +79,7 @@ function sortTableByPerformance(tableBlock: any): any {
     return tableBlock;
 }
 
-// --- OPTIMIZED PARSING LOGIC (UNCHANGED) ---
+// --- START OF OPTIMIZED PARSING LOGIC ---
 async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
         const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
@@ -95,136 +91,122 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
 }
 
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
+    // 1. Fetch the top-level blocks for the page.
     const topLevelBlocks = await fetchBlockChildren(pageId);
     if (topLevelBlocks.length === 0) {
-        return [];
+        return []; // Return early if the page is empty or deleted.
     }
+
+    // 2. Recursively find all block IDs that have children.
     const childrenMap: { [key: string]: any[] } = {};
-    const blocksToFetch = new Set<string>();
+    const blocksWithChildrenIds = new Set<string>();
+
     const findChildrenRecursively = (blocks: any[]) => {
         for (const block of blocks) {
             if (block.has_children) {
-                blocksToFetch.add(block.id);
+                blocksWithChildrenIds.add(block.id);
             }
         }
     };
     findChildrenRecursively(topLevelBlocks);
 
-    let currentLevelIds = Array.from(blocksToFetch);
+    // 3. Fetch all children concurrently.
+    let currentLevelIds = Array.from(blocksWithChildrenIds);
     while (currentLevelIds.length > 0) {
         const childFetchPromises = currentLevelIds.map(id => fetchBlockChildren(id));
         const results = await Promise.all(childFetchPromises);
 
+        const nextLevelIds = new Set<string>();
         results.forEach((children, index) => {
             const parentId = currentLevelIds[index];
             childrenMap[parentId] = children;
-            findChildrenRecursively(children);
+            findChildrenRecursively(children); // Find grandchildren
         });
 
-        currentLevelIds = Array.from(blocksToFetch).filter(id => !childrenMap[id]);
+        // Prepare for the next loop if there are more nested children
+        const fetchedIds = new Set(Object.keys(childrenMap));
+        currentLevelIds = Array.from(blocksWithChildrenIds).filter(id => !fetchedIds.has(id));
     }
 
+    // 4. Assemble the final nested structure from the pre-fetched children.
     const assembleBlocks = (blocks: any[]): any[] => {
         return blocks.map(block => {
-            const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
             let children: any[] = [];
             if (childrenMap[block.id]) {
                 children = assembleBlocks(childrenMap[block.id]);
             }
+
             let content: any = {};
-            switch (block.type) {
-                case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
-                case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
-                case 'heading_2': content = { richText: parseRichText(block.heading_2.rich_text) }; break;
-                case 'heading_3': content = { richText: parseRichText(block.heading_3.rich_text) }; break;
-                case 'bulleted_list_item': content = { richText: parseRichText(block.bulleted_list_item.rich_text) }; break;
-                case 'numbered_list_item': content = { richText: parseRichText(block.numbered_list_item.rich_text) }; break;
-                case 'to_do': content = { richText: parseRichText(block.to_do.rich_text), checked: block.to_do.checked }; break;
-                case 'toggle': content = { richText: parseRichText(block.toggle.rich_text) }; break;
-                case 'code': content = { richText: parseRichText(block.code.rich_text), language: block.code.language }; break;
-                case 'quote': content = { richText: parseRichText(block.quote.rich_text) }; break;
-                case 'callout': content = { richText: parseRichText(block.callout.rich_text), icon: block.callout.icon }; break;
-                case 'divider': content = {}; break;
-                case 'table': content = { tableWidth: block.table.table_width, hasColumnHeader: block.table.has_column_header, hasRowHeader: block.table.has_row_header }; break;
-                case 'table_row': content = { cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || [] }; break;
-                case 'image': content = { url: block.image.file?.url || block.image.external?.url, caption: parseRichText(block.image.caption || []) }; break;
-                case 'video': content = { url: block.video.file?.url || block.video.external?.url, caption: parseRichText(block.video.caption || []) }; break;
-                case 'file': content = { url: block.file.file?.url || block.file.external?.url, caption: parseRichText(block.file.caption || []) }; break;
-                case 'bookmark': content = { url: block.bookmark.url, caption: parseRichText(block.bookmark.caption || []) }; break;
-                case 'embed': content = { url: block.embed.url, caption: parseRichText(block.embed.caption || []) }; break;
-                case 'column_list': content = {}; break;
-                case 'column': content = {}; break;
-                default: content = { unsupported: true, originalType: block.type }; break;
+            const type = block.type;
+            if (block[type]) {
+                content = { ...block[type] }; // Copy content to avoid mutation
+                if (content.rich_text) { content.richText = parseRichText(content.rich_text); delete content.rich_text; }
+                if (content.caption) { content.caption = parseRichText(content.caption); }
+                if (type === 'table_row' && content.cells) { content.cells = content.cells.map((cell: any[]) => parseRichText(cell)); }
+            } else {
+                content = { unsupported: true, originalType: type };
             }
-            const parsedBlock = { ...baseBlock, content, children };
+
+            const parsedBlock = { id: block.id, type, hasChildren: block.has_children, content, children };
+
             if (parsedBlock.type === 'table') {
                 return sortTableByPerformance(parsedBlock);
             }
             return parsedBlock;
         });
     };
+
     return assembleBlocks(topLevelBlocks);
 }
+// --- END OF OPTIMIZED PARSING LOGIC ---
 
 // UNIFIED GET METHOD
 export async function GET(req: NextRequest) {
-    // --- DIAGNOSTIC LOG ---
-    // This log will prove that the latest version of the code is running.
-    console.log("--- API VERSION CHECK: v1.5 ---");
-    // --- END DIAGNOSTIC LOG ---
-
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
+    let client; // Declare client outside try block
 
     if (briefingIdParam) {
-        console.log(`🚀 API called for specific briefingId: ${briefingIdParam}`);
-        let dbId: number | null = null;
-        let notionId: string | null = null;
-        let briefingRecord: any = null;
-
         try {
+            client = await pool.connect();
+            console.log(`🚀 API called for specific briefingId: ${briefingIdParam}`);
+            let notionId: string | null = null;
+            let briefingRecord: any = null;
+
             if (!isNaN(parseInt(briefingIdParam))) {
-                dbId = parseInt(briefingIdParam);
-                const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
+                const dbId = parseInt(briefingIdParam);
+                const res = await client.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
                 if (res.rows.length > 0) {
                     briefingRecord = res.rows[0];
                     notionId = briefingRecord.notion_page_id;
                 }
             } else {
                 notionId = briefingIdParam;
-                const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
+                const res = await client.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
                 if (res.rows.length > 0) {
                     briefingRecord = res.rows[0];
                 }
             }
-        } catch (e) {
-            console.error(`Database error during ID lookup for ${briefingIdParam}:`, e);
-            return NextResponse.json({ error: 'Database error' }, { status: 500 });
-        }
 
-        if (!notionId) {
-            console.error(`Could not resolve a Notion Page ID from the provided identifier: ${briefingIdParam}`);
-            return NextResponse.json({ error: 'Briefing not found' }, { status: 404 });
-        }
+            if (!notionId) {
+                console.error(`Could not resolve a Notion Page ID from: ${briefingIdParam}`);
+                return NextResponse.json({ error: 'Briefing not found' }, { status: 404 });
+            }
 
-        if (briefingRecord && briefingRecord.json_content) {
-            console.log(`✅ Returning fast response from DATABASE CACHE for Notion ID: ${notionId}`);
-            return NextResponse.json({ data: [briefingRecord.json_content] });
-        }
+            if (briefingRecord && briefingRecord.json_content) {
+                console.log(`✅ Returning fast response from DATABASE CACHE for Notion ID: ${notionId}`);
+                return NextResponse.json({ data: [briefingRecord.json_content] });
+            }
 
-        console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
+            console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
 
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('API timeout exceeded while fetching from Notion.')), 25000)
-        );
-
-        const fetchAndParsePromise = (async () => {
-            const content = await parseNotionBlocks(notionId);
             const pageResponse = await notion.pages.retrieve({ page_id: notionId });
             const page = pageResponse as any;
             if (!page.properties) { throw new Error(`Could not retrieve properties for Notion page ${notionId}`); }
 
-            return {
+            const content = await parseNotionBlocks(notionId);
+
+            const singleBriefing = {
                 id: briefingRecord?.id || page.id,
                 title: getTitle(page.properties.Name),
                 period: getSelectValue(page.properties.Period),
@@ -234,22 +216,27 @@ export async function GET(req: NextRequest) {
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
                 content: content
             };
-        })();
-
-        try {
-            const singleBriefing = await Promise.race([fetchAndParsePromise, timeoutPromise]);
             return NextResponse.json({ data: [singleBriefing] });
+
         } catch (err: any) {
-            console.error(`Error fetching specific briefing from Notion (${notionId}):`, err)
-            const status = err.message.includes('object_not_found') ? 404 : 500;
-            const statusText = err.message.includes('object_not_found') ? 'Not Found in Notion' : 'Internal Server Error';
-            return NextResponse.json({ error: err.message }, { status, statusText });
+            console.error(`Error processing specific briefing (${briefingIdParam}):`, err);
+            // Check for Notion's specific "not found" error code
+            if (err.code === 'object_not_found') {
+                return NextResponse.json({ error: 'Not Found in Notion' }, { status: 404 });
+            }
+            // Check if it's a database-related error
+            if (err.message.includes('database')) {
+                return NextResponse.json({ error: 'Database connection error' }, { status: 500 });
+            }
+            return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        } finally {
+            client?.release();
         }
     }
 
-    // --- List view (unchanged) ---
-    console.log('🚀 API called for list of briefings');
+    // --- List view for the main page ---
     try {
+        console.log('🚀 API called for list of briefings');
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
         const pageSize = parseInt(searchParams.get('pageSize') || '10');
         const startCursor = searchParams.get('cursor') || undefined;
@@ -259,7 +246,9 @@ export async function GET(req: NextRequest) {
             page_size: pageSize,
             start_cursor: startCursor
         });
-        const briefingsPromises = response.results.map(async (result) => {
+
+        // This list view doesn't fetch full content, so it's already fast.
+        const briefings = response.results.map((result) => {
             const page = result as any;
             if (!page.properties) return null;
             return {
@@ -270,10 +259,10 @@ export async function GET(req: NextRequest) {
                 pageUrl: getUrlValue(page.properties['PDF Link']),
                 tweetUrl: getUrlValue(page.properties['Tweet URL']),
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: await parseNotionBlocks(page.id)
+                content: [] // No content for list view
             };
-        });
-        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean);
+        }).filter(Boolean);
+
         return NextResponse.json({
             data: briefings,
             pagination: { hasMore: response.has_more, nextCursor: response.next_cursor }
@@ -283,3 +272,4 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+
