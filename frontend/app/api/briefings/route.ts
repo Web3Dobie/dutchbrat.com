@@ -79,7 +79,7 @@ function sortTableByPerformance(tableBlock: any): any {
     return tableBlock;
 }
 
-// --- OPTIMIZED PARSING LOGIC (UNCHANGED) ---
+// --- FINAL, MULTI-LEVEL OPTIMIZED PARSING LOGIC ---
 async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
         const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
@@ -89,31 +89,60 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
         return [];
     }
 }
+
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
+    // Pass 1: Get top-level blocks
     const topLevelBlocks = await fetchBlockChildren(pageId);
-    const blocksWithChildrenIds: string[] = [];
-    const findNestedChildren = (blocks: any[]) => {
+
+    // Create a map to hold all children, keyed by their parent's ID
+    const childrenMap: { [key: string]: any[] } = {};
+
+    // Find all blocks that have children, including nested ones
+    const blocksToFetch = new Set<string>();
+    const findChildrenRecursively = (blocks: any[]) => {
         for (const block of blocks) {
             if (block.has_children) {
-                blocksWithChildrenIds.push(block.id);
+                blocksToFetch.add(block.id);
             }
         }
     };
-    findNestedChildren(topLevelBlocks);
-    const childFetchPromises = blocksWithChildrenIds.map(id => fetchBlockChildren(id));
-    const allChildrenResults = await Promise.all(childFetchPromises);
-    const childrenMap: { [key: string]: any[] } = {};
-    blocksWithChildrenIds.forEach((id, index) => {
-        childrenMap[id] = allChildrenResults[index];
-    });
+
+    findChildrenRecursively(topLevelBlocks);
+
+    // Pass 2: Fetch all children for the first level of blocks
+    let currentLevelIds = Array.from(blocksToFetch);
+    const allFetchedBlocks = new Map();
+    topLevelBlocks.forEach(b => allFetchedBlocks.set(b.id, b));
+
+    // This loop handles nested children (e.g., columns inside columns, toggles in columns)
+    while (currentLevelIds.length > 0) {
+        const childFetchPromises = currentLevelIds.map(id => fetchBlockChildren(id));
+        const results = await Promise.all(childFetchPromises);
+
+        const nextLevelIds = new Set<string>();
+        results.forEach((children, index) => {
+            const parentId = currentLevelIds[index];
+            childrenMap[parentId] = children; // Store the fetched children
+            children.forEach(c => allFetchedBlocks.set(c.id, c)); // Keep track of all blocks
+            findChildrenRecursively(children); // Check if these new children also have children
+        });
+
+        // Determine the next set of IDs to fetch, avoiding re-fetching
+        currentLevelIds = Array.from(blocksToFetch).filter(id => !childrenMap[id]);
+    }
+
+    // Recursive function to assemble the final structure from the pre-fetched data
     const assembleBlocks = (blocks: any[]): any[] => {
         return blocks.map(block => {
             const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
+
             let children: any[] = [];
             if (childrenMap[block.id]) {
                 children = assembleBlocks(childrenMap[block.id]);
             }
+
             let content: any = {};
+            // This switch statement handles all block types correctly.
             switch (block.type) {
                 case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
                 case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
@@ -148,7 +177,7 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
     return assembleBlocks(topLevelBlocks);
 }
 
-// --- UNIFIED GET METHOD WITH RESILIENT DB HANDLING ---
+// --- UNIFIED GET METHOD (UNCHANGED) ---
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
@@ -162,7 +191,6 @@ export async function GET(req: NextRequest) {
         try {
             if (!isNaN(parseInt(briefingIdParam))) {
                 dbId = parseInt(briefingIdParam);
-                // --- DB FIX: Use pool.query for resilience ---
                 const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
                 if (res.rows.length > 0) {
                     briefingRecord = res.rows[0];
@@ -170,7 +198,6 @@ export async function GET(req: NextRequest) {
                 }
             } else {
                 notionId = briefingIdParam;
-                // --- DB FIX: Use pool.query for resilience ---
                 const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
                 if (res.rows.length > 0) {
                     briefingRecord = res.rows[0];
@@ -193,10 +220,7 @@ export async function GET(req: NextRequest) {
 
         console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
         try {
-            // This is the long-running part
             const content = await parseNotionBlocks(notionId);
-
-            // This part is fast
             const pageResponse = await notion.pages.retrieve({ page_id: notionId });
             const page = pageResponse as any;
             if (!page.properties) { throw new Error(`Could not retrieve properties for Notion page ${notionId}`); }
@@ -219,7 +243,7 @@ export async function GET(req: NextRequest) {
         }
     }
 
-    // --- List view (also uses resilient DB logic implicitly via fast parsing) ---
+    // --- List view ---
     console.log('🚀 API called for list of briefings');
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
