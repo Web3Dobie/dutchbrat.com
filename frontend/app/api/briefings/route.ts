@@ -4,7 +4,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
 import { Pool } from 'pg';
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY })
+const notion = new Client({
+    auth: process.env.NOTION_API_KEY,
+    timeoutMs: 20000
+});
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
 // --- COMPLETE HELPER FUNCTIONS (UNCHANGED) ---
