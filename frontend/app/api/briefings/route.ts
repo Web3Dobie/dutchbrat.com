@@ -8,6 +8,7 @@ const notion = new Client({
     auth: process.env.NOTION_API_KEY,
     timeoutMs: 20000
 });
+
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
 
 // --- COMPLETE HELPER FUNCTIONS (UNCHANGED) ---
@@ -82,7 +83,7 @@ function sortTableByPerformance(tableBlock: any): any {
     return tableBlock;
 }
 
-// --- FINAL, MULTI-LEVEL OPTIMIZED PARSING LOGIC ---
+// --- OPTIMIZED PARSING LOGIC (UNCHANGED) ---
 async function fetchBlockChildren(blockId: string): Promise<any[]> {
     try {
         const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
@@ -94,13 +95,11 @@ async function fetchBlockChildren(blockId: string): Promise<any[]> {
 }
 
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
-    // Pass 1: Get top-level blocks
     const topLevelBlocks = await fetchBlockChildren(pageId);
-
-    // Create a map to hold all children, keyed by their parent's ID
+    if (topLevelBlocks.length === 0) {
+        return [];
+    }
     const childrenMap: { [key: string]: any[] } = {};
-
-    // Find all blocks that have children, including nested ones
     const blocksToFetch = new Set<string>();
     const findChildrenRecursively = (blocks: any[]) => {
         for (const block of blocks) {
@@ -109,43 +108,30 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
             }
         }
     };
-
     findChildrenRecursively(topLevelBlocks);
 
-    // Pass 2: Fetch all children for the first level of blocks
     let currentLevelIds = Array.from(blocksToFetch);
-    const allFetchedBlocks = new Map();
-    topLevelBlocks.forEach(b => allFetchedBlocks.set(b.id, b));
-
-    // This loop handles nested children (e.g., columns inside columns, toggles in columns)
     while (currentLevelIds.length > 0) {
         const childFetchPromises = currentLevelIds.map(id => fetchBlockChildren(id));
         const results = await Promise.all(childFetchPromises);
 
-        const nextLevelIds = new Set<string>();
         results.forEach((children, index) => {
             const parentId = currentLevelIds[index];
-            childrenMap[parentId] = children; // Store the fetched children
-            children.forEach(c => allFetchedBlocks.set(c.id, c)); // Keep track of all blocks
-            findChildrenRecursively(children); // Check if these new children also have children
+            childrenMap[parentId] = children;
+            findChildrenRecursively(children);
         });
 
-        // Determine the next set of IDs to fetch, avoiding re-fetching
         currentLevelIds = Array.from(blocksToFetch).filter(id => !childrenMap[id]);
     }
 
-    // Recursive function to assemble the final structure from the pre-fetched data
     const assembleBlocks = (blocks: any[]): any[] => {
         return blocks.map(block => {
             const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
-
             let children: any[] = [];
             if (childrenMap[block.id]) {
                 children = assembleBlocks(childrenMap[block.id]);
             }
-
             let content: any = {};
-            // This switch statement handles all block types correctly.
             switch (block.type) {
                 case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
                 case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
@@ -180,8 +166,13 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
     return assembleBlocks(topLevelBlocks);
 }
 
-// --- UNIFIED GET METHOD (UNCHANGED) ---
+// UNIFIED GET METHOD
 export async function GET(req: NextRequest) {
+    // --- DIAGNOSTIC LOG ---
+    // This log will prove that the latest version of the code is running.
+    console.log("--- API VERSION CHECK: v1.5 ---");
+    // --- END DIAGNOSTIC LOG ---
+
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
 
@@ -222,13 +213,18 @@ export async function GET(req: NextRequest) {
         }
 
         console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
-        try {
+
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('API timeout exceeded while fetching from Notion.')), 25000)
+        );
+
+        const fetchAndParsePromise = (async () => {
             const content = await parseNotionBlocks(notionId);
             const pageResponse = await notion.pages.retrieve({ page_id: notionId });
             const page = pageResponse as any;
             if (!page.properties) { throw new Error(`Could not retrieve properties for Notion page ${notionId}`); }
 
-            const singleBriefing = {
+            return {
                 id: briefingRecord?.id || page.id,
                 title: getTitle(page.properties.Name),
                 period: getSelectValue(page.properties.Period),
@@ -238,15 +234,20 @@ export async function GET(req: NextRequest) {
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
                 content: content
             };
-            return NextResponse.json({ data: [singleBriefing] });
+        })();
 
+        try {
+            const singleBriefing = await Promise.race([fetchAndParsePromise, timeoutPromise]);
+            return NextResponse.json({ data: [singleBriefing] });
         } catch (err: any) {
             console.error(`Error fetching specific briefing from Notion (${notionId}):`, err)
-            return NextResponse.json({ error: err.message }, { status: 404, statusText: 'Not Found in Notion' });
+            const status = err.message.includes('object_not_found') ? 404 : 500;
+            const statusText = err.message.includes('object_not_found') ? 'Not Found in Notion' : 'Internal Server Error';
+            return NextResponse.json({ error: err.message }, { status, statusText });
         }
     }
 
-    // --- List view ---
+    // --- List view (unchanged) ---
     console.log('🚀 API called for list of briefings');
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
@@ -282,4 +283,3 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
-
