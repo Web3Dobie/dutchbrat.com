@@ -40,22 +40,44 @@ function getMultiSelectValues(multiSelectProperty: any): string[] {
   return multiSelectProperty.multi_select.map((item: any) => item.name || '');
 }
 
+// Helper function to replace Azure blob URLs with local URLs
+function replaceAzureBlobUrl(azureUrl: string): string {
+  if (!azureUrl || !azureUrl.includes('blob.core.windows.net')) {
+    return azureUrl;
+  }
+  
+  // Extract filename from Azure URL
+  // Example: https://w3darticles.blob.core.windows.net/w3d-articles/something.md
+  const match = azureUrl.match(/\/([^\/]+)\.md$/);
+  if (!match) return azureUrl;
+  
+  const filename = match[1];
+  
+  // Determine category based on filename pattern or default to 'explainer'
+  // You can adjust this logic based on your naming conventions
+  const category = filename.includes('technical-analysis') ? 'ta' : 'explainer';
+  
+  // Return the new local URL format
+  return `/api/articles/files/${category}/${filename}.md`;
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const databaseId = process.env.NOTION_DB_ID!
+    const databaseId = process.env.NOTION_SUBSTACK_ARCHIVE_DB_ID!
     const response = await notion.databases.query({
       database_id: databaseId,
     })
 
-    // Transform Notion pages to Article objects
+    // Transform Notion pages to Article objects with URL replacement
     const articles = response.results.map((page: any) => {
       const properties = page.properties;
+      const originalFileUrl = getUrlValue(properties.File);
       
       return {
         id: page.id,
         headline: getTitle(properties.Headline),
         summary: getPlainText(properties.Summary?.rich_text),
-        file: getUrlValue(properties.File),
+        file: replaceAzureBlobUrl(originalFileUrl), // Replace Azure blob URLs with local URLs
         date: getDateValue(properties.Date),
         link: getUrlValue(properties.Tweet), // Using Tweet URL as link
         tags: getMultiSelectValues(properties.Tags),
@@ -74,7 +96,7 @@ export async function GET(req: NextRequest) {
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
-    console.log(`Returning ${publishedArticles.length} published articles`);
+    console.log(`Returning ${publishedArticles.length} published articles with replaced URLs`);
     
     return NextResponse.json(publishedArticles)
   } catch (err: any) {
