@@ -24,7 +24,7 @@ export function MediaModal({ media, onClose, onNext, onPrevious }: MediaModalPro
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose, onNext, onPrevious])
 
-  const formatDate = (date: string | Date) => {
+  const formatDate = (date: string | Date | undefined) => {
     if (!date) return 'Date unknown'
     const d = new Date(date)
     return d.toLocaleDateString('en-US', { 
@@ -108,7 +108,7 @@ export function MediaModal({ media, onClose, onNext, onPrevious }: MediaModalPro
             {/* Date */}
             <div>
               <label className="text-gray-400 block mb-1">Date taken</label>
-              <p className="text-white">{formatDate(media.taken_at || media.uploaded_at)}</p>
+              <p className="text-white">{formatDate(media.taken_at || media.uploaded_at || media.created_at || '')}</p>
             </div>
 
             {/* Location */}
@@ -122,11 +122,11 @@ export function MediaModal({ media, onClose, onNext, onPrevious }: MediaModalPro
             )}
 
             {/* Camera info */}
-            {(media.camera_make || media.camera_model) && (
+            {(media.camera || (media.camera_make && media.camera_model)) && (
               <div>
                 <label className="text-gray-400 block mb-1">Camera</label>
                 <p className="text-white">
-                  {[media.camera_make, media.camera_model].filter(Boolean).join(' ')}
+                  {media.camera || `${media.camera_make} ${media.camera_model}`}
                 </p>
               </div>
             )}
@@ -153,7 +153,7 @@ export function MediaModal({ media, onClose, onNext, onPrevious }: MediaModalPro
               <label className="text-gray-400 block mb-1">File details</label>
               <p className="text-white text-xs">
                 {media.filename}<br/>
-                {formatFileSize(media.file_size)}<br/>
+                {formatFileSize(media.file_size || 0)}<br/>
                 {media.media_type.toUpperCase()}
               </p>
             </div>

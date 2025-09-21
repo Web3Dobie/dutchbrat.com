@@ -15,17 +15,17 @@ export default function HunterMemorialPage() {
       {/* Header */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <div className="relative">
+          <div className="flex flex-col items-center text-center">
+            <div className="relative mb-6">
               <Image
                 src="/images/hunter_memorial.jpg"
                 alt="Hunter the Dobermann"
-                width={200}
-                height={200}
+                width={400}
+                height={400}
                 className="rounded-full border-4 border-blue-500 shadow-xl"
               />
             </div>
-            <div className="text-center md:text-left">
+            <div>
               <h1 className="text-4xl font-bold mb-2">
                 Hunter's Memory Garden 🐾
               </h1>
@@ -34,7 +34,7 @@ export default function HunterMemorialPage() {
               </p>
               <p className="text-gray-400 max-w-2xl">
                 A collection of precious moments, adventures, and memories. 
-                Hunter brought and still brings joy, loyalty, and unconditional love to our family. 
+                Hunter brought joy, loyalty, and unconditional love to our family, and he still does.
                 His spirit lives on in every photo and video captured here.
               </p>
             </div>

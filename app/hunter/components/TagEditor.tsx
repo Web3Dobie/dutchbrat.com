@@ -131,8 +131,8 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
     }
   }
 
-  const formatDate = (date: string | Date) => {
-    if (!date) return 'No date'
+  const formatDate = (date: string | Date | undefined) => {
+    if (!date) return 'Date unknown'
     const d = new Date(date)
     return d.toLocaleDateString('en-US', { 
       weekday: 'long',
@@ -187,14 +187,14 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
         <div className="flex-1">
           <div className="font-medium text-white">{media.filename}</div>
           <div className="text-sm text-gray-400">
-            {formatDate(media.taken_at || media.uploaded_at)}
+            <p className="text-white">{formatDate(media.taken_at || media.uploaded_at || media.created_at || '')}</p>
           </div>
           <div className="text-sm text-gray-400">
-            {formatFileSize(media.file_size)} • {media.media_type.toUpperCase()}
+            {formatFileSize(media.file_size || 0)} • {media.media_type.toUpperCase()}
           </div>
-          {media.camera_make && media.camera_model && (
+          {(media.camera || (media.camera_make && media.camera_model)) && (
             <div className="text-sm text-gray-400">
-              📷 {media.camera_make} {media.camera_model}
+              📷 {media.camera || `${media.camera_make} ${media.camera_model}`}
             </div>
           )}
         </div>

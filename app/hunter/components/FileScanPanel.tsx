@@ -42,7 +42,7 @@ export function FileScanPanel({ onStatsUpdate }: FileScanPanelProps) {
         <div className="bg-gray-800 rounded-lg p-4">
           <h3 className="font-medium mb-2">How it works:</h3>
           <ol className="text-sm text-gray-300 space-y-1 list-decimal list-inside">
-            <li>Upload photos/videos to <code className="bg-gray-700 px-1 rounded">/var/hunter-media/originals/</code></li>
+            <li>Upload photos/videos to <code className="bg-gray-700 px-1 rounded">/home/hunter-dev/hunter-media/originals/2024/</code></li>
             <li>Organize by year folders if you want (e.g., 2023/, 2024/)</li>
             <li>Click "Scan for New Files" below</li>
             <li>The system will automatically extract dates and GPS locations</li>
