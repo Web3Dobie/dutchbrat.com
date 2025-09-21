@@ -592,6 +592,7 @@ export function verifyAuthToken(token: string): boolean {
 
 // Database class wrapper for API routes
 export class HunterMediaDB {
+  // Core methods with full names
   static async getMediaFiles(filters: SearchFilters = {}): Promise<MediaResponse> {
     return getMediaFiles(filters)
   }
@@ -627,6 +628,55 @@ export class HunterMediaDB {
   }
   
   static async updateThumbnailPaths(id: number, thumbnails: {
+    thumbnail_150?: string
+    thumbnail_500?: string
+    thumbnail_1200?: string
+  }): Promise<void> {
+    return updateThumbnailPaths(id, thumbnails)
+  }
+  
+  // Common API route aliases
+  static async getMedia(filters: SearchFilters = {}): Promise<MediaResponse> {
+    return getMediaFiles(filters)
+  }
+  
+  static async updateMedia(id: number, updates: Partial<MediaFile>): Promise<MediaFile | null> {
+    return updateMediaFile(id, updates)
+  }
+  
+  static async saveMedia(
+    filename: string,
+    filePath: string,
+    mediaType: 'image' | 'video',
+    fileSize: number,
+    exifData: ProcessedExifData
+  ): Promise<MediaFile> {
+    return saveMediaFile(filename, filePath, mediaType, fileSize, exifData)
+  }
+  
+  static async createMedia(
+    filename: string,
+    filePath: string,
+    mediaType: 'image' | 'video',
+    fileSize: number,
+    exifData: ProcessedExifData
+  ): Promise<MediaFile> {
+    return saveMediaFile(filename, filePath, mediaType, fileSize, exifData)
+  }
+  
+  static async addTag(mediaId: number, tagType: TagType, tagValue: string): Promise<MediaTag> {
+    return addMediaTag(mediaId, tagType, tagValue)
+  }
+  
+  static async removeTag(tagId: number): Promise<boolean> {
+    return removeMediaTag(tagId)
+  }
+  
+  static async getTags(tagType?: TagType): Promise<string[]> {
+    return getTagSuggestions(tagType)
+  }
+  
+  static async updateThumbnails(id: number, thumbnails: {
     thumbnail_150?: string
     thumbnail_500?: string
     thumbnail_1200?: string

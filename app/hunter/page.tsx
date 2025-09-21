@@ -18,7 +18,7 @@ export default function HunterMemorialPage() {
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="relative">
               <Image
-                src="/images/hunter_memorial.jpg" // You'll need to add this
+                src="/images/hunter_memorial.jpg"
                 alt="Hunter the Dobermann"
                 width={200}
                 height={200}
@@ -30,11 +30,11 @@ export default function HunterMemorialPage() {
                 Hunter's Memory Garden 🐾
               </h1>
               <p className="text-xl text-gray-300 mb-4">
-                Celebrating the life of our beloved Dobermann
+                Celebrating the life of our beloved Boy-Boy
               </p>
               <p className="text-gray-400 max-w-2xl">
                 A collection of precious moments, adventures, and memories. 
-                Hunter brought joy, loyalty, and unconditional love to our family. 
+                Hunter brought and still brings joy, loyalty, and unconditional love to our family. 
                 His spirit lives on in every photo and video captured here.
               </p>
             </div>
