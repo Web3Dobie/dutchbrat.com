@@ -48,6 +48,12 @@ export default function Navbar() {
                         >
                             Articles
                         </Link>
+                        <Link 
+                            href="/hunter" 
+                            className="text-gray-200 hover:text-white transition-colors duration-300"
+                        >
+                            Hunter 🐾
+                        </Link>
                         <a 
                             href="https://x.com/@Web3_Dobie" 
                             target="_blank" 
@@ -132,6 +138,12 @@ export default function Navbar() {
                                 onClick={closeMobileMenu}
                             >
                                 Articles
+                            </Link>
+                            <Link 
+                                href="/hunter" 
+                                className="text-gray-200 hover:text-white transition-colors duration-300"
+                            >
+                                Hunter 🐾
                             </Link>
                             <a 
                                 href="https://x.com/@Web3_Dobie" 
