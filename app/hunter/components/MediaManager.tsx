@@ -1,4 +1,4 @@
-// app/hunter/components/MediaManager.tsx - Complete Enhanced Version
+// app/hunter/components/MediaManager.tsx - With Pagination
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -14,7 +14,14 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
   const [media, setMedia] = useState<MediaFile[]>([])
   const [selectedMedia, setSelectedMedia] = useState<MediaFile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  
+  // Pagination state
+  const [hasMore, setHasMore] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const ITEMS_PER_PAGE = 50 // Show 50 items at a time for good performance
   
   // Delete functionality state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -27,34 +34,54 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
   } | null>(null)
 
   useEffect(() => {
-    fetchMedia()
-  }, [])
+    // Reset pagination when search changes
+    setOffset(0)
+    setMedia([])
+    fetchMedia(true) // true = reset
+  }, [searchTerm])
 
-  const fetchMedia = async () => {
+  const fetchMedia = async (reset: boolean = false) => {
     try {
-      setLoading(true)
+      if (reset) {
+        setLoading(true)
+        setOffset(0)
+      } else {
+        setLoadingMore(true)
+      }
+
+      const currentOffset = reset ? 0 : offset
       const params = new URLSearchParams({
-        limit: '100', // Show more in admin
+        limit: ITEMS_PER_PAGE.toString(),
+        offset: currentOffset.toString(),
         search: searchTerm
       })
 
       const response = await fetch(`/api/hunter/media?${params}`)
       const data = await response.json()
-      setMedia(data.media)
+
+      if (reset) {
+        setMedia(data.media)
+      } else {
+        setMedia(prev => [...prev, ...data.media])
+      }
+
+      setTotal(data.total)
+      setHasMore(data.hasMore)
+      setOffset(currentOffset + ITEMS_PER_PAGE)
+
     } catch (error) {
       console.error('Error fetching media:', error)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchMedia()
-    }, 300)
-
-    return () => clearTimeout(timeoutId)
-  }, [searchTerm])
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore) {
+      fetchMedia(false)
+    }
+  }
 
   const handleMediaUpdate = (updatedMedia: MediaFile) => {
     setMedia(prev => prev.map(m => m.id === updatedMedia.id ? updatedMedia : m))
@@ -95,6 +122,9 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
         if (selectedMedia?.id === mediaToDelete.id) {
           setSelectedMedia(null)
         }
+
+        // Update total count
+        setTotal(prev => prev - 1)
 
         setDeleteResult({
           success: true,
@@ -170,7 +200,8 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Media Files</h2>
             <div className="text-sm text-gray-400">
-              {media.length} files
+              {media.length} of {total} files
+              {searchTerm && ` (filtered)`}
             </div>
           </div>
 
@@ -191,85 +222,107 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
               <div className="text-center py-4">Loading...</div>
             ) : media.length === 0 ? (
               <div className="text-center py-4 text-gray-400">
-                No files found. Try scanning for new files first.
+                {searchTerm ? 'No files found matching your search.' : 'No files found. Try scanning for new files first.'}
               </div>
             ) : (
-              media.map((item) => (
-                <div
-                  key={item.id}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    selectedMedia?.id === item.id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-800 hover:bg-gray-700'
-                  }`}
-                >
-                  {/* Thumbnail */}
-                  <div className="w-12 h-12 bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
-                    {item.thumbnail_150 ? (
-                      <img
-                        src={`/api/hunter/files/${item.thumbnail_150}`}
-                        alt={item.filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement
-                          target.src = `/api/hunter/files/${item.file_path}`
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                        {item.media_type === 'video' ? '🎥' : '📷'}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info - clickable area */}
-                  <div 
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => setSelectedMedia(item)}
+              <>
+                {media.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      selectedMedia?.id === item.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                    }`}
                   >
-                    <div className="font-medium truncate">
-                      {item.description || item.filename}
+                    {/* Thumbnail */}
+                    <div className="w-12 h-12 bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
+                      {item.thumbnail_150 ? (
+                        <img
+                          src={`/api/hunter/files/${item.thumbnail_150}`}
+                          alt={item.filename}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.src = `/api/hunter/files/${item.file_path}`
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                          {item.media_type === 'video' ? '🎥' : '📷'}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-sm opacity-75">
-                      {item.taken_at
-                        ? new Date(item.taken_at).toLocaleDateString()
-                        : 'No date'
-                      }
-                      {item.location_name && ` • ${item.location_name}`}
-                    </div>
-                    {/* Tags */}
-                    {item.tags && Array.isArray(item.tags) && item.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {item.tags.slice(0, 3).map((tag, index) => (
-                          <span
-                            key={index}
-                            className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded"
-                          >
-                            {tag.tag_value || tag.value || 'Unknown tag'}
-                          </span>
-                        ))}
-                        {item.tags.length > 3 && (
-                          <span className="text-xs opacity-75">
-                            +{item.tags.length - 3} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Delete Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteClick(item)
-                    }}
-                    className="flex-shrink-0 w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center justify-center transition-colors group"
-                    title="Delete permanently"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              ))
+                    {/* Info - clickable area */}
+                    <div 
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => setSelectedMedia(item)}
+                    >
+                      <div className="font-medium truncate">
+                        {item.description || item.filename}
+                      </div>
+                      <div className="text-sm opacity-75">
+                        {item.taken_at
+                          ? new Date(item.taken_at).toLocaleDateString()
+                          : 'No date'
+                        }
+                        {item.location_name && ` • ${item.location_name}`}
+                      </div>
+                      {/* Tags */}
+                      {item.tags && Array.isArray(item.tags) && item.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {item.tags.slice(0, 3).map((tag, index) => (
+                            <span
+                              key={index}
+                              className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded"
+                            >
+                              {tag.tag_value || tag.value || 'Unknown tag'}
+                            </span>
+                          ))}
+                          {item.tags.length > 3 && (
+                            <span className="text-xs opacity-75">
+                              +{item.tags.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteClick(item)
+                      }}
+                      className="flex-shrink-0 w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center justify-center transition-colors group"
+                      title="Delete permanently"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+
+                {/* Load More Button */}
+                {hasMore && (
+                  <div className="text-center pt-4">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
+                    >
+                      {loadingMore ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Loading...
+                        </div>
+                      ) : (
+                        `Load More (${total - media.length} remaining)`
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -298,6 +351,8 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
           ) : (
             <div className="text-center text-gray-400 py-8">
               Select a media file to edit its details and tags
+              <br />
+              <span className="text-sm">({total} total files)</span>
             </div>
           )}
         </div>
