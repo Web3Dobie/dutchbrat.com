@@ -11,10 +11,10 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
   const formatDate = (date: string | Date) => {
     if (!date) return ''
     const d = new Date(date)
-    return d.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     })
   }
 
@@ -26,7 +26,7 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
       {/* Thumbnail */}
       {media.media_type === 'image' ? (
         <img
-          src={`/api/hunter/files${media.thumbnail_150}`}
+          src={`/api/hunter/files${media.thumbnail_150 || media.file_path}`}
           alt={media.description || media.filename}
           className="w-full h-full object-cover transition-transform group-hover:scale-105"
           loading="lazy"
@@ -58,7 +58,7 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
       {media.media_type === 'video' && (
         <div className="absolute top-2 right-2 bg-black bg-opacity-60 rounded-full p-1">
           <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M6.5 5.5v9l7-4.5-7-4.5z"/>
+            <path d="M6.5 5.5v9l7-4.5-7-4.5z" />
           </svg>
         </div>
       )}
@@ -67,7 +67,7 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
       {media.location_lat && media.location_lng && (
         <div className="absolute top-2 left-2 bg-black bg-opacity-60 rounded-full p-1">
           <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
           </svg>
         </div>
       )}

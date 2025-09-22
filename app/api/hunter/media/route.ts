@@ -1,7 +1,7 @@
 // app/api/hunter/media/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { HunterMediaDB } from '../../../../lib/hunterMedia'
+import { getMediaFiles } from '../../../../lib/hunterMedia'
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,16 +9,15 @@ export async function GET(req: NextRequest) {
     
     const filters = {
       search: searchParams.get('search') || undefined,
-      mediaType: searchParams.get('type') as 'image' | 'video' | undefined,
-      dateFrom: searchParams.get('dateFrom') ? new Date(searchParams.get('dateFrom')!) : undefined,
-      dateTo: searchParams.get('dateTo') ? new Date(searchParams.get('dateTo')!) : undefined,
-      hasLocation: searchParams.get('hasLocation') === 'true',
+      type: searchParams.get('type') as 'image' | 'video' | undefined,
+      startDate: searchParams.get('dateFrom') || undefined,
+      endDate: searchParams.get('dateTo') || undefined,
       tags: searchParams.get('tags') ? searchParams.get('tags')!.split(',') : undefined,
-      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50,
-      offset: searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0
+      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50
     }
     
-    const result = await HunterMediaDB.getMedia(filters)
+    // Use the direct function instead of the class
+    const result = await getMediaFiles(filters)
     
     return NextResponse.json(result)
   } catch (error) {

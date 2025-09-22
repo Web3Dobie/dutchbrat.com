@@ -27,7 +27,7 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
     // Get suggestions for current tag type and input
     if (newTag.value) {
       const suggestions = availableTags
-        .filter(tag => 
+        .filter(tag =>
           tag.type === newTag.type &&
           tag.value.toLowerCase().includes(newTag.value.toLowerCase()) &&
           !media.tags?.some((mediaTag: any) => mediaTag.value === tag.value)
@@ -95,7 +95,7 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
         if (updatedMedia) {
           onUpdate(updatedMedia)
         }
-        
+
         setNewTag({ ...newTag, value: '' })
         setTagSuggestions([])
         fetchAvailableTags() // Refresh available tags
@@ -134,10 +134,10 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
   const formatDate = (date: string | Date | undefined) => {
     if (!date) return 'Date unknown'
     const d = new Date(date)
-    return d.toLocaleDateString('en-US', { 
+    return d.toLocaleDateString('en-US', {
       weekday: 'long',
-      year: 'numeric', 
-      month: 'long', 
+      year: 'numeric',
+      month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -172,9 +172,9 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
       {/* Preview */}
       <div className="flex items-center gap-4 p-4 bg-gray-800 rounded-lg">
         <div className="w-20 h-20 bg-gray-700 rounded overflow-hidden flex-shrink-0">
-          {media.media_type === 'image' && media.thumbnail_150 ? (
+          {media.media_type === 'image' ? (
             <img
-              src={`/api/hunter/files${media.thumbnail_150}`}
+              src={`/api/hunter/files${media.thumbnail_150 || media.file_path}`}
               alt={media.filename}
               className="w-full h-full object-cover"
             />
@@ -273,18 +273,17 @@ export function TagEditor({ media, onUpdate }: TagEditorProps) {
         {/* Add New Tag */}
         <div className="space-y-3">
           <div className="text-sm text-gray-400">Add new tag:</div>
-          
+
           {/* Tag Type Selector */}
           <div className="grid grid-cols-5 gap-1">
             {tagTypeOptions.map(option => (
               <button
                 key={option.value}
                 onClick={() => setNewTag({ ...newTag, type: option.value })}
-                className={`p-2 text-xs rounded-lg transition-colors ${
-                  newTag.type === option.value
+                className={`p-2 text-xs rounded-lg transition-colors ${newTag.type === option.value
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                }`}
+                  }`}
               >
                 <div>{option.icon}</div>
                 <div>{option.label}</div>

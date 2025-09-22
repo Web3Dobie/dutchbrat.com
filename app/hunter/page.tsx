@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { HunterGallery } from './components/HunterGallery'
 import { HunterSearch } from './components/HunterSearch'
+import { ThumbnailGeneratorPanel } from './components/ThumbnailGeneratorPanel'
 
 export default function HunterMemorialPage() {
   const [searchFilters, setSearchFilters] = useState({})

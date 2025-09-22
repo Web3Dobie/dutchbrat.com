@@ -26,7 +26,7 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
         limit: '100', // Show more in admin
         search: searchTerm
       })
-      
+
       const response = await fetch(`/api/hunter/media?${params}`)
       const data = await response.json()
       setMedia(data.media)
@@ -41,7 +41,7 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
     const timeoutId = setTimeout(() => {
       fetchMedia()
     }, 300)
-    
+
     return () => clearTimeout(timeoutId)
   }, [searchTerm])
 
@@ -53,7 +53,7 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      
+
       {/* Media List */}
       <div className="bg-gray-900 rounded-xl p-6 border border-gray-700">
         <div className="flex items-center justify-between mb-4">
@@ -87,17 +87,16 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
               <div
                 key={item.id}
                 onClick={() => setSelectedMedia(item)}
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedMedia?.id === item.id
+                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedMedia?.id === item.id
                     ? 'bg-blue-600'
                     : 'bg-gray-800 hover:bg-gray-700'
-                }`}
+                  }`}
               >
                 {/* Thumbnail */}
                 <div className="w-12 h-12 bg-gray-700 rounded overflow-hidden flex-shrink-0">
-                  {item.media_type === 'image' && item.thumbnail_150 ? (
+                  {item.media_type === 'image' ? (
                     <img
-                      src={`/api/hunter/files${item.thumbnail_150}`}
+                      src={`/api/hunter/files${item.thumbnail_150 || item.file_path}`}
                       alt={item.filename}
                       className="w-full h-full object-cover"
                     />
@@ -114,7 +113,7 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
                     {item.description || item.filename}
                   </div>
                   <div className="text-sm text-gray-400">
-                    {item.taken_at 
+                    {item.taken_at
                       ? new Date(item.taken_at).toLocaleDateString()
                       : 'No date'
                     }

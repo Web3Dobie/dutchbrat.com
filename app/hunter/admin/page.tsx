@@ -7,6 +7,7 @@ import { AdminDashboard } from '../components/AdminDashboard'
 
 export default function HunterAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     checkAuthStatus()
@@ -16,26 +17,42 @@ export default function HunterAdminPage() {
     try {
       const response = await fetch('/api/hunter/auth/check')
       const data = await response.json()
-      setIsAuthenticated(data.authenticated)
+      setIsAuthenticated(data.authenticated || false)
     } catch (error) {
+      console.error('Auth check failed:', error)
       setIsAuthenticated(false)
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  if (isAuthenticated === null) {
+  const handleLogin = () => {
+    setIsAuthenticated(true)
+  }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+  }
+
+  // Loading state
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <p className="text-gray-400">Checking authentication...</p>
+        </div>
       </div>
     )
   }
 
+  // Main render
   return (
     <div className="min-h-screen bg-gray-950">
       {isAuthenticated ? (
-        <AdminDashboard onLogout={() => setIsAuthenticated(false)} />
+        <AdminDashboard onLogout={handleLogout} />
       ) : (
-        <AdminLogin onLogin={() => setIsAuthenticated(true)} />
+        <AdminLogin onLogin={handleLogin} />
       )}
     </div>
   )
