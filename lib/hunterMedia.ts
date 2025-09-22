@@ -255,6 +255,72 @@ export function extractExifData(buffer: ArrayBuffer): ProcessedExifData {
   }
 }
 
+/**
+ * Parse date from filename patterns like:
+ * - 20211220_092719.mp4 -> 2021-12-20 09:27:19
+ * - IMG_20211220_092719.jpg -> 2021-12-20 09:27:19
+ * - VID_20211220_092719.mp4 -> 2021-12-20 09:27:19
+ */
+export function parseDateFromFilename(filename: string): Date | null {
+  console.log(`📅 Attempting to parse date from filename: ${filename}`)
+  
+  // Pattern 1: YYYYMMDD_HHMMSS (your video format)
+  const pattern1 = /(\d{8})_(\d{6})/
+  const match1 = filename.match(pattern1)
+  
+  if (match1) {
+    const [, dateStr, timeStr] = match1
+    const year = parseInt(dateStr.substring(0, 4))
+    const month = parseInt(dateStr.substring(4, 6)) - 1 // JavaScript months are 0-based
+    const day = parseInt(dateStr.substring(6, 8))
+    const hour = parseInt(timeStr.substring(0, 2))
+    const minute = parseInt(timeStr.substring(2, 4))
+    const second = parseInt(timeStr.substring(4, 6))
+    
+    const date = new Date(year, month, day, hour, minute, second)
+    if (!isNaN(date.getTime())) {
+      console.log(`✅ Successfully parsed date: ${date.toISOString()}`)
+      return date
+    }
+  }
+  
+  // Pattern 2: IMG_YYYYMMDD_HHMMSS or VID_YYYYMMDD_HHMMSS
+  const pattern2 = /(?:IMG_|VID_)?(\d{8})_(\d{6})/
+  const match2 = filename.match(pattern2)
+  
+  if (match2) {
+    const [, dateStr, timeStr] = match2
+    const year = parseInt(dateStr.substring(0, 4))
+    const month = parseInt(dateStr.substring(4, 6)) - 1
+    const day = parseInt(dateStr.substring(6, 8))
+    const hour = parseInt(timeStr.substring(0, 2))
+    const minute = parseInt(timeStr.substring(2, 4))
+    const second = parseInt(timeStr.substring(4, 6))
+    
+    const date = new Date(year, month, day, hour, minute, second)
+    if (!isNaN(date.getTime())) {
+      console.log(`✅ Successfully parsed date: ${date.toISOString()}`)
+      return date
+    }
+  }
+  
+  // Pattern 3: YYYY-MM-DD format
+  const pattern3 = /(\d{4})-(\d{2})-(\d{2})/
+  const match3 = filename.match(pattern3)
+  
+  if (match3) {
+    const [, year, month, day] = match3
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    if (!isNaN(date.getTime())) {
+      console.log(`✅ Successfully parsed date (date only): ${date.toISOString()}`)
+      return date
+    }
+  }
+  
+  console.log(`⚠️ Could not parse date from filename: ${filename}`)
+  return null
+}
+
 // Authentication function
 export async function verifyFamilyAuth(username: string, password: string): Promise<boolean> {
   // Simple hardcoded auth for now - enhance with database later

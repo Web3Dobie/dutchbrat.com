@@ -2,7 +2,8 @@
 import { readdir, stat } from 'fs/promises'
 import path from 'path'
 import { readFile } from 'fs/promises'
-import { extractExifData, ProcessedExifData } from './hunterMedia'
+import { extractExifData, ProcessedExifData, parseDateFromFilename } from './hunterMedia'
+import { videoThumbnailGenerator } from './videoThumbnailGenerator'
 import { Pool } from 'pg'
 
 // Replace the getPool function with this:
@@ -112,77 +113,115 @@ export class EnhancedMediaScanner {
    * Process a single file: extract EXIF, generate thumbnails, save to database
    */
   private async processFile(
-    file: { filename: string; fullPath: string; stats: any },
-    uploadedBy: string
-  ): Promise<ScanResult | null> {
-    try {
-      const mediaType = this.getMediaType(file.filename)
+  file: { filename: string; fullPath: string; stats: any },
+  uploadedBy: string
+): Promise<ScanResult | null> {
+  try {
+    const mediaType = this.getMediaType(file.filename)
+    console.log(`🔄 Processing ${mediaType}: ${file.filename}`)
 
+    // Extract metadata based on file type
+    let exifData: ProcessedExifData = {}
+    
+    if (mediaType === 'image') {
       // Extract EXIF data for images
-      let exifData: ProcessedExifData = {}
-      if (mediaType === 'image') {
-        try {
-          const buffer = await readFile(file.fullPath)
-          // Fix ArrayBuffer issue by using buffer directly
-          exifData = extractExifData(buffer.buffer as ArrayBuffer)
-          console.log(`📊 EXIF extracted for ${file.filename}:`, {
-            hasDate: !!exifData.dateTime,
-            hasGPS: !!(exifData.latitude && exifData.longitude),
-            camera: exifData.camera
-          })
-        } catch (error) {
-          console.warn(`⚠️ EXIF extraction failed for ${file.filename}:`, error)
+      try {
+        const buffer = await readFile(file.fullPath)
+        exifData = extractExifData(buffer.buffer as ArrayBuffer)
+        console.log(`📊 EXIF extracted for ${file.filename}:`, {
+          hasDate: !!exifData.dateTime,
+          hasGPS: !!(exifData.latitude && exifData.longitude),
+          camera: exifData.camera
+        })
+      } catch (error) {
+        console.warn(`⚠️ EXIF extraction failed for ${file.filename}:`, error)
+      }
+      
+      // If no EXIF date, try filename parsing as backup
+      if (!exifData.dateTime) {
+        const parsedDate = parseDateFromFilename(file.filename)
+        if (parsedDate) {
+          exifData.dateTime = parsedDate
+          console.log(`📅 Used filename date for image: ${parsedDate.toISOString()}`)
         }
       }
-
-      // Generate thumbnails for images
-      let thumbnailPaths: ThumbnailPaths = {}
-      if (mediaType === 'image' && thumbnailGenerator.isImageSupported(file.filename)) {
-        try {
-          console.log(`🖼️ Generating thumbnails for ${file.filename}...`)
-          thumbnailPaths = await thumbnailGenerator.generateThumbnails(file.fullPath, file.filename)
-          console.log(`✅ Generated ${Object.keys(thumbnailPaths).length} thumbnails for ${file.filename}`)
-        } catch (error) {
-          console.error(`❌ Thumbnail generation failed for ${file.filename}:`, error)
-          // Continue without thumbnails
-        }
+      
+    } else if (mediaType === 'video') {
+      // For videos, parse date from filename (videos rarely have usable metadata)
+      const parsedDate = parseDateFromFilename(file.filename)
+      if (parsedDate) {
+        exifData.dateTime = parsedDate
+        console.log(`📅 Date parsed from video filename ${file.filename}: ${parsedDate.toISOString()}`)
       }
-
-      // Calculate relative path for database storage
-      let relativePath = file.fullPath.replace(this.mediaPath, '')
-      // Ensure path starts with /originals/
-      if (!relativePath.startsWith('/originals/')) {
-        const cleanPath = relativePath.replace(/^\/+/, '') // remove leading slashes
-        relativePath = `/originals/${cleanPath}`
-      }
-
-      // Save to database
-      const savedMedia = await this.saveToDatabase({
-        filename: file.filename,
-        filePath: relativePath,
-        mediaType,
-        fileSize: file.stats.size,
-        exifData,
-        thumbnailPaths,
-        uploadedBy
-      })
-
-      return {
-        id: savedMedia.id,
-        filename: savedMedia.filename,
-        media_type: savedMedia.media_type,
-        taken_at: savedMedia.taken_at,
-        has_location: !!(savedMedia.location_lat && savedMedia.location_lng),
-        thumbnail_150: savedMedia.thumbnail_150,
-        thumbnail_500: savedMedia.thumbnail_500,
-        thumbnail_1200: savedMedia.thumbnail_1200
-      }
-
-    } catch (error) {
-      console.error(`❌ Error processing file ${file.filename}:`, error)
-      return null
     }
+
+    // Generate thumbnails
+    let thumbnailPaths: ThumbnailPaths = {}
+    
+    if (mediaType === 'image' && thumbnailGenerator.isImageSupported(file.filename)) {
+      // Generate image thumbnails
+      try {
+        console.log(`🖼️ Generating thumbnails for image: ${file.filename}...`)
+        thumbnailPaths = await thumbnailGenerator.generateThumbnails(file.fullPath, file.filename)
+        console.log(`✅ Generated ${Object.keys(thumbnailPaths).length} image thumbnails for ${file.filename}`)
+      } catch (error) {
+        console.error(`❌ Image thumbnail generation failed for ${file.filename}:`, error)
+      }
+    } else if (mediaType === 'video') {
+      // Generate video thumbnails
+      try {
+        console.log(`🎬 Generating video thumbnails for: ${file.filename}...`)
+        
+        // Check if FFmpeg is available
+        const ffmpegAvailable = await videoThumbnailGenerator.isFFmpegAvailable()
+        if (!ffmpegAvailable) {
+          console.warn(`⚠️ FFmpeg not available - skipping video thumbnail generation for ${file.filename}`)
+        } else {
+          thumbnailPaths = await videoThumbnailGenerator.generateVideoThumbnails(file.fullPath, file.filename)
+          console.log(`✅ Generated ${Object.keys(thumbnailPaths).length} video thumbnails for ${file.filename}`)
+        }
+      } catch (error) {
+        console.error(`❌ Video thumbnail generation failed for ${file.filename}:`, error)
+        // Continue without thumbnails - video will still be added to database
+      }
+    }
+
+    // Calculate relative path for database storage
+    let relativePath = file.fullPath.replace(this.mediaPath, '')
+    if (!relativePath.startsWith('/originals/')) {
+      const cleanPath = relativePath.replace(/^\/+/, '')
+      relativePath = `/originals/${cleanPath}`
+    }
+
+    // Save to database
+    const savedMedia = await this.saveToDatabase({
+      filename: file.filename,
+      filePath: relativePath,
+      mediaType,
+      fileSize: file.stats.size,
+      exifData,
+      thumbnailPaths,
+      uploadedBy
+    })
+
+    console.log(`✅ Successfully processed and saved: ${file.filename}`)
+
+    return {
+      id: savedMedia.id,
+      filename: savedMedia.filename,
+      media_type: savedMedia.media_type,
+      taken_at: savedMedia.taken_at,
+      has_location: !!(savedMedia.location_lat && savedMedia.location_lng),
+      thumbnail_150: savedMedia.thumbnail_150,
+      thumbnail_500: savedMedia.thumbnail_500,
+      thumbnail_1200: savedMedia.thumbnail_1200
+    }
+
+  } catch (error) {
+    console.error(`❌ Error processing file ${file.filename}:`, error)
+    return null
   }
+}
 
   /**
    * Save processed file data to database

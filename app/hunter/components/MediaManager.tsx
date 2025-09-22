@@ -94,7 +94,7 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
               >
                 {/* Thumbnail */}
                 <div className="w-12 h-12 bg-gray-700 rounded overflow-hidden flex-shrink-0">
-                  {item.media_type === 'image' ? (
+                  {(item.media_type === 'image') || (item.media_type === 'video' && (item.thumbnail_150 || item.thumbnail_500 || item.thumbnail_1200)) ? (
                     <img
                       src={`/api/hunter/files${item.thumbnail_150 || item.file_path}`}
                       alt={item.filename}

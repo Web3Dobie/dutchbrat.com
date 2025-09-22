@@ -13,8 +13,11 @@ export async function GET(req: NextRequest) {
       startDate: searchParams.get('dateFrom') || undefined,
       endDate: searchParams.get('dateTo') || undefined,
       tags: searchParams.get('tags') ? searchParams.get('tags')!.split(',') : undefined,
-      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50
+      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50,
+      offset: searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0  // ADD THIS LINE!
     }
+    
+    console.log('API Route - Received filters:', filters) // Debug log
     
     // Use the direct function instead of the class
     const result = await getMediaFiles(filters)

@@ -46,34 +46,34 @@ export function MediaModal({ media, onClose, onNext, onPrevious }: MediaModalPro
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-      <div className="relative max-w-7xl max-h-full w-full h-full flex">
+    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-2 lg:p-4">
+      <div className="relative w-full h-full max-w-7xl flex flex-col lg:flex-row">
         
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-70 transition-opacity"
+          className="absolute top-2 right-2 lg:top-4 lg:right-4 z-10 bg-black bg-opacity-50 text-white rounded-full w-8 h-8 lg:w-10 lg:h-10 flex items-center justify-center hover:bg-opacity-70 transition-opacity"
         >
           ×
         </button>
 
-        {/* Navigation buttons */}
+        {/* Navigation buttons - positioned differently for mobile vs desktop */}
         <button
           onClick={onPrevious}
-          className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10 bg-black bg-opacity-50 text-white rounded-full w-12 h-12 flex items-center justify-center hover:bg-opacity-70 transition-opacity"
+          className="absolute left-2 top-1/2 lg:left-4 lg:top-1/2 transform -translate-y-1/2 z-10 bg-black bg-opacity-50 text-white rounded-full w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center hover:bg-opacity-70 transition-opacity"
         >
           ←
         </button>
         
         <button
           onClick={onNext}
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 z-10 bg-black bg-opacity-50 text-white rounded-full w-12 h-12 flex items-center justify-center hover:bg-opacity-70 transition-opacity"
+          className="absolute right-2 top-1/2 lg:right-4 lg:top-1/2 transform -translate-y-1/2 z-10 bg-black bg-opacity-50 text-white rounded-full w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center hover:bg-opacity-70 transition-opacity"
         >
           →
         </button>
 
-        {/* Media content */}
-        <div className="flex-1 flex items-center justify-center">
+        {/* Media content - full width on mobile, flex-1 on desktop */}
+        <div className="flex-1 flex items-center justify-center min-h-0 lg:min-h-full">
           {media.media_type === 'image' ? (
             <img
               src={`/api/hunter/files${media.thumbnail_1200 || media.file_path}`}
@@ -92,18 +92,18 @@ export function MediaModal({ media, onClose, onNext, onPrevious }: MediaModalPro
           
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <div className="animate-spin rounded-full h-6 w-6 lg:h-8 lg:w-8 border-b-2 border-white"></div>
             </div>
           )}
         </div>
 
-        {/* Metadata sidebar */}
-        <div className="w-80 bg-gray-900 bg-opacity-95 p-6 overflow-y-auto">
-          <h3 className="text-lg font-semibold mb-4 text-white">
+        {/* Metadata section - full width below image on mobile, sidebar on desktop */}
+        <div className="w-full lg:w-80 bg-gray-900 bg-opacity-95 p-4 lg:p-6 overflow-y-auto max-h-64 lg:max-h-full">
+          <h3 className="text-base lg:text-lg font-semibold mb-3 lg:mb-4 text-white">
             {media.description || 'Hunter Memory'}
           </h3>
           
-          <div className="space-y-4 text-sm">
+          <div className="space-y-3 lg:space-y-4 text-xs lg:text-sm">
             
             {/* Date */}
             <div>

@@ -18,13 +18,16 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
     })
   }
 
+  // Check if media has any thumbnails
+  const hasThumbnail = media.thumbnail_150 || media.thumbnail_500 || media.thumbnail_1200
+
   return (
     <div
       onClick={onClick}
       className="relative group cursor-pointer rounded-lg overflow-hidden bg-gray-800 aspect-square"
     >
-      {/* Thumbnail */}
-      {media.media_type === 'image' ? (
+      {/* Thumbnail - now works for both images and videos */}
+      {(media.media_type === 'image') || (media.media_type === 'video' && hasThumbnail) ? (
         <img
           src={`/api/hunter/files${media.thumbnail_150 || media.file_path}`}
           alt={media.description || media.filename}

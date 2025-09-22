@@ -20,11 +20,17 @@ export function HunterGallery({ filters }: HunterGalleryProps) {
   const fetchMedia = async (loadMore = false) => {
     try {
       setLoading(true)
+      
+      // Calculate the correct offset
+      const currentOffset = loadMore ? media.length : 0
+      
       const params = new URLSearchParams({
         limit: pageSize.toString(),
-        offset: (loadMore ? (page + 1) * pageSize : 0).toString(),
+        offset: currentOffset.toString(),
         ...filters
       })
+
+      console.log(`Fetching media: loadMore=${loadMore}, currentOffset=${currentOffset}, mediaLength=${media.length}`)
 
       const response = await fetch(`/api/hunter/media?${params}`)
       const data = await response.json()
