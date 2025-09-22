@@ -321,6 +321,99 @@ export function parseDateFromFilename(filename: string): Date | null {
   return null
 }
 
+/**
+ * Permanently delete a media file and all associated data
+ * This is irreversible - use with extreme caution
+ */
+export async function deleteMediaFile(id: number): Promise<{
+  success: boolean
+  deletedFiles: string[]
+  errors: string[]
+}> {
+  const pool = getPool()
+  const deletedFiles: string[] = []
+  const errors: string[] = []
+
+  try {
+    // 1. Get media file details before deletion
+    const media = await getMediaById(id)
+    if (!media) {
+      throw new Error(`Media file with ID ${id} not found`)
+    }
+
+    console.log(`🗑️ Starting deletion process for media ID ${id}: ${media.filename}`)
+
+    // 2. Delete associated tags first (foreign key constraint)
+    try {
+      const deleteTagsQuery = `DELETE FROM hunter_media.tags WHERE media_id = $1`
+      const tagResult = await pool.query(deleteTagsQuery, [id])
+      console.log(`🏷️ Deleted ${tagResult.rowCount || 0} associated tags`)
+    } catch (error) {
+      errors.push(`Failed to delete tags: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+
+    // 3. Delete physical files
+    const MEDIA_BASE_PATH = '/app/hunter-media'
+    
+    // Delete original file
+    try {
+      const originalPath = path.join(MEDIA_BASE_PATH, media.file_path)
+      await fs.unlink(originalPath)
+      deletedFiles.push(originalPath)
+      console.log(`📁 Deleted original file: ${originalPath}`)
+    } catch (error) {
+      errors.push(`Failed to delete original file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+
+    // Delete thumbnails if they exist
+    const thumbnailSizes = ['150', '500', '1200']
+    const ext = path.extname(media.filename)
+    const baseName = path.basename(media.filename, ext)
+
+    for (const size of thumbnailSizes) {
+      if (media[`thumbnail_${size}` as keyof typeof media]) {
+        try {
+          const thumbnailPath = path.join(MEDIA_BASE_PATH, 'thumbnails', size, `${baseName}_${size}${ext}`)
+          await fs.unlink(thumbnailPath)
+          deletedFiles.push(thumbnailPath)
+          console.log(`🖼️ Deleted ${size}px thumbnail: ${thumbnailPath}`)
+        } catch (error) {
+          errors.push(`Failed to delete ${size}px thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+    }
+
+    // 4. Delete database record
+    try {
+      const deleteMediaQuery = `DELETE FROM hunter_media.media WHERE id = $1`
+      const mediaResult = await pool.query(deleteMediaQuery, [id])
+      if (mediaResult.rowCount === 0) {
+        throw new Error('No media record was deleted')
+      }
+      console.log(`💾 Deleted database record for media ID ${id}`)
+    } catch (error) {
+      errors.push(`Failed to delete database record: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+
+    const success = errors.length === 0
+    console.log(`${success ? '✅' : '⚠️'} Deletion ${success ? 'completed successfully' : 'completed with errors'} for ${media.filename}`)
+
+    return {
+      success,
+      deletedFiles,
+      errors
+    }
+
+  } catch (error) {
+    console.error('❌ Critical error during deletion:', error)
+    return {
+      success: false,
+      deletedFiles,
+      errors: [...errors, `Critical error: ${error instanceof Error ? error.message : 'Unknown error'}`]
+    }
+  }
+}
+
 // Authentication function
 export async function verifyFamilyAuth(username: string, password: string): Promise<boolean> {
   // Simple hardcoded auth for now - enhance with database later
@@ -868,5 +961,15 @@ export class HunterMediaDB {
     return updateMediaFile(id, updates)
   }
 
-
+    /**
+     * Delete media file with safety checks
+     * Requires admin authentication at API level
+     */
+  static async deleteMediaFile(id: number): Promise<{
+    success: boolean
+    deletedFiles: string[]
+    errors: string[]
+  }> {
+    return deleteMediaFile(id)
+  }
 }

@@ -113,6 +113,29 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           </div>
         </div>
 
+        {/* Safety Notice for Delete Functionality */}
+        <div className="bg-red-900/30 border border-red-700 rounded-xl p-4 mb-8">
+          <div className="flex items-start gap-3">
+            <div className="text-red-500 text-xl flex-shrink-0">⚠️</div>
+            <div>
+              <h3 className="text-red-400 font-semibold mb-1">Delete Functionality Available</h3>
+              <p className="text-red-200 text-sm mb-2">
+                The media manager now includes permanent deletion capabilities with multiple safety measures:
+              </p>
+              <ul className="text-red-200 text-sm space-y-1 ml-4">
+                <li>• Three-step confirmation process required</li>
+                <li>• Type exact confirmation phrase</li>
+                <li>• 10-second countdown with final checkbox</li>
+                <li>• Deletes original files, thumbnails, and database records</li>
+                <li>• <strong className="text-red-400">Actions are IRREVERSIBLE</strong></li>
+              </ul>
+              <p className="text-yellow-300 text-sm mt-2 font-medium">
+                💾 Remember: You have multiple backups of Hunter's photos as confirmed
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 mb-8">
           <button
