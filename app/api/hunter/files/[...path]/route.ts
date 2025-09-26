@@ -17,9 +17,10 @@ export async function GET(
             return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
         }
 
-        // Check if file exists
+        // Check if file exists and get stats
+        let stats
         try {
-            await fs.access(resolvedPath)
+            stats = await fs.stat(resolvedPath)
         } catch {
             return NextResponse.json({ error: 'File not found' }, { status: 404 })
         }
@@ -27,17 +28,35 @@ export async function GET(
         // Determine content type
         const ext = path.extname(resolvedPath).toLowerCase()
         const contentType = getContentType(ext)
+        const fileSize = stats.size
 
-        // Read file
-        const fileBuffer = await fs.readFile(resolvedPath)
+        // For videos, force HTTP/1.1 and disable range requests to avoid HTTP/2 issues
+        if (isVideoFile(ext)) {
+            // Read the entire file (only for testing - not ideal for large files)
+            const fileBuffer = await fs.readFile(resolvedPath)
 
-        return new NextResponse(new Uint8Array(fileBuffer), {
-            status: 200,
-            headers: {
-                'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=31536000',
-            },
-        })
+            return new NextResponse(new Uint8Array(fileBuffer), {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Content-Length': fileSize.toString(),
+                    'Cache-Control': 'public, max-age=31536000',
+                    'Connection': 'close', // Force HTTP/1.1
+                    'Upgrade': 'http/1.1', // Disable HTTP/2
+                },
+            })
+        } else {
+            // Handle images normally
+            const fileBuffer = await fs.readFile(resolvedPath)
+            return new NextResponse(new Uint8Array(fileBuffer), {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Content-Length': fileSize.toString(),
+                    'Cache-Control': 'public, max-age=31536000',
+                },
+            })
+        }
     } catch (error) {
         console.error('Error serving file:', error)
         return NextResponse.json({ error: 'Failed to serve file' }, { status: 500 })
@@ -60,4 +79,9 @@ function getContentType(ext: string): string {
         '.webm': 'video/webm',
     }
     return types[ext] || 'application/octet-stream'
+}
+
+function isVideoFile(ext: string): boolean {
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v']
+    return videoExtensions.includes(ext.toLowerCase())
 }

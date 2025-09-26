@@ -27,52 +27,54 @@ export default function Navbar() {
                     <h1 className="text-xl font-bold text-white">
                         DutchBrat
                     </h1>
-                    
+
                     {/* Desktop Navigation Links */}
                     <div className="hidden md:flex items-center gap-4 text-sm">
-                        <Link 
-                            href="/" 
+                        <Link
+                            href="/"
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
                             Home
                         </Link>
-                        <Link 
-                            href="/briefings" 
+                        <Link
+                            href="/briefings"
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
                             Briefings
                         </Link>
-                        <Link 
-                            href="/articles" 
+                        <Link
+                            href="/articles"
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
                             Articles
                         </Link>
+                        {/*}
                         <Link 
                             href="/hunter" 
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
                             Hunter 🐾
                         </Link>
-                        <a 
-                            href="https://x.com/@Web3_Dobie" 
-                            target="_blank" 
+                        */}
+                        <a
+                            href="https://x.com/@Web3_Dobie"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
                             Hunter-X
                         </a>
-                        <a 
-                            href="https://web3dobie.substack.com" 
-                            target="_blank" 
+                        <a
+                            href="https://web3dobie.substack.com"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
                             Newsletter
                         </a>
-                        <a 
-                            href="https://github.com/Web3Dobie/X-AI-Agent" 
-                            target="_blank" 
+                        <a
+                            href="https://github.com/Web3Dobie/X-AI-Agent"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-gray-200 hover:text-white transition-colors duration-300"
                         >
@@ -86,27 +88,27 @@ export default function Navbar() {
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                             className="text-white focus:outline-none"
                         >
-                            <svg 
-                                className="w-6 h-6" 
-                                fill="none" 
-                                stroke="currentColor" 
+                            <svg
+                                className="w-6 h-6"
+                                fill="none"
+                                stroke="currentColor"
                                 viewBox="0 0 24 24"
                             >
                                 {mobileMenuOpen ? (
                                     // X icon when menu is open
-                                    <path 
-                                        strokeLinecap="round" 
-                                        strokeLinejoin="round" 
-                                        strokeWidth={2} 
-                                        d="M6 18L18 6M6 6l12 12" 
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
                                     />
                                 ) : (
                                     // Hamburger icon when menu is closed
-                                    <path 
-                                        strokeLinecap="round" 
-                                        strokeLinejoin="round" 
-                                        strokeWidth={2} 
-                                        d="M4 6h16M4 12h16M4 18h16" 
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 6h16M4 12h16M4 18h16"
                                     />
                                 )}
                             </svg>
@@ -118,54 +120,54 @@ export default function Navbar() {
                 {mobileMenuOpen && (
                     <div className="md:hidden mt-4 pb-4 border-t border-gray-700">
                         <div className="flex flex-col space-y-3 pt-4">
-                            <Link 
-                                href="/" 
+                            <Link
+                                href="/"
                                 className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
                                 onClick={closeMobileMenu}
                             >
                                 Home
                             </Link>
-                            <Link 
-                                href="/briefings" 
+                            <Link
+                                href="/briefings"
                                 className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
                                 onClick={closeMobileMenu}
                             >
                                 Briefings
                             </Link>
-                            <Link 
-                                href="/articles" 
+                            <Link
+                                href="/articles"
                                 className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
                                 onClick={closeMobileMenu}
                             >
                                 Articles
                             </Link>
-                            <Link 
-                                href="/hunter" 
+                            <Link
+                                href="/hunter"
                                 className="text-gray-200 hover:text-white transition-colors duration-300"
                             >
                                 Hunter 🐾
                             </Link>
-                            <a 
-                                href="https://x.com/@Web3_Dobie" 
-                                target="_blank" 
+                            <a
+                                href="https://x.com/@Web3_Dobie"
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
                                 onClick={closeMobileMenu}
                             >
                                 Hunter-X
                             </a>
-                            <a 
-                                href="https://web3dobie.substack.com" 
-                                target="_blank" 
+                            <a
+                                href="https://web3dobie.substack.com"
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
                                 onClick={closeMobileMenu}
                             >
                                 Newsletter
                             </a>
-                            <a 
-                                href="https://github.com/Web3Dobie/X-AI-Agent" 
-                                target="_blank" 
+                            <a
+                                href="https://github.com/Web3Dobie/X-AI-Agent"
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
                                 onClick={closeMobileMenu}

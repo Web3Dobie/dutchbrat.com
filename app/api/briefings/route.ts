@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
 import { Pool } from 'pg';
+import { getRedisService, BriefingData } from '../../../lib/redis';
 
 const notion = new Client({
     auth: process.env.NOTION_API_KEY,
@@ -10,8 +11,9 @@ const notion = new Client({
 });
 
 const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
+const redis = getRedisService();
 
-// --- COMPLETE HELPER FUNCTIONS (UNCHANGED) ---
+// --- HELPER FUNCTIONS (UNCHANGED) ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
@@ -166,103 +168,174 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
     return assembleBlocks(topLevelBlocks);
 }
 
-// UNIFIED GET METHOD
-export async function GET(req: NextRequest) {
-    // --- DIAGNOSTIC LOG ---
-    // This log will prove that the latest version of the code is running.
-    console.log("--- API VERSION CHECK: v1.5 ---");
-    // --- END DIAGNOSTIC LOG ---
+/**
+ * Fetch briefing from Notion and cache it
+ */
+async function fetchAndCacheBriefing(notionId: string, briefingRecord: any): Promise<BriefingData> {
+    console.log(`⚡ Fetching briefing from Notion: ${notionId}`);
+    
+    const content = await parseNotionBlocks(notionId);
+    const pageResponse = await notion.pages.retrieve({ page_id: notionId });
+    const page = pageResponse as any;
+    
+    if (!page.properties) {
+        throw new Error(`Could not retrieve properties for Notion page ${notionId}`);
+    }
 
+    const briefingData: BriefingData = {
+        id: briefingRecord?.id || page.id,
+        title: getTitle(page.properties.Name),
+        period: getSelectValue(page.properties.Period),
+        date: getDateValue(page.properties.Date),
+        pageUrl: getUrlValue(page.properties['PDF Link']),
+        tweetUrl: getUrlValue(page.properties['Tweet URL']),
+        marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
+        content: content
+    };
+
+    // Cache in Redis if briefing has database ID
+    if (briefingRecord?.id) {
+        await redis.setBriefing(briefingRecord.id, notionId, briefingData);
+    }
+
+    return briefingData;
+}
+
+/**
+ * Get single briefing with Redis caching and lock mechanism
+ */
+async function getSingleBriefing(briefingIdParam: string): Promise<BriefingData> {
+    let dbId: number | null = null;
+    let notionId: string | null = null;
+    let briefingRecord: any = null;
+
+    // Resolve briefing ID and Notion ID
+    try {
+        if (!isNaN(parseInt(briefingIdParam))) {
+            dbId = parseInt(briefingIdParam);
+            const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
+            if (res.rows.length > 0) {
+                briefingRecord = res.rows[0];
+                notionId = briefingRecord.notion_page_id;
+            }
+        } else {
+            notionId = briefingIdParam;
+            const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
+            if (res.rows.length > 0) {
+                briefingRecord = res.rows[0];
+                dbId = briefingRecord.id;
+            }
+        }
+    } catch (e) {
+        console.error(`Database error during ID lookup for ${briefingIdParam}:`, e);
+        throw new Error('Database error');
+    }
+
+    if (!notionId) {
+        throw new Error('Briefing not found');
+    }
+
+    // Try Redis cache first
+    let cachedBriefing: BriefingData | null = null;
+    
+    if (dbId) {
+        cachedBriefing = await redis.getBriefing(dbId);
+    } else {
+        cachedBriefing = await redis.getBriefingByNotionId(notionId);
+    }
+
+    if (cachedBriefing) {
+        console.log(`🚀 REDIS CACHE HIT for briefing ${briefingIdParam}`);
+        return cachedBriefing;
+    }
+
+    console.log(`⚠️ Cache miss for briefing ${briefingIdParam}`);
+
+    // If we have a database ID, use lock mechanism to prevent concurrent fetches
+    if (dbId) {
+        const lockAcquired = await redis.acquireLock(dbId, 25000);
+        
+        if (!lockAcquired) {
+            // Another request is building this briefing, wait for it
+            console.log(`⏳ Waiting for briefing ${dbId} to be built by another request...`);
+            const waitResult = await redis.waitForBriefing(dbId, 20000);
+            
+            if (waitResult) {
+                console.log(`✅ Got briefing ${dbId} from waiting`);
+                return waitResult;
+            }
+            
+            console.log(`⏱️ Timeout waiting for briefing ${dbId}, proceeding to fetch`);
+        }
+
+        try {
+            // Fetch from Notion and cache
+            const briefingData = await fetchAndCacheBriefing(notionId, briefingRecord);
+            return briefingData;
+        } finally {
+            // Always release the lock
+            await redis.releaseLock(dbId);
+        }
+    } else {
+        // No database ID, just fetch directly
+        return await fetchAndCacheBriefing(notionId, briefingRecord);
+    }
+}
+
+// UNIFIED GET METHOD WITH REDIS CACHING
+export async function GET(req: NextRequest) {
+    console.log("--- API VERSION: Redis-Cached v2.0 ---");
+    
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
 
+    // SINGLE BRIEFING REQUEST
     if (briefingIdParam) {
         console.log(`🚀 API called for specific briefingId: ${briefingIdParam}`);
-        let dbId: number | null = null;
-        let notionId: string | null = null;
-        let briefingRecord: any = null;
-
+        
         try {
-            if (!isNaN(parseInt(briefingIdParam))) {
-                dbId = parseInt(briefingIdParam);
-                const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
-                if (res.rows.length > 0) {
-                    briefingRecord = res.rows[0];
-                    notionId = briefingRecord.notion_page_id;
-                }
-            } else {
-                notionId = briefingIdParam;
-                const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
-                if (res.rows.length > 0) {
-                    briefingRecord = res.rows[0];
-                }
-            }
-        } catch (e) {
-            console.error(`Database error during ID lookup for ${briefingIdParam}:`, e);
-            return NextResponse.json({ error: 'Database error' }, { status: 500 });
-        }
-
-        if (!notionId) {
-            console.error(`Could not resolve a Notion Page ID from the provided identifier: ${briefingIdParam}`);
-            return NextResponse.json({ error: 'Briefing not found' }, { status: 404 });
-        }
-
-        if (briefingRecord && briefingRecord.json_content) {
-            console.log(`✅ Returning fast response from DATABASE CACHE for Notion ID: ${notionId}`);
-            return NextResponse.json({ data: [briefingRecord.json_content] });
-        }
-
-        console.log(`⚠️ Cache miss for Notion ID ${notionId}. Fetching from Notion.`);
-
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('API timeout exceeded while fetching from Notion.')), 25000)
-        );
-
-        const fetchAndParsePromise = (async () => {
-            const content = await parseNotionBlocks(notionId);
-            const pageResponse = await notion.pages.retrieve({ page_id: notionId });
-            const page = pageResponse as any;
-            if (!page.properties) { throw new Error(`Could not retrieve properties for Notion page ${notionId}`); }
-
-            return {
-                id: briefingRecord?.id || page.id,
-                title: getTitle(page.properties.Name),
-                period: getSelectValue(page.properties.Period),
-                date: getDateValue(page.properties.Date),
-                pageUrl: getUrlValue(page.properties['PDF Link']),
-                tweetUrl: getUrlValue(page.properties['Tweet URL']),
-                marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: content
-            };
-        })();
-
-        try {
-            const singleBriefing = await Promise.race([fetchAndParsePromise, timeoutPromise]);
-            return NextResponse.json({ data: [singleBriefing] });
+            const briefingData = await getSingleBriefing(briefingIdParam);
+            return NextResponse.json({ data: [briefingData] });
         } catch (err: any) {
-            console.error(`Error fetching specific briefing from Notion (${notionId}):`, err)
-            const status = err.message.includes('object_not_found') ? 404 : 500;
-            const statusText = err.message.includes('object_not_found') ? 'Not Found in Notion' : 'Internal Server Error';
-            return NextResponse.json({ error: err.message }, { status, statusText });
+            console.error(`Error fetching specific briefing:`, err);
+            const status = err.message.includes('not found') ? 404 : 500;
+            return NextResponse.json({ error: err.message }, { status });
         }
     }
 
-    // --- List view (unchanged) ---
+    // BRIEFINGS LIST REQUEST WITH REDIS CACHING
     console.log('🚀 API called for list of briefings');
+    
+    const pageSize = parseInt(searchParams.get('pageSize') || '10');
+    const startCursor = searchParams.get('cursor') || undefined;
+    
+    // Try Redis cache for list
+    const cachedList = await redis.getBriefingsList(startCursor);
+    if (cachedList && cachedList.length > 0) {
+        console.log(`🚀 REDIS CACHE HIT for briefings list (${cachedList.length} items)`);
+        return NextResponse.json({
+            data: cachedList,
+            pagination: { hasMore: false, nextCursor: null } // Simplified for cached response
+        });
+    }
+
+    console.log('⚠️ Cache miss for briefings list, fetching from Notion');
+
     try {
         const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
-        const pageSize = parseInt(searchParams.get('pageSize') || '10');
-        const startCursor = searchParams.get('cursor') || undefined;
+        
         const response = await notion.databases.query({
             database_id: databaseId,
             sorts: [{ property: 'Date', direction: 'descending' }],
             page_size: pageSize,
             start_cursor: startCursor
         });
+
         const briefingsPromises = response.results.map(async (result) => {
             const page = result as any;
             if (!page.properties) return null;
-            return {
+            
+            const briefingData: BriefingData = {
                 id: page.id,
                 title: getTitle(page.properties.Name),
                 period: getSelectValue(page.properties.Period),
@@ -272,12 +345,20 @@ export async function GET(req: NextRequest) {
                 marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
                 content: await parseNotionBlocks(page.id)
             };
+
+            return briefingData;
         });
-        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean);
+
+        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean) as BriefingData[];
+        
+        // Cache the results
+        await redis.setBriefingsList(briefings, startCursor);
+        
         return NextResponse.json({
             data: briefings,
             pagination: { hasMore: response.has_more, nextCursor: response.next_cursor }
         });
+        
     } catch (err: any) {
         console.error('Error fetching briefings list:', err);
         return NextResponse.json({ error: err.message }, { status: 500 });
