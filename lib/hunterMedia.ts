@@ -127,6 +127,7 @@ export interface SearchFilters {
   type?: 'image' | 'video'
   limit?: number | string
   offset?: number
+  year?: number
   // Additional filters for new API routes
   mediaType?: 'image' | 'video'
   dateFrom?: Date
@@ -263,11 +264,11 @@ export function extractExifData(buffer: ArrayBuffer): ProcessedExifData {
  */
 export function parseDateFromFilename(filename: string): Date | null {
   console.log(`📅 Attempting to parse date from filename: ${filename}`)
-  
+
   // Pattern 1: YYYYMMDD_HHMMSS (your video format)
   const pattern1 = /(\d{8})_(\d{6})/
   const match1 = filename.match(pattern1)
-  
+
   if (match1) {
     const [, dateStr, timeStr] = match1
     const year = parseInt(dateStr.substring(0, 4))
@@ -276,18 +277,18 @@ export function parseDateFromFilename(filename: string): Date | null {
     const hour = parseInt(timeStr.substring(0, 2))
     const minute = parseInt(timeStr.substring(2, 4))
     const second = parseInt(timeStr.substring(4, 6))
-    
+
     const date = new Date(year, month, day, hour, minute, second)
     if (!isNaN(date.getTime())) {
       console.log(`✅ Successfully parsed date: ${date.toISOString()}`)
       return date
     }
   }
-  
+
   // Pattern 2: IMG_YYYYMMDD_HHMMSS or VID_YYYYMMDD_HHMMSS
   const pattern2 = /(?:IMG_|VID_)?(\d{8})_(\d{6})/
   const match2 = filename.match(pattern2)
-  
+
   if (match2) {
     const [, dateStr, timeStr] = match2
     const year = parseInt(dateStr.substring(0, 4))
@@ -296,18 +297,18 @@ export function parseDateFromFilename(filename: string): Date | null {
     const hour = parseInt(timeStr.substring(0, 2))
     const minute = parseInt(timeStr.substring(2, 4))
     const second = parseInt(timeStr.substring(4, 6))
-    
+
     const date = new Date(year, month, day, hour, minute, second)
     if (!isNaN(date.getTime())) {
       console.log(`✅ Successfully parsed date: ${date.toISOString()}`)
       return date
     }
   }
-  
+
   // Pattern 3: YYYY-MM-DD format
   const pattern3 = /(\d{4})-(\d{2})-(\d{2})/
   const match3 = filename.match(pattern3)
-  
+
   if (match3) {
     const [, year, month, day] = match3
     const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
@@ -316,7 +317,7 @@ export function parseDateFromFilename(filename: string): Date | null {
       return date
     }
   }
-  
+
   console.log(`⚠️ Could not parse date from filename: ${filename}`)
   return null
 }
@@ -354,7 +355,7 @@ export async function deleteMediaFile(id: number): Promise<{
 
     // 3. Delete physical files
     const MEDIA_BASE_PATH = '/app/hunter-media'
-    
+
     // Delete original file
     try {
       const originalPath = path.join(MEDIA_BASE_PATH, media.file_path)
@@ -536,12 +537,27 @@ export async function getMediaFiles(filters: SearchFilters = {}): Promise<MediaR
     valueIndex++
   }
 
+  if (filters.year) {
+    conditions.push(`EXTRACT(YEAR FROM m.taken_at) = $${valueIndex}`)
+    values.push(filters.year)
+    valueIndex++
+  }
+
   if (filters.hasLocation) {
     conditions.push(`m.location_lat IS NOT NULL AND m.location_lng IS NOT NULL`)
   }
 
   if (filters.tags && filters.tags.length > 0) {
-    conditions.push(`t.tag_value = ANY($${valueIndex})`)
+    // AND logic: media must have ALL specified tags
+    conditions.push(`
+      m.id IN (
+        SELECT media_id 
+        FROM hunter_media.tags 
+        WHERE tag_value = ANY($${valueIndex})
+        GROUP BY media_id 
+        HAVING COUNT(DISTINCT tag_value) = ${filters.tags.length}
+      )
+    `)
     values.push(filters.tags)
     valueIndex++
   }
@@ -603,12 +619,27 @@ export async function getMediaFiles(filters: SearchFilters = {}): Promise<MediaR
       countValueIndex++
     }
 
+    if (filters.year) {
+      countConditions.push(`EXTRACT(YEAR FROM m.taken_at) = $${countValueIndex}`)
+      countValues.push(filters.year)
+      countValueIndex++
+    }
+
     if (filters.hasLocation) {
       countConditions.push(`m.location_lat IS NOT NULL AND m.location_lng IS NOT NULL`)
     }
 
     if (filters.tags && filters.tags.length > 0) {
-      countConditions.push(`t.tag_value = ANY($${countValueIndex})`)
+      // AND logic: media must have ALL specified tags
+      countConditions.push(`
+        m.id IN (
+          SELECT media_id 
+          FROM hunter_media.tags 
+          WHERE tag_value = ANY($${countValueIndex})
+          GROUP BY media_id 
+          HAVING COUNT(DISTINCT tag_value) = ${filters.tags.length}
+        )
+      `)
       countValues.push(filters.tags)
       countValueIndex++
     }
@@ -961,10 +992,10 @@ export class HunterMediaDB {
     return updateMediaFile(id, updates)
   }
 
-    /**
-     * Delete media file with safety checks
-     * Requires admin authentication at API level
-     */
+  /**
+   * Delete media file with safety checks
+   * Requires admin authentication at API level
+   */
   static async deleteMediaFile(id: number): Promise<{
     success: boolean
     deletedFiles: string[]
