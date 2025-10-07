@@ -2,8 +2,18 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
+import { Pool } from 'pg'
 
 const notion = new Client({ auth: process.env.NOTION_API_KEY })
+
+const pool = new Pool({
+    host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'postgres',
+    port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432'),
+    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'agents_platform',
+    user: process.env.POSTGRES_USER || process.env.DB_USER || 'hunter_admin',
+    password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
+    ssl: false
+})
 
 // Helper function to extract title from Notion title property
 function getTitle(titleProperty: any): string {
@@ -51,7 +61,7 @@ export async function GET(req: NextRequest) {
                     direction: 'descending',
                 },
             ],
-            page_size: 1, // We only want the latest briefing
+            page_size: 1,
         })
 
         if (!response.results || response.results.length === 0) {
@@ -61,21 +71,36 @@ export async function GET(req: NextRequest) {
             )
         }
 
-        // Transform the latest briefing to our metadata format
         const latestPage = response.results[0] as any
         const properties = latestPage.properties
+        const notionId = latestPage.id
+
+        // Look up database ID from PostgreSQL
+        let databaseId_int = notionId; // fallback to Notion ID
+        try {
+            const dbResult = await pool.query(
+                'SELECT id FROM hedgefund_agent.briefings WHERE notion_page_id = $1',
+                [notionId]
+            )
+            if (dbResult.rows[0]?.id) {
+                databaseId_int = dbResult.rows[0].id.toString()
+            }
+        } catch (dbErr) {
+            console.error('Failed to lookup database ID:', dbErr)
+            // Continue with Notion ID as fallback
+        }
 
         const briefingMetadata = {
-            id: latestPage.id,
+            id: databaseId_int,
             title: getTitle(properties.Name),
             period: getSelectValue(properties.Period),
             date: getDateValue(properties.Date),
-            pageUrl: getUrlValue(properties['PDF Link']), // Renamed from pdfUrl
+            pageUrl: getUrlValue(properties['PDF Link']),
             tweetUrl: getUrlValue(properties['Tweet URL']),
             marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || [])
         }
 
-        console.log(`Returning latest briefing metadata: ${briefingMetadata.title}`)
+        console.log(`Returning latest briefing: ${briefingMetadata.title} with ID: ${briefingMetadata.id}`)
 
         return NextResponse.json(briefingMetadata)
     } catch (err: any) {

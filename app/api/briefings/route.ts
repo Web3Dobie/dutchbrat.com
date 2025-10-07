@@ -1,4 +1,4 @@
-// frontend/app/api/briefings/route.ts
+// app/api/briefings/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Client } from '@notionhq/client'
@@ -10,10 +10,17 @@ const notion = new Client({
     timeoutMs: 20000
 });
 
-const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
+const pool = new Pool({
+    host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'postgres',
+    port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432'),
+    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'agents_platform',
+    user: process.env.POSTGRES_USER || process.env.DB_USER || 'hunter_admin',
+    password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
+    ssl: false
+});
 const redis = getRedisService();
 
-// --- HELPER FUNCTIONS (UNCHANGED) ---
+// --- HELPER FUNCTIONS ---
 function getPlainText(richText: any[]): string {
     if (!richText || !Array.isArray(richText)) return '';
     return richText.map(item => item.plain_text || '').join('');
@@ -39,91 +46,106 @@ function parseRichText(richText: any[]): any[] {
     return richText.map(item => ({
         type: 'text',
         text: item.plain_text || item.text?.content || '',
-        annotations: item.annotations || { bold: false, italic: false, strikethrough: false, underline: false, code: false, color: 'default' },
+        annotations: item.annotations || {
+            bold: false,
+            italic: false,
+            strikethrough: false,
+            underline: false,
+            code: false,
+            color: 'default'
+        },
         href: item.href || item.text?.link?.url || null
-    }));
-}
-function sortTableByPerformance(tableBlock: any): any {
-    if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
-        return tableBlock;
-    }
-    const hasHeader = tableBlock.content?.hasColumnHeader;
-    const dataRowsStartIndex = hasHeader ? 1 : 0;
-    if (tableBlock.children.length <= dataRowsStartIndex) {
-        return tableBlock;
-    }
-    const findPerfColumn = (row: any): number => {
-        const cells = row?.content?.cells;
-        if (!cells) return -1;
-        for (let i = 0; i < cells.length; i++) {
-            const cellText = getPlainText(cells[i]).toLowerCase();
-            if (cellText.includes('%') || cellText.includes('bps')) {
-                return i;
-            }
-        }
-        return -1;
-    };
-    const cleanAndParse = (cell: any): number => {
-        if (!cell) return NaN;
-        const text = getPlainText(cell);
-        const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
-        return parseFloat(cleanedText);
-    };
-    const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
-    if (changeColumnIndex === -1) {
-        return tableBlock;
-    }
-    const headerRow = hasHeader ? tableBlock.children.slice(0, 1) : [];
-    const dataRows = tableBlock.children.slice(dataRowsStartIndex);
-    dataRows.sort((rowA: any, rowB: any) => {
-        const valueA = cleanAndParse(rowA?.content?.cells[changeColumnIndex]);
-        const valueB = cleanAndParse(rowB?.content?.cells[changeColumnIndex]);
-        if (isNaN(valueA) || isNaN(valueB)) return 0;
-        return valueB - valueA;
-    });
-    tableBlock.children = [...headerRow, ...dataRows];
-    return tableBlock;
+    })).filter(item => item.text !== ''); // Remove empty text items
 }
 
-// --- OPTIMIZED PARSING LOGIC (UNCHANGED) ---
-async function fetchBlockChildren(blockId: string): Promise<any[]> {
-    try {
-        const response = await notion.blocks.children.list({ block_id: blockId, page_size: 100 });
-        return response.results;
-    } catch (error) {
-        console.error(`Failed to fetch children for block ${blockId}:`, error);
-        return [];
-    }
-}
-
+// --- NOTION BLOCK PARSING ---
 async function parseNotionBlocks(pageId: string): Promise<any[]> {
-    const topLevelBlocks = await fetchBlockChildren(pageId);
-    if (topLevelBlocks.length === 0) {
-        return [];
-    }
-    const childrenMap: { [key: string]: any[] } = {};
-    const blocksToFetch = new Set<string>();
-    const findChildrenRecursively = (blocks: any[]) => {
-        for (const block of blocks) {
-            if (block.has_children) {
-                blocksToFetch.add(block.id);
-            }
-        }
-    };
-    findChildrenRecursively(topLevelBlocks);
+    const allBlocks: any[] = [];
+    let cursor: string | undefined = undefined;
 
-    let currentLevelIds = Array.from(blocksToFetch);
-    while (currentLevelIds.length > 0) {
-        const childFetchPromises = currentLevelIds.map(id => fetchBlockChildren(id));
-        const results = await Promise.all(childFetchPromises);
-
-        results.forEach((children, index) => {
-            const parentId = currentLevelIds[index];
-            childrenMap[parentId] = children;
-            findChildrenRecursively(children);
+    do {
+        const response: any = await notion.blocks.children.list({
+            block_id: pageId,
+            start_cursor: cursor,
+            page_size: 100
         });
+        allBlocks.push(...response.results);
+        cursor = response.next_cursor || undefined;
+    } while (cursor);
 
-        currentLevelIds = Array.from(blocksToFetch).filter(id => !childrenMap[id]);
+    const childrenMap: Record<string, any[]> = {};
+    const topLevelBlocks: any[] = [];
+
+    for (const block of allBlocks) {
+        if (block.has_children && block.type !== 'column_list' && block.type !== 'table') {
+            const childCursor: string | undefined = undefined;
+            const childBlocks: any[] = [];
+            let childCursorLoop = childCursor;
+            do {
+                const childResponse: any = await notion.blocks.children.list({
+                    block_id: block.id,
+                    start_cursor: childCursorLoop,
+                    page_size: 100
+                });
+                childBlocks.push(...childResponse.results);
+                childCursorLoop = childResponse.next_cursor || undefined;
+            } while (childCursorLoop);
+
+            childrenMap[block.id] = childBlocks;
+        }
+    }
+
+    for (const block of allBlocks) {
+        const parentId = (block as any).parent?.block_id;
+        if (!parentId || !allBlocks.some(b => b.id === parentId)) {
+            topLevelBlocks.push(block);
+        }
+    }
+
+    function sortTableByPerformance(tableBlock: any): any {
+        if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
+            return tableBlock;
+        }
+        const hasHeader = tableBlock.content?.hasColumnHeader;
+        const dataRowsStartIndex = hasHeader ? 1 : 0;
+        if (tableBlock.children.length <= dataRowsStartIndex) {
+            return tableBlock;
+        }
+        const findPerfColumn = (row: any): number => {
+            const cells = row?.content?.cells;
+            if (!cells) return -1;
+            for (let i = 0; i < cells.length; i++) {
+                const cellText = getPlainText(cells[i]).toLowerCase();
+                if (cellText.includes('%') || cellText.includes('bps')) {
+                    return i;
+                }
+            }
+            return -1;
+        };
+        const cleanAndParse = (cell: any): number => {
+            if (!cell) return NaN;
+            const text = getPlainText(cell);
+            const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
+            return parseFloat(cleanedText);
+        };
+        const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
+        if (changeColumnIndex === -1) {
+            return tableBlock;
+        }
+        const headerRow = hasHeader ? [tableBlock.children[0]] : [];
+        const dataRows = tableBlock.children.slice(dataRowsStartIndex);
+        dataRows.sort((a, b) => {
+            const cellA = a.content?.cells?.[changeColumnIndex];
+            const cellB = b.content?.cells?.[changeColumnIndex];
+            const numA = cleanAndParse(cellA);
+            const numB = cleanAndParse(cellB);
+            if (isNaN(numA) && isNaN(numB)) return 0;
+            if (isNaN(numA)) return 1;
+            if (isNaN(numB)) return -1;
+            return numB - numA;
+        });
+        tableBlock.children = [...headerRow, ...dataRows];
+        return tableBlock;
     }
 
     const assembleBlocks = (blocks: any[]): any[] => {
@@ -169,58 +191,172 @@ async function parseNotionBlocks(pageId: string): Promise<any[]> {
 }
 
 /**
- * Fetch briefing from Notion and cache it
+ * Backfill a briefing from Notion (when json_content is NULL)
+ * CRITICAL FIX: Use database integer ID, not Notion UUID
  */
-async function fetchAndCacheBriefing(notionId: string, briefingRecord: any): Promise<BriefingData> {
-    console.log(`⚡ Fetching briefing from Notion: ${notionId}`);
-    
-    const content = await parseNotionBlocks(notionId);
-    const pageResponse = await notion.pages.retrieve({ page_id: notionId });
-    const page = pageResponse as any;
-    
-    if (!page.properties) {
-        throw new Error(`Could not retrieve properties for Notion page ${notionId}`);
+async function backfillBriefingFromNotion(dbId: number, notionPageId: string): Promise<BriefingData> {
+    console.log(`Backfilling briefing ${dbId} from Notion: ${notionPageId}`);
+
+    try {
+        const content = await parseNotionBlocks(notionPageId);
+        const pageResponse = await notion.pages.retrieve({ page_id: notionPageId });
+        const page = pageResponse as any;
+
+        if (!page.properties) {
+            throw new Error(`Could not retrieve properties for Notion page ${notionPageId}`);
+        }
+
+        const briefingData: BriefingData = {
+            id: dbId.toString(), // CRITICAL: Use database ID, not Notion ID
+            title: getTitle(page.properties.Name),
+            period: getSelectValue(page.properties.Period),
+            date: getDateValue(page.properties.Date),
+            pageUrl: getUrlValue(page.properties['PDF Link']),
+            tweetUrl: getUrlValue(page.properties['Tweet URL']),
+            marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
+            content: content
+        };
+
+        // Save to PostgreSQL
+        await pool.query(
+            `UPDATE hedgefund_agent.briefings 
+             SET json_content = $1 
+             WHERE id = $2`,
+            [JSON.stringify(briefingData), dbId]
+        );
+
+        console.log(`Backfilled briefing ${dbId} to database`);
+
+        // Cache in Redis
+        await redis.setBriefing(dbId, notionPageId, briefingData);
+
+        return briefingData;
+    } catch (error) {
+        console.error(`Failed to backfill briefing ${dbId}:`, error);
+        throw error;
     }
-
-    const briefingData: BriefingData = {
-        id: briefingRecord?.id || page.id,
-        title: getTitle(page.properties.Name),
-        period: getSelectValue(page.properties.Period),
-        date: getDateValue(page.properties.Date),
-        pageUrl: getUrlValue(page.properties['PDF Link']),
-        tweetUrl: getUrlValue(page.properties['Tweet URL']),
-        marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-        content: content
-    };
-
-    // Cache in Redis if briefing has database ID
-    if (briefingRecord?.id) {
-        await redis.setBriefing(briefingRecord.id, notionId, briefingData);
-    }
-
-    return briefingData;
 }
 
 /**
- * Get single briefing with Redis caching and lock mechanism
+ * Get tree metadata (Year -> Month -> Date structure)
+ */
+async function getTreeMetadata(): Promise<any> {
+    const REDIS_KEY = 'briefings:tree-metadata';
+
+    const cached = await redis.get(REDIS_KEY);
+    if (cached) {
+        console.log('Tree metadata cache HIT');
+        return JSON.parse(cached);
+    }
+
+    console.log('Tree metadata cache MISS, querying database');
+
+    const result = await pool.query(`
+        SELECT 
+            EXTRACT(YEAR FROM published_at)::INTEGER as year,
+            EXTRACT(MONTH FROM published_at)::INTEGER as month,
+            TO_CHAR(published_at, 'YYYY-MM-DD') as date,
+            COUNT(*)::INTEGER as count
+        FROM hedgefund_agent.briefings
+        WHERE published_at IS NOT NULL
+        GROUP BY year, month, date
+        ORDER BY year DESC, month DESC, date DESC
+    `);
+
+    const tree: Record<number, Record<string, Record<string, number>>> = {};
+
+    for (const row of result.rows) {
+        const year = row.year;
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthStr = monthNames[row.month - 1];
+        const dateStr = row.date; // Now "2025-10-06" format
+
+        if (!tree[year]) tree[year] = {};
+        if (!tree[year][monthStr]) tree[year][monthStr] = {};
+        tree[year][monthStr][dateStr] = row.count;
+    }
+
+    await redis.setex(REDIS_KEY, 3600, JSON.stringify(tree));
+
+    console.log(`Built tree with ${Object.keys(tree).length} years`);
+    return tree;
+}
+
+/**
+ * Get briefings for a specific date
+ * CRITICAL FIX: Override ID with database integer
+ */
+async function getBriefingsByDate(date: string): Promise<BriefingData[]> {
+    const REDIS_KEY = `briefings:by-date:${date}`;
+
+    const cached = await redis.get(REDIS_KEY);
+    if (cached) {
+        console.log(`Briefings for ${date} cache HIT`);
+        return JSON.parse(cached);
+    }
+
+    console.log(`Briefings for ${date} cache MISS, querying database`);
+
+    const result = await pool.query(`
+        SELECT id, title, briefing_type, notion_page_id, 
+               website_url, tweet_url, published_at, json_content
+        FROM hedgefund_agent.briefings
+        WHERE DATE(published_at) = $1
+        ORDER BY published_at ASC
+    `, [date]);
+
+    const briefings: BriefingData[] = [];
+
+    for (const row of result.rows) {
+        if (row.json_content) {
+            const parsed = typeof row.json_content === 'string'
+                ? JSON.parse(row.json_content)
+                : row.json_content;
+
+            parsed.id = row.id.toString();
+            briefings.push(parsed);
+        } else {
+            try {
+                const briefingData = await backfillBriefingFromNotion(row.id, row.notion_page_id);
+                briefings.push(briefingData);
+            } catch (error) {
+                console.error(`Failed to backfill briefing ${row.id}, skipping`);
+            }
+        }
+    }
+
+    await redis.setex(REDIS_KEY, 1800, JSON.stringify(briefings));
+
+    return briefings;
+}
+
+/**
+ * Get single briefing by ID
+ * CRITICAL FIX: Override ID with database integer
  */
 async function getSingleBriefing(briefingIdParam: string): Promise<BriefingData> {
     let dbId: number | null = null;
     let notionId: string | null = null;
     let briefingRecord: any = null;
 
-    // Resolve briefing ID and Notion ID
     try {
         if (!isNaN(parseInt(briefingIdParam))) {
             dbId = parseInt(briefingIdParam);
-            const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE id = $1', [dbId]);
+            const res = await pool.query(
+                'SELECT * FROM hedgefund_agent.briefings WHERE id = $1',
+                [dbId]
+            );
             if (res.rows.length > 0) {
                 briefingRecord = res.rows[0];
                 notionId = briefingRecord.notion_page_id;
             }
         } else {
             notionId = briefingIdParam;
-            const res = await pool.query('SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1', [notionId]);
+            const res = await pool.query(
+                'SELECT * FROM hedgefund_agent.briefings WHERE notion_page_id = $1',
+                [notionId]
+            );
             if (res.rows.length > 0) {
                 briefingRecord = res.rows[0];
                 dbId = briefingRecord.id;
@@ -231,136 +367,116 @@ async function getSingleBriefing(briefingIdParam: string): Promise<BriefingData>
         throw new Error('Database error');
     }
 
-    if (!notionId) {
+    if (!notionId || !briefingRecord) {
         throw new Error('Briefing not found');
     }
 
-    // Try Redis cache first
-    let cachedBriefing: BriefingData | null = null;
-    
     if (dbId) {
-        cachedBriefing = await redis.getBriefing(dbId);
-    } else {
-        cachedBriefing = await redis.getBriefingByNotionId(notionId);
+        const cachedBriefing = await redis.getBriefing(dbId);
+        if (cachedBriefing) {
+            console.log(`REDIS cache HIT for briefing ${briefingIdParam}`);
+            return cachedBriefing;
+        }
     }
 
-    if (cachedBriefing) {
-        console.log(`🚀 REDIS CACHE HIT for briefing ${briefingIdParam}`);
-        return cachedBriefing;
-    }
+    console.log(`Cache miss for briefing ${briefingIdParam}`);
 
-    console.log(`⚠️ Cache miss for briefing ${briefingIdParam}`);
+    if (briefingRecord.json_content) {
+        console.log(`Using json_content from database for briefing ${dbId}`);
+        const briefingData = typeof briefingRecord.json_content === 'string'
+            ? JSON.parse(briefingRecord.json_content)
+            : briefingRecord.json_content;
 
-    // If we have a database ID, use lock mechanism to prevent concurrent fetches
-    if (dbId) {
-        const lockAcquired = await redis.acquireLock(dbId, 25000);
-        
-        if (!lockAcquired) {
-            // Another request is building this briefing, wait for it
-            console.log(`⏳ Waiting for briefing ${dbId} to be built by another request...`);
-            const waitResult = await redis.waitForBriefing(dbId, 20000);
-            
-            if (waitResult) {
-                console.log(`✅ Got briefing ${dbId} from waiting`);
-                return waitResult;
-            }
-            
-            console.log(`⏱️ Timeout waiting for briefing ${dbId}, proceeding to fetch`);
+        // CRITICAL: Override ID with database integer
+        briefingData.id = dbId!.toString();
+
+        if (dbId) {
+            await redis.setBriefing(dbId, notionId, briefingData);
         }
 
-        try {
-            // Fetch from Notion and cache
-            const briefingData = await fetchAndCacheBriefing(notionId, briefingRecord);
-            return briefingData;
-        } finally {
-            // Always release the lock
-            await redis.releaseLock(dbId);
-        }
-    } else {
-        // No database ID, just fetch directly
-        return await fetchAndCacheBriefing(notionId, briefingRecord);
+        return briefingData;
     }
+
+    console.log(`json_content is NULL, backfilling from Notion for briefing ${dbId}`);
+    return await backfillBriefingFromNotion(dbId!, notionId);
 }
 
-// UNIFIED GET METHOD WITH REDIS CACHING
+// MAIN GET HANDLER
 export async function GET(req: NextRequest) {
-    console.log("--- API VERSION: Redis-Cached v2.0 ---");
-    
+    console.log("--- API VERSION: PostgreSQL-First v3.0 ---");
+
     const { searchParams } = new URL(req.url);
     const briefingIdParam = searchParams.get('briefingId');
-
-    // SINGLE BRIEFING REQUEST
-    if (briefingIdParam) {
-        console.log(`🚀 API called for specific briefingId: ${briefingIdParam}`);
-        
-        try {
-            const briefingData = await getSingleBriefing(briefingIdParam);
-            return NextResponse.json({ data: [briefingData] });
-        } catch (err: any) {
-            console.error(`Error fetching specific briefing:`, err);
-            const status = err.message.includes('not found') ? 404 : 500;
-            return NextResponse.json({ error: err.message }, { status });
-        }
-    }
-
-    // BRIEFINGS LIST REQUEST WITH REDIS CACHING
-    console.log('🚀 API called for list of briefings');
-    
-    const pageSize = parseInt(searchParams.get('pageSize') || '10');
-    const startCursor = searchParams.get('cursor') || undefined;
-    
-    // Try Redis cache for list
-    const cachedList = await redis.getBriefingsList(startCursor);
-    if (cachedList && cachedList.length > 0) {
-        console.log(`🚀 REDIS CACHE HIT for briefings list (${cachedList.length} items)`);
-        return NextResponse.json({
-            data: cachedList,
-            pagination: { hasMore: false, nextCursor: null } // Simplified for cached response
-        });
-    }
-
-    console.log('⚠️ Cache miss for briefings list, fetching from Notion');
+    const treeMetadata = searchParams.get('tree-metadata');
+    const dateParam = searchParams.get('date');
 
     try {
-        const databaseId = process.env.NOTION_PDF_DATABASE_ID!;
-        
-        const response = await notion.databases.query({
-            database_id: databaseId,
-            sorts: [{ property: 'Date', direction: 'descending' }],
-            page_size: pageSize,
-            start_cursor: startCursor
-        });
+        if (treeMetadata === 'true') {
+            console.log('Tree metadata requested');
+            const tree = await getTreeMetadata();
+            return NextResponse.json({ tree });
+        }
 
-        const briefingsPromises = response.results.map(async (result) => {
-            const page = result as any;
-            if (!page.properties) return null;
-            
-            const briefingData: BriefingData = {
-                id: page.id,
-                title: getTitle(page.properties.Name),
-                period: getSelectValue(page.properties.Period),
-                date: getDateValue(page.properties.Date),
-                pageUrl: getUrlValue(page.properties['PDF Link']),
-                tweetUrl: getUrlValue(page.properties['Tweet URL']),
-                marketSentiment: getPlainText(page.properties['Market Sentiment']?.rich_text || []),
-                content: await parseNotionBlocks(page.id)
-            };
+        if (dateParam) {
+            console.log(`Briefings for date ${dateParam} requested`);
+            const briefings = await getBriefingsByDate(dateParam);
+            return NextResponse.json({ data: briefings });
+        }
 
-            return briefingData;
-        });
+        if (briefingIdParam) {
+            console.log(`Single briefing requested: ${briefingIdParam}`);
+            const briefingData = await getSingleBriefing(briefingIdParam);
+            return NextResponse.json({ data: [briefingData] });
+        }
 
-        const briefings = (await Promise.all(briefingsPromises)).filter(Boolean) as BriefingData[];
-        
-        // Cache the results
-        await redis.setBriefingsList(briefings, startCursor);
-        
+        // DEFAULT: Return recent briefings
+        console.log('Recent briefings list requested (legacy mode)');
+        console.log('About to execute PostgreSQL query...');
+
+        const result = await pool.query(`
+            SELECT id, title, briefing_type, notion_page_id, 
+                   website_url as "pageUrl", tweet_url as "tweetUrl", 
+                   created_at, json_content
+            FROM hedgefund_agent.briefings
+            ORDER BY created_at DESC
+            LIMIT 10
+        `);
+
+        console.log(`PostgreSQL query returned ${result.rows.length} rows`);
+
+        const briefings: BriefingData[] = [];
+
+        for (const row of result.rows) {
+            if (row.json_content) {
+                const parsed = typeof row.json_content === 'string'
+                    ? JSON.parse(row.json_content)
+                    : row.json_content;
+
+                // CRITICAL: Override ID with database integer
+                parsed.id = row.id.toString();
+
+                console.log(`Using json_content from database for briefing ${row.id}`);
+                briefings.push(parsed);
+            } else {
+                try {
+                    const briefingData = await backfillBriefingFromNotion(row.id, row.notion_page_id);
+                    briefings.push(briefingData);
+                } catch (error) {
+                    console.error(`Failed to backfill briefing ${row.id}`);
+                }
+            }
+        }
+
         return NextResponse.json({
             data: briefings,
-            pagination: { hasMore: response.has_more, nextCursor: response.next_cursor }
+            pagination: { hasMore: false, nextCursor: null }
         });
-        
+
     } catch (err: any) {
-        console.error('Error fetching briefings list:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        console.error('Error in briefings API:', err);
+        return NextResponse.json(
+            { error: err.message || 'Internal server error' },
+            { status: 500 }
+        );
     }
 }

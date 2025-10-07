@@ -50,24 +50,22 @@ function renderRichText(richText: RichText[]): JSX.Element | null {
                 let element = <span key={index}>{textWithBreaks}</span>;
 
                 // Apply formatting (unchanged)
-                if (text.annotations.bold) {
+                if (text.annotations?.bold) {
                     element = <strong key={index}>{element}</strong>;
                 }
-                if (text.annotations.italic) {
+                if (text.annotations?.italic) {
                     element = <em key={index}>{element}</em>;
                 }
-                if (text.annotations.strikethrough) {
+                if (text.annotations?.strikethrough) {
                     element = <s key={index}>{element}</s>;
                 }
-                if (text.annotations.underline) {
+                if (text.annotations?.underline) {
                     element = <u key={index}>{element}</u>;
                 }
-                if (text.annotations.code) {
+                if (text.annotations?.code) {
                     element = <code key={index} className="bg-gray-800 text-gray-300 px-1 py-0.5 rounded text-sm">{element}</code>;
                 }
-
-                // Apply color (unchanged)
-                if (text.annotations.color !== 'default') {
+                if (text.annotations?.color && text.annotations.color !== 'default') {
                     const colorClass = getColorClass(text.annotations.color);
                     element = <span key={index} className={colorClass}>{element}</span>;
                 }

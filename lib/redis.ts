@@ -17,11 +17,15 @@ export class RedisService {
   private isConnected: boolean = false;
 
   constructor() {
-    // Use Docker container name from your docker-compose
     this.redis = new Redis({
-      host: 'redis', // Docker container name
+      host: 'redis',
       port: 6379,
-      lazyConnect: true,
+      // Remove lazyConnect: true
+      retryStrategy: (times) => {
+        // Retry connection with exponential backoff
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
     });
 
     this.redis.on('connect', () => {
@@ -59,14 +63,14 @@ export class RedisService {
       try {
         console.log(`🔄 Attempting Redis connection (attempt ${i + 1}/${retries})`);
         await this.redis.connect();
-        
+
         if (this.isAvailable()) {
           console.log('✅ Redis connection established');
           return true;
         }
       } catch (error) {
         console.error(`❌ Redis connection attempt ${i + 1} failed:`, error);
-        
+
         if (i < retries - 1) {
           await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
         }
@@ -89,12 +93,12 @@ export class RedisService {
     try {
       const key = `briefing:content:${briefingId}`;
       const cached = await this.redis.get(key);
-      
+
       if (cached) {
         console.log(`✅ Redis cache HIT for briefing ${briefingId}`);
         return JSON.parse(cached);
       }
-      
+
       console.log(`❌ Redis cache MISS for briefing ${briefingId}`);
       return null;
     } catch (error) {
@@ -116,7 +120,7 @@ export class RedisService {
       // First get the database ID mapping
       const mappingKey = `briefing:notion:${notionPageId}`;
       const briefingId = await this.redis.get(mappingKey);
-      
+
       if (!briefingId) {
         console.log(`❌ No mapping found for Notion ID ${notionPageId}`);
         return null;
@@ -199,18 +203,55 @@ export class RedisService {
 
       const key = cursor ? `briefings:list:${cursor}` : 'briefings:list:latest';
       const cached = await this.redis.get(key);
-      
+
       if (cached) {
         const briefings = JSON.parse(cached);
         console.log(`✅ Redis cache HIT for briefings list (${briefings.length} items)`);
         return briefings;
       }
-      
+
       console.log('❌ Redis cache MISS for briefings list');
       return null;
     } catch (error) {
       console.error('Redis getBriefingsList error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Generic get from Redis
+   */
+  async get(key: string): Promise<string | null> {
+    if (!this.isAvailable()) {
+      console.log(`⚠️ Redis unavailable for get: ${key}`);
+      return null;
+    }
+
+    try {
+      const value = await this.redis.get(key);
+      return value;
+    } catch (error) {
+      console.error(`Redis get error for key ${key}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Generic setex (set with expiration) to Redis
+   */
+  async setex(key: string, ttlSeconds: number, value: string): Promise<boolean> {
+    if (!this.isAvailable()) {
+      console.log(`⚠️ Redis unavailable for setex: ${key}`);
+      return false;
+    }
+
+    try {
+      await this.redis.setex(key, ttlSeconds, value);
+      console.log(`✅ Cached ${key} with ${ttlSeconds}s TTL`);
+      return true;
+    } catch (error) {
+      console.error(`Redis setex error for key ${key}:`, error);
+      return false;
     }
   }
 
@@ -229,12 +270,12 @@ export class RedisService {
 
       // Set lock only if it doesn't exist (NX option)
       const result = await this.redis.set(lockKey, lockValue, 'EX', TTL_SECONDS, 'NX');
-      
+
       if (result === 'OK') {
         console.log(`🔒 Acquired lock for briefing ${briefingId}`);
         return true;
       }
-      
+
       console.log(`⏳ Lock already exists for briefing ${briefingId}`);
       return false;
     } catch (error) {
@@ -292,7 +333,7 @@ export class RedisService {
 
     try {
       const keys = [`briefing:content:${briefingId}`];
-      
+
       if (notionPageId) {
         keys.push(`briefing:notion:${notionPageId}`);
       }
@@ -342,14 +383,14 @@ export class RedisService {
   private parseRedisInfo(info: string): any {
     const lines = info.split('\r\n');
     const result: any = {};
-    
+
     lines.forEach(line => {
       if (line.includes(':')) {
         const [key, value] = line.split(':');
         result[key] = value;
       }
     });
-    
+
     return result;
   }
 
