@@ -48,6 +48,15 @@ export default function Navbar() {
                         >
                             Articles
                         </Link>
+                        
+                        {/* ==> NEW LINK ADDED HERE FOR DESKTOP <== */}
+                        <Link
+                            href="/dog-walking"
+                            className="text-gray-200 hover:text-white transition-colors duration-300"
+                        >
+                            Dog Walking
+                        </Link>
+                        
                         {/*}
                         <Link 
                             href="/hunter" 
@@ -141,6 +150,16 @@ export default function Navbar() {
                             >
                                 Articles
                             </Link>
+                            
+                            {/* ==> NEW LINK ADDED HERE FOR MOBILE <== */}
+                            <Link
+                                href="/dog-walking"
+                                className="text-gray-200 hover:text-white transition-colors duration-300 py-2"
+                                onClick={closeMobileMenu}
+                            >
+                                Dog Walking
+                            </Link>
+                            
                             <Link
                                 href="/hunter"
                                 className="text-gray-200 hover:text-white transition-colors duration-300"
