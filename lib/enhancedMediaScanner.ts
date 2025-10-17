@@ -54,6 +54,7 @@ interface MediaFile {
 
 export class EnhancedMediaScanner {
   private readonly mediaPath: string
+  private isScanning = false
 
   constructor(mediaPath = '/app/hunter-media') {
     this.mediaPath = mediaPath
@@ -63,12 +64,20 @@ export class EnhancedMediaScanner {
    * Scan for new files and process them with thumbnails
    */
   async scanAndProcessNewFiles(uploadedBy: string): Promise<ScanResult[]> {
+    
     console.log('🔍 Starting enhanced media scan with thumbnail generation...')
 
     try {
-      // Get existing files from database
+      // Get existing files from database with error handling
       const existingFiles = await this.getExistingFilenames()
       console.log(`📊 Found ${existingFiles.size} existing files in database`)
+
+      // SAFETY CHECK: If we got 0 existing files but we expect some, abort
+      if (existingFiles.size === 0) {
+        console.error('❌ SAFETY CHECK FAILED: Database returned 0 existing files')
+        console.error('❌ This would cause all filesystem files to be treated as new')
+        throw new Error('Database appears to be empty or inaccessible - aborting scan for safety')
+      }
 
       // Scan file system
       const foundFiles = await this.scanDirectory(path.join(this.mediaPath, 'originals'))
@@ -248,7 +257,9 @@ export class EnhancedMediaScanner {
         $6, $7, $8, $9, $10,
         $11, NOW(),
         $12, $13, $14
-      ) RETURNING *
+      )
+      ON CONFLICT (filename) DO NOTHING
+      RETURNING *
     `
 
     const values = [
@@ -269,16 +280,41 @@ export class EnhancedMediaScanner {
     ]
 
     const result = await pool.query(query, values)
+    if (result.rows.length === 0) {
+      // File already exists, get existing record
+      const existingResult = await pool.query('SELECT * FROM hunter_media.media WHERE filename = $1', [data.filename])
+      return existingResult.rows[0]
+    }
     return result.rows[0]
   }
 
   /**
-   * Get existing filenames from database
+   * Get existing filenames from database with proper error handling
    */
   private async getExistingFilenames(): Promise<Set<string>> {
-    const pool = getPool()
-    const result = await pool.query('SELECT filename FROM hunter_media.media')
-    return new Set(result.rows.map(row => row.filename))
+    try {
+      const pool = getPool()
+      
+      // Test connection first
+      await pool.query('SELECT 1')
+      
+      const result = await pool.query('SELECT filename FROM hunter_media.media')
+      const filenames = new Set(result.rows.map(row => row.filename))
+      
+      console.log(`[SUCCESS] Successfully retrieved ${filenames.size} existing filenames from database`)
+      
+      // Sanity check - we should have a reasonable number of files
+      if (filenames.size === 0) {
+        console.warn('[WARNING] Database returned 0 filenames - this might indicate a problem')
+      }
+      
+      return filenames
+      
+    } catch (error) {
+      console.error('[CRITICAL] Failed to get existing filenames from database:', error)
+      console.error('[CRITICAL] This would cause all files to be treated as new - ABORTING SCAN')
+      throw new Error(`Database query failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   /**
@@ -338,7 +374,23 @@ export class EnhancedMediaScanner {
 // Export default instance
 export const enhancedMediaScanner = new EnhancedMediaScanner()
 
+// Global lock to prevent multiple scans across all instances
+let isGlobalScanning = false
+
 // Helper function for API routes
 export async function scanAndProcessNewFiles(uploadedBy: string): Promise<ScanResult[]> {
-  return enhancedMediaScanner.scanAndProcessNewFiles(uploadedBy)
+  if (isGlobalScanning) {
+    console.log('GLOBAL: Scan already in progress, rejecting new scan request')
+    throw new Error('Scan already in progress')
+  }
+  
+  isGlobalScanning = true
+  try {
+    const result = await enhancedMediaScanner.scanAndProcessNewFiles(uploadedBy)
+    console.log('GLOBAL: Scan completed successfully')
+    return result
+  } finally {
+    isGlobalScanning = false
+    console.log('GLOBAL: Released scan lock')
+  }
 }
