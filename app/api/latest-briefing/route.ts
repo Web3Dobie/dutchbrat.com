@@ -1,113 +1,99 @@
-// frontend/app/api/latest-briefing/route.ts
-export const dynamic = 'force-dynamic'
-import { NextRequest, NextResponse } from 'next/server'
-import { Client } from '@notionhq/client'
-import { Pool } from 'pg'
+// File: frontend/app/api/latest-briefing/route.ts
+// Create this new API route following your existing pattern
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY })
+import { NextRequest, NextResponse } from 'next/server';
 
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'postgres',
-    port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432'),
-    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'agents_platform',
-    user: process.env.POSTGRES_USER || process.env.DB_USER || 'hunter_admin',
-    password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
-    ssl: false
-})
+export async function GET(request: NextRequest) {
+  try {
+    // Use internal Docker networking to call htd-agent
+    const url = 'http://htd-agent:3002/latest-briefing';
+    
+    console.log(`[Latest Briefing API] Fetching from: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      // 10 second timeout
+      signal: AbortSignal.timeout(10000),
+    });
 
-// Helper function to extract title from Notion title property
-function getTitle(titleProperty: any): string {
-    if (!titleProperty || !titleProperty.title) return '';
-    return titleProperty.title.map((item: any) => item.plain_text || '').join('');
-}
-
-// Helper function to extract select property value
-function getSelectValue(selectProperty: any): string {
-    if (!selectProperty || !selectProperty.select) return '';
-    return selectProperty.select.name || '';
-}
-
-// Helper function to extract URL property value
-function getUrlValue(urlProperty: any): string {
-    if (!urlProperty || !urlProperty.url) return '';
-    return urlProperty.url;
-}
-
-// Helper function to extract date property value
-function getDateValue(dateProperty: any): string {
-    if (!dateProperty || !dateProperty.date) return '';
-    return dateProperty.date.start || '';
-}
-
-// Helper function to extract plain text from Notion rich text
-function getPlainText(richText: any[]): string {
-    if (!richText || !Array.isArray(richText)) return '';
-    return richText.map(item => item.plain_text || '').join('');
-}
-
-export async function GET(req: NextRequest) {
-    try {
-        const databaseId = process.env.NOTION_PDF_DATABASE_ID!
-
-        if (!databaseId) {
-            throw new Error('NOTION_PDF_DATABASE_ID environment variable not set')
-        }
-
-        const response = await notion.databases.query({
-            database_id: databaseId,
-            sorts: [
-                {
-                    property: 'Date',
-                    direction: 'descending',
-                },
-            ],
-            page_size: 1,
-        })
-
-        if (!response.results || response.results.length === 0) {
-            return NextResponse.json(
-                { error: 'No briefings found' },
-                { status: 404 }
-            )
-        }
-
-        const latestPage = response.results[0] as any
-        const properties = latestPage.properties
-        const notionId = latestPage.id
-
-        // Look up database ID from PostgreSQL
-        let databaseId_int = notionId; // fallback to Notion ID
-        try {
-            const dbResult = await pool.query(
-                'SELECT id FROM hedgefund_agent.briefings WHERE notion_page_id = $1',
-                [notionId]
-            )
-            if (dbResult.rows[0]?.id) {
-                databaseId_int = dbResult.rows[0].id.toString()
-            }
-        } catch (dbErr) {
-            console.error('Failed to lookup database ID:', dbErr)
-            // Continue with Notion ID as fallback
-        }
-
-        const briefingMetadata = {
-            id: databaseId_int,
-            title: getTitle(properties.Name),
-            period: getSelectValue(properties.Period),
-            date: getDateValue(properties.Date),
-            pageUrl: getUrlValue(properties['PDF Link']),
-            tweetUrl: getUrlValue(properties['Tweet URL']),
-            marketSentiment: getPlainText(properties['Market Sentiment']?.rich_text || [])
-        }
-
-        console.log(`Returning latest briefing: ${briefingMetadata.title} with ID: ${briefingMetadata.id}`)
-
-        return NextResponse.json(briefingMetadata)
-    } catch (err: any) {
-        console.error('Error fetching latest briefing metadata:', err)
-        return NextResponse.json(
-            { error: err.message || 'Unknown error' },
-            { status: 500 }
-        )
+    if (!response.ok) {
+      console.error(`[Latest Briefing API] HTD Agent returned ${response.status}: ${response.statusText}`);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `HTD Agent service error: ${response.status}`,
+          fallback: true 
+        }, 
+        { status: response.status }
+      );
     }
+
+    const data = await response.json();
+    console.log(`[Latest Briefing API] Success:`, data.briefing?.title || 'Unknown briefing');
+
+    // Add CORS headers for frontend access
+    const responseHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    };
+
+    return new NextResponse(JSON.stringify(data), {
+      status: 200,
+      headers: responseHeaders,
+    });
+
+  } catch (error) {
+    console.error('[Latest Briefing API] Error:', error);
+    
+    // Return fallback data structure
+    const fallbackResponse = {
+      success: false,
+      briefing: null,
+      sentiment: {
+        sentiment: "unknown",
+        emoji: "🔄", 
+        color: "#6b7280",
+        description: "Market analysis loading"
+      },
+      momentum: {
+        bullish_percentage: 50,
+        bearish_percentage: 50,
+        neutral_percentage: 0,
+        momentum_direction: "neutral"
+      },
+      sectors: [],
+      insights: ["Market analysis in progress"],
+      summary: "Latest briefing data temporarily unavailable.",
+      confidence: "moderate",
+      health_score: 50,
+      lastUpdated: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+
+    return NextResponse.json(fallbackResponse, { 
+      status: 503,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }

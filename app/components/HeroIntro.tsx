@@ -5,6 +5,7 @@ import DutchBrat from '../../public/images/DB_AI.jpg';
 import LatestBriefingCard from './LatestBriefingCard';
 import LatestHedgeFundTweetCard from './LatestHedgeFundTweetCard';
 import HedgeFundNewsCard from './HedgeFundNewsCard';
+import LatestHTDArticleCard from './LatestHTDArticleCard';
 
 export default function HeroIntro() {
     return (
@@ -30,10 +31,13 @@ export default function HeroIntro() {
             </div>
 
             {/* Cards section - 3-card layout for HedgeFund content */}
-            <div className="max-w-4xl">
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="max-w-6xl">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
                     {/* Latest Briefing Card */}
                     <LatestBriefingCard />
+
+                    {/* Latest HTD Article Card - NEW, positioned as 2nd card */}
+                    <LatestHTDArticleCard />
 
                     {/* Latest HedgeFund Tweet Card */}
                     <LatestHedgeFundTweetCard />

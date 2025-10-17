@@ -1,161 +1,196 @@
-// frontend/app/components/LatestBriefingCard.tsx
-'use client'
+// Temporary debug version - add this to see what data you're getting
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+'use client';
 
-interface Briefing {
-    id: string
-    title: string
-    period: string
-    date: string
-    pageUrl: string // Changed from pdfUrl
-    tweetUrl?: string
-    marketSentiment?: string
-}
+import React, { useEffect } from 'react';
+import { useLatestBriefing } from '../../lib/useLatestBriefing';
 
 export default function LatestBriefingCard() {
-    const [briefing, setBriefing] = useState<Briefing | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [isClient, setIsClient] = useState(false)
+  const { briefingData, loading, error, refreshBriefing } = useLatestBriefing();
 
-    // Fix hydration mismatch by ensuring client-side rendering
-    useEffect(() => {
-        setIsClient(true)
-    }, [])
-
-    const fetchLatestBriefing = async () => {
-        try {
-            setLoading(true)
-            setError(null)
-
-            const response = await fetch('/api/latest-briefing')
-
-            if (!response.ok) {
-                throw new Error(`Briefing fetch failed: ${response.status}`)
-            }
-
-            const briefingData: Briefing = await response.json()
-            setBriefing(briefingData)
-        } catch (err) {
-            console.error('Error fetching latest briefing:', err)
-            setError('Failed to load latest briefing')
-        } finally {
-            setLoading(false)
-        }
+  // DEBUG: Log the actual data structure
+  useEffect(() => {
+    if (briefingData) {
+      console.log('🔍 Full briefingData:', briefingData);
+      console.log('🔍 Sentiment:', briefingData.sentiment);
+      console.log('🔍 Momentum:', briefingData.momentum);
+      console.log('🔍 Sectors:', briefingData.sectors);
     }
+  }, [briefingData]);
 
-    const formatBriefingDate = (dateString: string): string => {
-        if (!dateString) return ''
-        const date = new Date(dateString)
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        })
-    }
-
-    const formatPeriod = (period: string): string => {
-        if (!period) return ''
-        // Capitalize and make it more readable
-        return period.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
-    }
-
-    const truncateText = (text: string, maxLength: number): string => {
-        if (text.length <= maxLength) return text
-        return text.substring(0, maxLength) + '...'
-    }
-
-    useEffect(() => {
-        fetchLatestBriefing()
-
-        // Refresh data every 5 minutes
-        const interval = setInterval(fetchLatestBriefing, 5 * 60 * 1000)
-
-        return () => clearInterval(interval)
-    }, [])
-
+  if (loading) {
     return (
-        <div className="p-4 border border-gray-700 rounded-xl bg-gray-900 hover:border-gray-600 transition-colors duration-200 w-full">
-            <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-gray-400 font-semibold">📊 Latest Briefing</p>
-                {briefing && isClient && (
-                    <p className="text-xs text-gray-500">
-                        {formatBriefingDate(briefing.date)}
-                    </p>
-                )}
-            </div>
+      <div className="bg-gray-900 rounded-lg p-6 border border-gray-700 animate-pulse">
+        <div className="text-center text-gray-400">Loading latest briefing...</div>
+      </div>
+    );
+  }
 
-            {loading ? (
-                <div className="animate-pulse">
-                    <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-                    <div className="h-3 bg-gray-700 rounded w-full mb-1"></div>
-                    <div className="h-3 bg-gray-700 rounded w-2/3"></div>
-                </div>
-            ) : error ? (
-                <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">Failed to load briefing</p>
-                    <button
-                        onClick={fetchLatestBriefing}
-                        className="text-sm text-blue-400 hover:underline transition-colors"
-                    >
-                        Try again →
-                    </button>
-                </div>
-            ) : briefing ? (
-                <div className="space-y-3">
-                    <Link
-                        href={`/briefings?briefingId=${briefing.id}`}
-                        className="text-base font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors leading-tight block"
-                    >
-                        {truncateText(briefing.title, 80)}
-                    </Link>
-
-                    <div className="text-sm text-blue-400">
-                        {formatPeriod(briefing.period)} Market Analysis
-                    </div>
-
-                    {/* Market Sentiment Section */}
-                    {briefing.marketSentiment && (
-                        <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mt-3">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="text-xs font-medium text-blue-400">💭 Market Sentiment</span>
-                            </div>
-                            <p className="text-sm text-gray-300 leading-relaxed">
-                                {truncateText(briefing.marketSentiment, 150)}
-                            </p>
-                        </div>
-                    )}
-
-                    <div className="flex gap-3">
-                        <Link
-                            href={`/briefings?briefingId=${briefing.id}`}
-                            className="inline-block text-sm text-blue-400 hover:underline transition-colors"
-                        >
-                            📄 Read Briefing →
-                        </Link>
-
-                        {briefing.tweetUrl && (
-                            <Link
-                                href={briefing.tweetUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-block text-sm text-blue-400 hover:underline transition-colors"
-                            >
-                                🐦 View Tweet →
-                            </Link>
-                        )}
-                    </div>
-                </div>
-            ) : (
-                <div className="text-center py-4">
-                    <p className="text-gray-500 mb-2">No briefings available</p>
-                    <p className="text-xs text-gray-600">
-                        Check back soon for fresh analysis 📊
-                    </p>
-                </div>
-            )}
+  if (error || !briefingData) {
+    return (
+      <div className="bg-gray-900 rounded-lg p-6 border border-gray-700">
+        <div className="text-center">
+          <div className="text-4xl mb-2">📊</div>
+          <h3 className="text-lg font-semibold text-white mb-2">Market Analysis in Progress</h3>
+          <p className="text-gray-400 text-sm mb-4">
+            {error || "Latest briefing will appear here shortly"}
+          </p>
+          <button 
+            onClick={refreshBriefing}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+          >
+            Refresh
+          </button>
         </div>
-    )
+      </div>
+    );
+  }
+
+  // SAFE ACCESS: Check if briefing exists
+  if (!briefingData.briefing) {
+    return (
+      <div className="bg-gray-900 rounded-lg p-6 border border-gray-700">
+        <div className="text-center">
+          <div className="text-yellow-500 text-lg mb-2">⚠️ No briefing data available</div>
+          <pre className="text-xs text-gray-500 bg-gray-800 p-2 rounded overflow-auto">
+            {JSON.stringify(briefingData, null, 2)}
+          </pre>
+        </div>
+      </div>
+    );
+  }
+
+  const { briefing, sentiment, momentum, sectors, insights, summary } = briefingData;
+
+  return (
+    <div className="bg-gray-900 rounded-lg p-6 border border-gray-700 hover:border-gray-600 transition-colors">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-white">{briefing.title || 'Unknown Briefing'}</h3>
+        <time className="text-xs text-gray-400">
+          {briefing.created_at ? new Date(briefing.created_at).toLocaleString() : 'Unknown time'}
+        </time>
+      </div>
+
+      {/* DEBUG: Raw data display */}
+      <details className="mb-4">
+        <summary className="text-xs text-gray-500 cursor-pointer">🔍 Debug Data</summary>
+        <pre className="text-xs text-gray-500 bg-gray-800 p-2 rounded mt-2 overflow-auto max-h-40">
+          {JSON.stringify({ sentiment, momentum, sectors }, null, 2)}
+        </pre>
+      </details>
+
+      {/* Sentiment Visual - SAFE */}
+      {sentiment && (
+        <div className="mb-4">
+          <div 
+            className="flex items-center px-3 py-2 rounded-lg"
+            style={{ 
+              backgroundColor: (sentiment.color || '#6b7280') + '20', 
+              borderLeft: `4px solid ${sentiment.color || '#6b7280'}` 
+            }}
+          >
+            <span className="text-2xl mr-3">{sentiment.emoji || '📊'}</span>
+            <div>
+              <div className="font-medium text-white">{sentiment.description || 'No description'}</div>
+              {sentiment.confidence && typeof sentiment.confidence === 'number' && (
+                <div className="text-sm text-gray-400">
+                  Confidence: {(sentiment.confidence * 100).toFixed(0)}%
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Momentum Indicators - SAFE */}
+      {momentum && (
+        <div className="mb-4">
+          <div className="text-sm font-medium text-gray-300 mb-2">Market Momentum</div>
+          <div className="flex space-x-2 text-xs">
+            <div 
+              className="px-2 py-1 rounded bg-green-600 text-white font-medium"
+              style={{ width: `${Math.max(momentum.bullish_percentage || 0, 10)}%`, minWidth: '60px' }}
+            >
+              {(momentum.bullish_percentage || 0).toFixed(0)}% Bullish
+            </div>
+            <div 
+              className="px-2 py-1 rounded bg-red-600 text-white font-medium"
+              style={{ width: `${Math.max(momentum.bearish_percentage || 0, 10)}%`, minWidth: '60px' }}
+            >
+              {(momentum.bearish_percentage || 0).toFixed(0)}% Bearish
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sector Highlights - SAFE */}
+      {sectors && Array.isArray(sectors) && sectors.length > 0 && (
+        <div className="mb-4">
+          <div className="text-sm font-medium text-gray-300 mb-2">Sector Highlights</div>
+          <div className="space-y-1">
+            {sectors.map((sector, index) => (
+              <div key={index} className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <span className="mr-2">{sector.emoji || '📊'}</span>
+                  <span className="text-sm text-gray-300">{sector.name || 'Unknown Sector'}</span>
+                </div>
+                <span className={`text-sm font-medium ${
+                  (sector.performance || 0) > 0 ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {(sector.performance || 0) > 0 ? '+' : ''}{(sector.performance || 0).toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Key Insights - SAFE */}
+      {insights && Array.isArray(insights) && insights.length > 0 && (
+        <div className="mb-4">
+          <div className="text-sm font-medium text-gray-300 mb-2">Key Insights</div>
+          <ul className="space-y-1">
+            {insights.slice(0, 3).map((insight, index) => (
+              <li key={index} className="text-sm text-gray-400 flex items-start">
+                <span className="text-blue-400 mr-2">•</span>
+                {insight || 'No insight available'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Summary - SAFE */}
+      {summary && (
+        <div className="mb-4">
+          <p className="text-sm text-gray-300 leading-relaxed">{summary}</p>
+        </div>
+      )}
+
+      {/* Action Links - SAFE */}
+      <div className="flex space-x-3">
+        {briefing.urls?.website && (
+          <a 
+            href={briefing.urls.website} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex-1 px-4 py-2 bg-blue-600 text-white text-center rounded hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            Read Full Analysis
+          </a>
+        )}
+        {briefing.urls?.twitter && (
+          <a 
+            href={briefing.urls.twitter} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors text-sm font-medium"
+          >
+            View Tweet
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
