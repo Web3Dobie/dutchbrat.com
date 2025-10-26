@@ -9,6 +9,8 @@ function checkAuth(req: NextRequest) {
   return authCookie?.value === 'authenticated'
 }
 
+export const maxDuration = 300 // 5 minutes
+
 export async function POST(req: NextRequest) {
   if (!checkAuth(req)) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })

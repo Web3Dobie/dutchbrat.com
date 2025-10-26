@@ -1,173 +1,157 @@
-// app/hunter/components/MediaManager.tsx - With Pagination
 'use client'
 
 import { useState, useEffect } from 'react'
 import { MediaFile } from '../../../lib/hunterMedia'
 import { TagEditor } from './TagEditor'
-import { DeleteConfirmationModal } from './DeleteConfirmationModal'
+import { getOrientationStyle } from '../../../lib/imageOrientationUtils'
+
+interface DeleteResult {
+  success: boolean
+  message: string
+  errors?: string[]
+}
 
 interface MediaManagerProps {
-  onStatsUpdate: () => void
+  onStatsUpdate: () => Promise<void>
 }
 
 export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
   const [media, setMedia] = useState<MediaFile[]>([])
   const [selectedMedia, setSelectedMedia] = useState<MediaFile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  
-  // Pagination state
-  const [hasMore, setHasMore] = useState(true)
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
-  const ITEMS_PER_PAGE = 50 // Show 50 items at a time for good performance
-  
-  // Delete functionality state
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [mediaToDelete, setMediaToDelete] = useState<MediaFile | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [deleteResult, setDeleteResult] = useState<{
-    success: boolean
-    message: string
-    errors?: string[]
-  } | null>(null)
+  const [limit] = useState(20)
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<string>('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteStage, setDeleteStage] = useState<'confirm' | 'verify' | 'final'>('confirm')
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteResult, setDeleteResult] = useState<DeleteResult | null>(null)
 
-  useEffect(() => {
-    // Reset pagination when search changes
-    setOffset(0)
-    setMedia([])
-    fetchMedia(true) // true = reset
-  }, [searchTerm])
-
-  const fetchMedia = async (reset: boolean = false) => {
+  const fetchMedia = async () => {
     try {
-      if (reset) {
-        setLoading(true)
-        setOffset(0)
-      } else {
-        setLoadingMore(true)
-      }
-
-      const currentOffset = reset ? 0 : offset
+      setLoading(true)
       const params = new URLSearchParams({
-        limit: ITEMS_PER_PAGE.toString(),
-        offset: currentOffset.toString(),
-        search: searchTerm
+        limit: limit.toString(),
+        offset: offset.toString()
       })
+      
+      if (searchTerm) {
+        params.append('search', searchTerm)
+      }
 
       const response = await fetch(`/api/hunter/media?${params}`)
+      if (!response.ok) throw new Error('Failed to fetch media')
+      
       const data = await response.json()
-
-      if (reset) {
-        setMedia(data.media)
-      } else {
-        setMedia(prev => [...prev, ...data.media])
-      }
-
-      setTotal(data.total)
-      setHasMore(data.hasMore)
-      setOffset(currentOffset + ITEMS_PER_PAGE)
-
+      setMedia(data.media || [])
+      setTotal(data.total || 0)
     } catch (error) {
       console.error('Error fetching media:', error)
     } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
   }
 
-  const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
-      fetchMedia(false)
-    }
-  }
+  useEffect(() => {
+    fetchMedia()
+  }, [offset, searchTerm])
 
-  const handleMediaUpdate = (updatedMedia: MediaFile) => {
-    setMedia(prev => prev.map(m => m.id === updatedMedia.id ? updatedMedia : m))
-    setSelectedMedia(updatedMedia)
-    onStatsUpdate()
-  }
-
-  // Delete functionality
-  const handleDeleteClick = (mediaItem: MediaFile) => {
-    setMediaToDelete(mediaItem)
-    setShowDeleteModal(true)
-    setDeleteResult(null)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!mediaToDelete) return
-
-    setIsDeleting(true)
+  const handleScan = async () => {
     try {
-      const response = await fetch(`/api/hunter/media/${mediaToDelete.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          confirmationPhrase: 'DELETE HUNTER PHOTO PERMANENTLY',
-          userConfirmed: true
-        })
+      setScanning(true)
+      setScanResult('')
+      
+      const response = await fetch('/api/hunter/media/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUser: 'system' })
+      })
+
+      if (!response.ok) throw new Error('Scan failed')
+      
+      const result = await response.json()
+      setScanResult(`Scan completed! Processed ${result.files?.length || 0} new files.`)
+      
+      // Refresh the media list and dashboard stats
+      fetchMedia()
+      await onStatsUpdate()
+    } catch (error) {
+      console.error('Scan error:', error)
+      setScanResult('Scan failed. Please try again.')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedMedia) return
+
+    try {
+      const response = await fetch(`/api/hunter/media/${selectedMedia.id}`, {
+        method: 'DELETE'
       })
 
       const result = await response.json()
+      
+      setDeleteResult({
+        success: result.success,
+        message: result.success 
+          ? `Successfully deleted ${selectedMedia.filename}` 
+          : `Failed to delete ${selectedMedia.filename}`,
+        errors: result.errors
+      })
 
       if (result.success) {
-        // Remove from local state
-        setMedia(prev => prev.filter(m => m.id !== mediaToDelete.id))
-        
-        // Clear selection if deleted media was selected
-        if (selectedMedia?.id === mediaToDelete.id) {
-          setSelectedMedia(null)
-        }
-
-        // Update total count
-        setTotal(prev => prev - 1)
-
-        setDeleteResult({
-          success: true,
-          message: `Successfully deleted ${mediaToDelete.filename}`
-        })
-
-        // Update stats
-        onStatsUpdate()
-      } else {
-        setDeleteResult({
-          success: false,
-          message: result.message || 'Deletion failed',
-          errors: result.errors
-        })
+        setSelectedMedia(null)
+        fetchMedia() // Refresh list
+        await onStatsUpdate() // Update dashboard stats
       }
-
     } catch (error) {
-      console.error('Delete error:', error)
       setDeleteResult({
         success: false,
-        message: 'Network error during deletion',
-        errors: [error instanceof Error ? error.message : 'Unknown error']
+        message: `Error deleting file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        errors: []
       })
     } finally {
-      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+      setDeleteStage('confirm')
+      setDeleteConfirmText('')
     }
   }
 
-  const handleDeleteModalClose = () => {
-    if (!isDeleting) {
-      setShowDeleteModal(false)
-      setMediaToDelete(null)
-      // Keep delete result visible for a few seconds
-      if (deleteResult) {
-        setTimeout(() => setDeleteResult(null), 5000)
-      }
-    }
+  const resetDeleteDialog = () => {
+    setShowDeleteConfirm(false)
+    setDeleteStage('confirm')
+    setDeleteConfirmText('')
+    setDeleteResult(null)
   }
+
+  const filteredMedia = media
 
   return (
-    <div className="space-y-6">
-      
-      {/* Delete Result Toast */}
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Media Manager</h1>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            {scanning ? 'Scanning...' : 'Scan for New Files'}
+          </button>
+        </div>
+      </div>
+
+      {scanResult && (
+        <div className="bg-green-900/50 border border-green-700 text-green-200 p-4 rounded-lg">
+          {scanResult}
+        </div>
+      )}
+
       {deleteResult && (
         <div className={`p-4 rounded-lg border ${
           deleteResult.success 
@@ -235,13 +219,14 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
                         : 'bg-gray-800 hover:bg-gray-700'
                     }`}
                   >
-                    {/* Thumbnail */}
+                    {/* Thumbnail with orientation support */}
                     <div className="w-12 h-12 bg-gray-700 rounded-lg flex-shrink-0 overflow-hidden">
                       {item.thumbnail_150 ? (
                         <img
                           src={`/api/hunter/files/${item.thumbnail_150}`}
                           alt={item.filename}
                           className="w-full h-full object-cover"
+                          style={getOrientationStyle(item.orientation)}
                           onError={(e) => {
                             const target = e.target as HTMLImageElement
                             target.src = `/api/hunter/files/${item.file_path}`
@@ -265,108 +250,165 @@ export function MediaManager({ onStatsUpdate }: MediaManagerProps) {
                       <div className="text-sm opacity-75">
                         {item.taken_at
                           ? new Date(item.taken_at).toLocaleDateString()
-                          : 'No date'
+                          : new Date(item.uploaded_at || '').toLocaleDateString()
                         }
-                        {item.location_name && ` • ${item.location_name}`}
+                        {item.orientation && item.orientation !== 1 && (
+                          <span className="ml-2 text-xs bg-blue-500 px-1 rounded">
+                            ↻{item.orientation}
+                          </span>
+                        )}
                       </div>
-                      {/* Tags */}
-                      {item.tags && Array.isArray(item.tags) && item.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {item.tags.slice(0, 3).map((tag, index) => (
-                            <span
-                              key={index}
-                              className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded"
-                            >
-                              {tag.tag_value || tag.value || 'Unknown tag'}
-                            </span>
-                          ))}
-                          {item.tags.length > 3 && (
-                            <span className="text-xs opacity-75">
-                              +{item.tags.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteClick(item)
-                      }}
-                      className="flex-shrink-0 w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center justify-center transition-colors group"
-                      title="Delete permanently"
-                    >
-                      🗑️
-                    </button>
                   </div>
                 ))}
 
-                {/* Load More Button */}
-                {hasMore && (
-                  <div className="text-center pt-4">
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={loadingMore}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg transition-colors"
-                    >
-                      {loadingMore ? (
-                        <div className="flex items-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Loading...
-                        </div>
-                      ) : (
-                        `Load More (${total - media.length} remaining)`
-                      )}
-                    </button>
-                  </div>
-                )}
+                {/* Pagination */}
+                <div className="flex justify-between items-center pt-4 border-t border-gray-700">
+                  <button
+                    onClick={() => setOffset(Math.max(0, offset - limit))}
+                    disabled={offset === 0}
+                    className="px-3 py-1 bg-gray-700 text-sm rounded disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  
+                  <span className="text-sm text-gray-400">
+                    {offset + 1}-{Math.min(offset + limit, total)} of {total}
+                  </span>
+                  
+                  <button
+                    onClick={() => setOffset(offset + limit)}
+                    disabled={offset + limit >= total}
+                    className="px-3 py-1 bg-gray-700 text-sm rounded disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
               </>
             )}
           </div>
         </div>
 
-        {/* Media Editor */}
-        <div className="bg-gray-900 rounded-xl p-6 border border-gray-700">
+        {/* Editor Panel */}
+        <div className="bg-gray-900 rounded-xl border border-gray-700">
           {selectedMedia ? (
-            <div className="space-y-4">
-              {/* Selected Media Header */}
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Edit Media</h3>
-                <button
-                  onClick={() => handleDeleteClick(selectedMedia)}
-                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
-                >
-                  🗑️ Delete
-                </button>
-              </div>
-
-              {/* Tag Editor Component */}
-              <TagEditor
-                media={selectedMedia}
-                onUpdate={handleMediaUpdate}
-              />
-            </div>
+            <TagEditor 
+              media={selectedMedia} 
+              onUpdate={(updatedMedia) => {
+                setSelectedMedia(updatedMedia)
+                fetchMedia() // Refresh the list to show updates
+              }}
+              onDelete={() => setShowDeleteConfirm(true)}
+            />
           ) : (
-            <div className="text-center text-gray-400 py-8">
-              Select a media file to edit its details and tags
-              <br />
-              <span className="text-sm">({total} total files)</span>
+            <div className="p-6 text-center text-gray-400">
+              Select a media file to edit its metadata and tags
             </div>
           )}
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && mediaToDelete && (
-        <DeleteConfirmationModal
-          media={mediaToDelete}
-          isOpen={showDeleteModal}
-          onClose={handleDeleteModalClose}
-          onConfirm={handleDeleteConfirm}
-          isDeleting={isDeleting}
-        />
+      {showDeleteConfirm && selectedMedia && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-xl max-w-md w-full mx-4">
+            
+            {deleteStage === 'confirm' && (
+              <>
+                <h3 className="text-lg font-semibold text-red-400 mb-4">⚠️ Delete Media File</h3>
+                <p className="text-gray-300 mb-4">
+                  Are you sure you want to delete <strong>{selectedMedia.filename}</strong>?
+                </p>
+                <p className="text-sm text-gray-400 mb-6">
+                  This will permanently delete the file, all thumbnails, and associated metadata. This action cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteStage('verify')}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Yes, Delete
+                  </button>
+                  <button
+                    onClick={resetDeleteDialog}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            {deleteStage === 'verify' && (
+              <>
+                <h3 className="text-lg font-semibold text-red-400 mb-4">🔒 Verification Required</h3>
+                <p className="text-gray-300 mb-4">
+                  To confirm deletion, please type the filename exactly:
+                </p>
+                <p className="text-yellow-400 font-mono text-sm mb-4 bg-gray-700 p-2 rounded">
+                  {selectedMedia.filename}
+                </p>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Type filename here..."
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white mb-6 focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteStage('final')}
+                    disabled={deleteConfirmText !== selectedMedia.filename}
+                    className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Proceed to Final Step
+                  </button>
+                  <button
+                    onClick={resetDeleteDialog}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            {deleteStage === 'final' && (
+              <>
+                <h3 className="text-lg font-semibold text-red-400 mb-4">💀 FINAL WARNING</h3>
+                <div className="bg-red-900/30 border border-red-700 p-4 rounded-lg mb-4">
+                  <p className="text-red-200 font-semibold">PERMANENT DELETION</p>
+                  <p className="text-red-300 text-sm mt-1">
+                    This will immediately and permanently delete:
+                  </p>
+                  <ul className="text-red-300 text-sm mt-2 ml-4 list-disc">
+                    <li>Original file: {selectedMedia.filename}</li>
+                    <li>All thumbnail versions</li>
+                    <li>All metadata and tags</li>
+                    <li>Database records</li>
+                  </ul>
+                </div>
+                <p className="text-gray-300 text-sm mb-6">
+                  This action is irreversible. The file will be gone forever.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDelete}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors font-semibold"
+                  >
+                    DELETE PERMANENTLY
+                  </button>
+                  <button
+                    onClick={resetDeleteDialog}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

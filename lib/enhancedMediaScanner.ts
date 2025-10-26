@@ -251,12 +251,12 @@ export class EnhancedMediaScanner {
         filename, original_filename, file_path, media_type, file_size,
         taken_at, location_lat, location_lng, camera_make, camera_model,
         uploaded_by, uploaded_at,
-        thumbnail_150, thumbnail_500, thumbnail_1200
+        thumbnail_150, thumbnail_500, thumbnail_1200, orientation
       ) VALUES (
         $1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
         $11, NOW(),
-        $12, $13, $14
+        $12, $13, $14, $15
       )
       ON CONFLICT (filename) DO NOTHING
       RETURNING *
@@ -276,7 +276,8 @@ export class EnhancedMediaScanner {
       data.uploadedBy,                            // $11
       data.thumbnailPaths.thumbnail_150 || null, // $12
       data.thumbnailPaths.thumbnail_500 || null, // $13
-      data.thumbnailPaths.thumbnail_1200 || null // $14
+      data.thumbnailPaths.thumbnail_1200 || null, // $14
+      data.exifData.orientation || 1             // $15
     ]
 
     const result = await pool.query(query, values)

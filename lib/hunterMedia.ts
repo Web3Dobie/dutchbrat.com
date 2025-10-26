@@ -84,6 +84,7 @@ export interface MediaFile {
   camera_model?: string // Separate fields in database
   uploaded_by?: string
   upload_session_id?: number
+  orientation?: number
 
   // Computed properties for backwards compatibility
   created_at?: string // Will map to uploaded_at
@@ -456,8 +457,8 @@ export async function saveMediaFile(
 
   const query = `
     INSERT INTO hunter_media.media 
-    (filename, original_filename, file_path, media_type, file_size, taken_at, location_lat, location_lng, camera_make, camera_model, uploaded_by)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    (filename, original_filename, file_path, media_type, file_size, taken_at, location_lat, location_lng, camera_make, camera_model, uploaded_by, orientation)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     RETURNING *
   `
 
@@ -479,7 +480,8 @@ export async function saveMediaFile(
     exifData.longitude || null,
     cameraMake,
     cameraModel,
-    'system' // uploaded_by
+    'system', // uploaded_by
+    exifData.orientation || 1 // orientation, default to 1 (normal)
   ]
 
   const result = await pool.query(query, values)

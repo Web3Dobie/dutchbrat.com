@@ -10,25 +10,50 @@ interface FileScanPanelProps {
 export function FileScanPanel({ onStatsUpdate }: FileScanPanelProps) {
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState<any>(null)
+  const [progress, setProgress] = useState('')
 
   const handleScan = async () => {
     setScanning(true)
     setScanResult(null)
+    setProgress('Starting scan...')
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minutes
+      
+      setProgress('Scanning files... this may take several minutes for large batches')
+      
       const response = await fetch('/api/hunter/media/scan', {
-        method: 'POST'
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' }
       })
+      
+      clearTimeout(timeoutId)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
       
       const result = await response.json()
       setScanResult(result)
+      setProgress('')
       
       if (result.success) {
         onStatsUpdate()
       }
     } catch (error) {
       console.error('Scan error:', error)
-      setScanResult({ error: 'Scan failed' })
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        setScanResult({ 
+          error: 'Scan timeout after 5 minutes',
+          note: 'The scan may still be processing in the background. Check your photo count in a few minutes.' 
+        })
+      } else {
+        setScanResult({ error: 'Scan failed', details: error instanceof Error ? error.message : 'Unknown error' })
+      }
+      setProgress('')
     } finally {
       setScanning(false)
     }
@@ -58,6 +83,15 @@ export function FileScanPanel({ onStatsUpdate }: FileScanPanelProps) {
           {scanning ? 'Scanning files...' : 'Scan for New Files'}
         </button>
 
+        {/* Progress indicator */}
+        {progress && (
+          <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
+            <div className="text-blue-300 text-sm">
+              {progress}
+            </div>
+          </div>
+        )}
+
         {scanResult && (
           <div className={`rounded-lg p-4 ${
             scanResult.error 
@@ -67,19 +101,30 @@ export function FileScanPanel({ onStatsUpdate }: FileScanPanelProps) {
             {scanResult.error ? (
               <div className="text-red-300">
                 <strong>Error:</strong> {scanResult.error}
+                {scanResult.details && (
+                  <div className="text-sm mt-1">Details: {scanResult.details}</div>
+                )}
+                {scanResult.note && (
+                  <div className="text-sm mt-2 bg-red-800 p-2 rounded">
+                    {scanResult.note}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-green-300">
                 <strong>Scan completed!</strong>
                 <div className="mt-2 text-sm">
                   <div>Found {scanResult.processedCount} new files</div>
+                  {scanResult.processingTimeSeconds && (
+                    <div>Completed in {Math.round(scanResult.processingTimeSeconds)}s</div>
+                  )}
                   {scanResult.processedFiles && scanResult.processedFiles.length > 0 && (
                     <div className="mt-2">
                       <div className="font-medium">New files:</div>
-                      <ul className="mt-1 space-y-1">
+                      <ul className="mt-1 space-y-1 max-h-40 overflow-y-auto">
                         {scanResult.processedFiles.map((file: any) => (
                           <li key={file.id} className="text-xs">
-                            {file.filename} ({file.media_type})
+                            * {file.filename} ({file.media_type})
                             {file.taken_at && ` - ${new Date(file.taken_at).toLocaleDateString()}`}
                             {file.has_location && ' 📍'}
                           </li>

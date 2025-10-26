@@ -5,7 +5,7 @@ import fs from 'fs/promises'
 
 export interface ThumbnailPaths {
   thumbnail_150?: string
-  thumbnail_500?: string  
+  thumbnail_500?: string
   thumbnail_1200?: string
 }
 
@@ -32,20 +32,31 @@ export class ThumbnailGenerator {
       // Get file extension and create base filename
       const ext = path.extname(filename)
       const baseName = path.basename(filename, ext)
-      
+
+      // First, validate the image can be read by Sharp
+      try {
+        const image = sharp(originalPath)
+        const metadata = await image.metadata()
+
+        if (!metadata.format) {
+          console.error(`⚠️ Cannot determine image format for ${filename}`)
+          return {}
+        }
+      } catch (error) {
+        console.error(`⚠️ Corrupt or unreadable image file ${filename}:`, error)
+        return {} // Skip this file
+      }
+
       // Generate each thumbnail size
       for (const size of sizes) {
-        const thumbnailFilename = `${baseName}_${size}${ext}`
+        const thumbnailFilename = `${baseName}_${size}.jpg` // Always output as JPEG
         const thumbnailFullPath = path.join(this.thumbnailPath, size.toString(), thumbnailFilename)
         const relativePath = `/thumbnails/${size}/${thumbnailFilename}`
 
         try {
           // Create sharp instance with error handling
           const image = sharp(originalPath)
-          
-          // Get image metadata to check orientation
-          const metadata = await image.metadata()
-          
+
           // Resize image maintaining aspect ratio
           await image
             .rotate() // Auto-rotate based on EXIF orientation
@@ -53,26 +64,32 @@ export class ThumbnailGenerator {
               fit: 'inside',
               withoutEnlargement: true
             })
-            .jpeg({ 
+            .jpeg({
               quality: size <= 150 ? 75 : 85,
-              progressive: true
+              progressive: true,
+              force: true // Force JPEG output even for HEIC/other formats
             })
             .toFile(thumbnailFullPath)
 
           // Store relative path for database
           const key = `thumbnail_${size}` as keyof ThumbnailPaths
           thumbnailPaths[key] = relativePath
-          
+
           console.log(`✅ Generated ${size}px thumbnail: ${relativePath}`)
-          
+
         } catch (error) {
           console.error(`❌ Failed to generate ${size}px thumbnail for ${filename}:`, error)
           // Continue with other sizes even if one fails
         }
       }
 
+      // If no thumbnails were generated, return empty object
+      if (Object.keys(thumbnailPaths).length === 0) {
+        console.error(`❌ No thumbnails generated for ${filename} - file may be corrupt`)
+      }
+
       return thumbnailPaths
-      
+
     } catch (error) {
       console.error(`❌ Thumbnail generation failed for ${filename}:`, error)
       return {}
@@ -84,7 +101,7 @@ export class ThumbnailGenerator {
    */
   private async ensureThumbnailDirectories(): Promise<void> {
     const sizes = ['150', '500', '1200']
-    
+
     for (const size of sizes) {
       const dir = path.join(this.thumbnailPath, size)
       try {
@@ -100,7 +117,7 @@ export class ThumbnailGenerator {
    * Check if image file is supported
    */
   isImageSupported(filename: string): boolean {
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.gif']
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.gif', '.heic', '.heif']
     const ext = path.extname(filename).toLowerCase()
     return supportedExtensions.includes(ext)
   }
@@ -116,7 +133,7 @@ export class ThumbnailGenerator {
     for (const size of sizes) {
       const thumbnailFilename = `${baseName}_${size}${ext}`
       const thumbnailPath = path.join(this.thumbnailPath, size, thumbnailFilename)
-      
+
       try {
         await fs.unlink(thumbnailPath)
         console.log(`🗑️ Cleaned up thumbnail: ${thumbnailPath}`)
@@ -131,9 +148,9 @@ export class ThumbnailGenerator {
    */
   async batchGenerateThumbnails(files: Array<{ path: string, filename: string }>): Promise<Map<string, ThumbnailPaths>> {
     const results = new Map<string, ThumbnailPaths>()
-    
+
     console.log(`🔄 Starting batch thumbnail generation for ${files.length} files...`)
-    
+
     for (const file of files) {
       if (this.isImageSupported(file.filename)) {
         const thumbnails = await this.generateThumbnails(file.path, file.filename)
@@ -142,7 +159,7 @@ export class ThumbnailGenerator {
         console.log(`⚠️ Skipping unsupported file: ${file.filename}`)
       }
     }
-    
+
     console.log(`✅ Batch thumbnail generation complete. Generated thumbnails for ${results.size} files.`)
     return results
   }

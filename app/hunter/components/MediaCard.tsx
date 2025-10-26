@@ -1,6 +1,7 @@
 'use client'
 
 import { MediaFile } from '../../../lib/hunterMedia'
+import { getOrientationStyle } from '../../../lib/imageOrientationUtils'
 
 interface MediaCardProps {
   media: MediaFile
@@ -21,17 +22,21 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
   // Check if media has any thumbnails
   const hasThumbnail = media.thumbnail_150 || media.thumbnail_500 || media.thumbnail_1200
 
+  // Get orientation styles for proper image rotation
+  const orientationStyle = getOrientationStyle(media.orientation)
+
   return (
     <div
       onClick={onClick}
       className="relative group cursor-pointer rounded-lg overflow-hidden bg-gray-800 aspect-square"
     >
-      {/* Thumbnail - now works for both images and videos */}
+      {/* Thumbnail - now works for both images and videos with orientation support */}
       {(media.media_type === 'image') || (media.media_type === 'video' && hasThumbnail) ? (
         <img
           src={`/api/hunter/files${media.thumbnail_150 || media.file_path}`}
           alt={media.description || media.filename}
           className="w-full h-full object-cover transition-transform group-hover:scale-105"
+          style={orientationStyle}
           loading="lazy"
         />
       ) : (
@@ -72,6 +77,13 @@ export function MediaCard({ media, onClick }: MediaCardProps) {
           <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
           </svg>
+        </div>
+      )}
+
+      {/* Orientation indicator (for debugging - can be removed later) */}
+      {media.orientation && media.orientation !== 1 && (
+        <div className="absolute bottom-2 right-2 bg-black bg-opacity-60 rounded px-1 text-xs text-white">
+          {media.orientation}
         </div>
       )}
     </div>
