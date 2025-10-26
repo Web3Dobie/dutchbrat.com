@@ -5,16 +5,28 @@ import { BookingCalendar } from '@/app/components/BookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 
 // UPDATED: Added an optional 'objectPositionClass' prop to fix cropping
-function PlayfulImage({ src, alt, rotationClass, objectPositionClass = 'object-center' }: { src: string, alt: string, rotationClass: string, objectPositionClass?: string }) {
+// Updated PlayfulImage component with responsive aspect ratios
+function PlayfulImage({
+  src,
+  alt,
+  rotationClass,
+  aspectRatio = 'aspect-square',
+  objectPositionClass = 'object-center'
+}: {
+  src: string,
+  alt: string,
+  rotationClass: string,
+  aspectRatio?: string,
+  objectPositionClass?: string
+}) {
   return (
-    <div className={`relative w-full aspect-square rounded-lg overflow-hidden shadow-2xl transition-transform duration-300 ease-in-out hover:scale-105 ${rotationClass}`}>
+    <div className={`relative w-full ${aspectRatio} rounded-lg overflow-hidden shadow-2xl transition-transform duration-300 ease-in-out hover:scale-105 ${rotationClass}`}>
       <Image
         src={src}
         alt={alt}
         fill
-        // UPDATED: The new prop is used here to control image focus
         className={`object-cover ${objectPositionClass}`}
-        sizes="(max-width: 768px) 50vw, 33vw"
+        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
       />
     </div>
   );
@@ -65,55 +77,94 @@ export default function DogWalkingPage() {
           <div className="max-w-3xl mx-auto mb-12">
             <p className="text-gray-300 leading-relaxed">
               Highbury Fields and Clissold Park are my favourite spots to walk dogs. I offer a range of services
-              to suit your dog's needs, from solo walks to quick play sessions. All walks include plenty of
-              exercise, socialisation, and love.
+              to suit your dog's needs, from solo walks (1 hour & 30 minutes) to longer dog sitting sessions.
+              All walks include plenty of exercise, socialisation, and love. Your dog's happiness and well-being
+              are my top priorities.
+
+              New clients are welcome to book a free 30 minute meet-and-greet session, so I can get to know your dog
+              and discuss their needs.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <ServiceCard
               title="Solo Walk"
               description="One-on-one attention for your best friend. Perfect for dogs who prefer their own space."
-              price="£25 / hour"
+              price="£17.50 / hour"
             />
             <ServiceCard
               title="Quick Walk"
               description="A fun, quick play in the park, to break up the day."
-              price="£15 / 30-mins"
+              price="£10 / 30-mins"
             />
             <ServiceCard
-              title="Puppy Visit"
-              description="A 15-minute visit for potty breaks, playtime, and feeding for the little ones."
-              price="£10 / visit"
+              title="Dog sitting"
+              description="Customized visits during the day or the evening, when your dog does not want to be on its own."
+              price="POA / visit"
             />
           </div>
         </section>
 
-        {/* Section 4: Booking Calendar with Playful Gallery */}
+        {/* Section 4: Booking Calendar with Mobile-Responsive Gallery */}
         <section>
           <h2 className="text-3xl font-bold mb-8 text-center text-blue-400">Book a Walk</h2>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
 
+            {/* Left Image - Mobile: hidden, Desktop: portrait ratio */}
             <div className="hidden lg:flex justify-center">
-              <PlayfulImage src="/images/dog-walking/photo1.jpg" alt="A happy dog in the park" rotationClass="-rotate-3 hover:-rotate-1" />
+              <PlayfulImage
+                src="/images/dog-walking/photo1.jpg"
+                alt="A happy dog in the park"
+                rotationClass="-rotate-3 hover:-rotate-1"
+                aspectRatio="aspect-[3/4]"
+              />
             </div>
 
+            {/* Booking Calendar - Center */}
             <div className="max-w-xl mx-auto w-full bg-gray-900 rounded-lg p-2 lg:col-span-1">
               <BookingCalendar />
             </div>
 
+            {/* Right Image - Mobile: hidden, Desktop: portrait ratio */}
             <div className="hidden lg:flex justify-center">
-              {/* UPDATED: Added objectPositionClass to fix cropping. Try "object-top" or "object-bottom" if this doesn't work */}
-              <PlayfulImage src="/images/dog-walking/photo2.jpg" alt="Hunter playing with a ball" rotationClass="rotate-3 hover:rotate-1" objectPositionClass="object-top" />
+              <PlayfulImage
+                src="/images/dog-walking/photo2.jpg"
+                alt="Hunter enjoying the park scenery"
+                rotationClass="rotate-3 hover:rotate-1"
+                aspectRatio="aspect-[3/4]"
+                objectPositionClass="object-center"
+              />
             </div>
 
           </div>
-          {/* ===== FIX #2: Wrapped the bottom image in a div to control its size ===== */}
+
+          {/* Mobile Gallery - Shows on mobile/tablet, hidden on desktop */}
+          <div className="mt-8 lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <PlayfulImage
+              src="/images/dog-walking/photo1.jpg"
+              alt="A happy dog in the park"
+              rotationClass="-rotate-1"
+              aspectRatio="aspect-[4/3]"
+            />
+            <PlayfulImage
+              src="/images/dog-walking/photo2.jpg"
+              alt="Hunter enjoying the park scenery"
+              rotationClass="rotate-1"
+              aspectRatio="aspect-[4/3]"
+              objectPositionClass="object-center"
+            />
+          </div>
+
+          {/* Bottom Image - Responsive ratios */}
           <div className="mt-8 max-w-lg mx-auto">
-            <PlayfulImage src="/images/dog-walking/photo3.jpg" alt="A sunny day in the park" rotationClass="rotate-2" />
+            <PlayfulImage
+              src="/images/dog-walking/photo3.jpg"
+              alt="A sunny day in the park"
+              rotationClass="rotate-2"
+              aspectRatio="aspect-[4/3] lg:aspect-[3/4]"
+            />
           </div>
         </section>
-
       </div>
     </main>
   );
-}
+} 
