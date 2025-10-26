@@ -3,6 +3,10 @@ FROM node:18-alpine AS base
 # Install dependencies only when needed
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
+
+# Install libheif WITH decoder plugins for HEIC support
+RUN apk add --no-cache libheif libheif-dev vips-dev libde265 libde265-dev
+
 WORKDIR /app
 
 # Copy package files
@@ -23,7 +27,7 @@ ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN npm run build
 
-## Production image
+# Production image
 FROM base AS runner
 WORKDIR /app
 
@@ -33,8 +37,8 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install FFmpeg
-RUN apk add --no-cache ffmpeg
+# Install FFmpeg, libheif AND decoder at runtime
+RUN apk add --no-cache ffmpeg libheif libde265
 
 COPY --from=builder /app/public ./public
 
@@ -46,8 +50,7 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy ALL node_modules from deps (not just ioredis)
-# This ensures ioredis dependencies like 'standard-as-callback' are included
+# Copy ALL node_modules from deps
 COPY --from=deps /app/node_modules ./node_modules
 
 USER nextjs

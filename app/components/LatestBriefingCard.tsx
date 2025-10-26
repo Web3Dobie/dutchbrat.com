@@ -72,13 +72,13 @@ export default function LatestBriefingCard() {
         </time>
       </div>
 
-      {/* DEBUG: Raw data display */}
+      {/* DEBUG: Raw data display
       <details className="mb-4">
-        <summary className="text-xs text-gray-500 cursor-pointer">🔍 Debug Data</summary>
-        <pre className="text-xs text-gray-500 bg-gray-800 p-2 rounded mt-2 overflow-auto max-h-40">
-          {JSON.stringify({ sentiment, momentum, sectors }, null, 2)}
-        </pre>
-      </details>
+      <summary className="text-xs text-gray-500 cursor-pointer">🔍 Debug Data</summary>
+       <pre className="text-xs text-gray-500 bg-gray-800 p-2 rounded mt-2 overflow-auto max-h-40">
+       {JSON.stringify({ sentiment, momentum, sectors }, null, 2)}
+       </pre>
+       </details>*/}
 
       {/* Sentiment Visual - SAFE */}
       {sentiment && (
