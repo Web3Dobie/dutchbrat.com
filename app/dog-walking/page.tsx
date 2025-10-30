@@ -87,6 +87,11 @@ export default function DogWalkingPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <ServiceCard
+              title="Meet & Greet"
+              description="Free 30-minute introduction session for new clients. Get to know each other and discuss your dog's specific needs."
+              price="FREE / 30-mins"
+            />
+            <ServiceCard
               title="Solo Walk"
               description="One-on-one attention for your best friend. Perfect for dogs who prefer their own space."
               price="£17.50 / hour"

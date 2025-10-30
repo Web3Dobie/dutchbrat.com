@@ -26,11 +26,12 @@ type AvailabilityResponse = {
 
 // --- Service Definitions ---
 const SERVICES = [
+    { id: "meetgreet", name: "Meet & Greet - for new clients", duration: 30 },
     { id: "solo", name: "Solo Walk (60 min)", duration: 60 },
     { id: "quick", name: "Quick Walk (30 min)", duration: 30 },
     { id: "sitting", name: "Dog Sitting (Variable)", duration: null },
 ];
-type ServiceId = "solo" | "quick" | "sitting";
+type ServiceId = "meetgreet" | "solo" | "quick" | "sitting";
 
 // --- Helper Functions (Unchanged) ---
 const parseTime = (timeStr: string): Date => {
@@ -186,18 +187,30 @@ export default function BookingCalendar() {
     // --- Memoized Calculations (Fully Expanded) ---
 
     const walkSlots = useMemo(() => {
+
         const service = SERVICES.find((s) => s.id === selectedServiceId);
-        if (selectedServiceId === "sitting" || !service || !service.duration) return [];
+
+        if (selectedServiceId === "sitting" || !service || !service.duration) {
+            console.log("Early return - sitting:", selectedServiceId === "sitting");
+            console.log("Early return - no service:", !service);
+            console.log("Early return - no duration:", !service?.duration);
+            return [];
+        }
 
         const generatedSlots = generateWalkSlots(apiRanges, service.duration);
 
         // Filter past slots for today
         const now = new Date();
         const isToday = selectedDay ? isSameDay(selectedDay, now) : false;
+        console.log("Is today:", isToday);
 
         if (isToday) {
-            return generatedSlots.filter(slot => isAfter(parseTime(slot), now));
+            const filteredSlots = generatedSlots.filter(slot => isAfter(parseTime(slot), now));
+            console.log("Filtered slots for today:", filteredSlots);
+            return filteredSlots;
         }
+
+        console.log("Final slots:", generatedSlots);
         return generatedSlots;
     }, [apiRanges, selectedServiceId, selectedDay]);
 
@@ -342,7 +355,7 @@ export default function BookingCalendar() {
                     )}
 
                     {/* RENDER WALK SLOTS */}
-                    {apiRanges.length > 0 && (selectedServiceId === 'solo' || selectedServiceId === 'quick') && (
+                    {apiRanges.length > 0 && (selectedServiceId === 'solo' || selectedServiceId === 'quick' || selectedServiceId === 'meetgreet') && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                             {walkSlots.length > 0 ? (
                                 walkSlots.map((slot) => (
