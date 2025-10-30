@@ -1,7 +1,7 @@
 // File: frontend/app/dog-walking/page.tsx
 
 import Image from 'next/image';
-import BookingCalendar from '../components/BookingCalendar';
+import MobileBookingCalendar from '../components/MobileBookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 
 // UPDATED: Added an optional 'objectPositionClass' prop to fix cropping
@@ -126,7 +126,7 @@ export default function DogWalkingPage() {
 
             {/* Booking Calendar - Center */}
             <div className="max-w-xl mx-auto w-full bg-gray-900 rounded-lg p-2 lg:col-span-1">
-              <BookingCalendar />
+              <MobileBookingCalendar />
             </div>
 
             {/* Right Image - Mobile: hidden, Desktop: portrait ratio */}

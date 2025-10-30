@@ -40,3 +40,75 @@ body {
   color: #60a5fa;
   /* blue-400 */
 }
+
+/* ===== MOBILE BOOKING STYLES ===== */
+
+/* Mobile-specific styles for the booking calendar */
+
+/* Ensure calendar is touch-friendly on mobile */
+.mobile-calendar {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Increase touch targets for mobile */
+@media (max-width: 640px) {
+  .mobile-calendar .rdp-cell {
+    height: 44px !important;
+    width: 44px !important;
+  }
+
+  .mobile-calendar .rdp-day {
+    height: 44px !important;
+    width: 44px !important;
+    font-size: 16px !important;
+  }
+
+  .mobile-calendar .rdp-nav_button {
+    height: 44px !important;
+    width: 44px !important;
+  }
+}
+
+/* Improve calendar spacing on mobile */
+@media (max-width: 640px) {
+  .mobile-calendar .rdp-table {
+    font-size: 14px;
+  }
+
+  .mobile-calendar .rdp-caption {
+    padding-bottom: 1rem;
+  }
+
+  .mobile-calendar .rdp-head_cell {
+    padding: 0.5rem 0;
+  }
+}
+
+/* Prevent text selection on touch devices for buttons */
+.mobile-calendar,
+button {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Improve button touch feedback */
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* Ensure proper scrolling on mobile */
+@media (max-width: 640px) {
+  .mobile-booking-container {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+}
