@@ -105,8 +105,6 @@ export async function POST(request: NextRequest) {
       `,
             start: { dateTime: data.startTime, timeZone: "Europe/London" },
             end: { dateTime: data.endTime, timeZone: "Europe/London" },
-            // Optional: Add owner as an attendee to send a calendar invite
-            attendees: [{ email: data.email }],
         };
 
         const calendarResponse = await calendar.events.insert({
@@ -134,7 +132,7 @@ export async function POST(request: NextRequest) {
                 <p>Your booking for a <strong>${data.serviceType}</strong> is confirmed!</p>
                 <p><strong>Date & Time:</strong> ${displayDate}</p>
                 <p><strong>Dog(s):</strong> ${dogNames}</p>
-                <p>A calendar invite has been sent to your email. Please check your spam folder if you don't see it immediately.</p>
+                <p>Please save this confirmation email for your records. We'll see you at the scheduled time!</p>
                 <br>
                 
                 <p>If you need to cancel this appointment, please click the button below:</p>
@@ -150,7 +148,7 @@ export async function POST(request: NextRequest) {
                 </a>
                 
                 <br><br>
-                <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please refer to your calendar invite or contact us directly if you prefer.</p>
+                <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
                 <p>Thank you!</p>
             `,
         });

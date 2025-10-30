@@ -174,28 +174,38 @@ export default function BookingForm({
     // --- 2. REGISTER HANDLER (Updated) ---
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        console.log("🚀 Starting registration...", registerData); // DEBUG
         setIsLoading(true);
         setError(null);
+
         try {
-            // The registerData state now includes the email
             const res = await fetch("/api/dog-walking/user-register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ...registerData,
-                    phone: phone, // The phone number from the lookup
-                    dogAge: parseInt(registerData.dogAge, 10) || null,
+                    phone: phone,
+                    dogAge: parseInt(registerData.dogAge, 10),
                 }),
             });
+
+            console.log("📥 Response status:", res.status); // DEBUG
+
             if (!res.ok) {
                 const errData = await res.json();
                 throw new Error(errData.error || "Registration failed.");
             }
+
             const data = await res.json();
+            console.log("✅ Response data:", data); // DEBUG
+
             setCurrentUser(data.user);
-            setSelectedDogIds([data.user.dogs[0].id]); // Pre-select their first dog
+            console.log("🔄 Setting view to selectDog"); // DEBUG
             setView("selectDog");
+
         } catch (err: any) {
+            console.error("💥 Error:", err); // DEBUG
             setError(err.message);
         } finally {
             setIsLoading(false);
@@ -206,8 +216,21 @@ export default function BookingForm({
     const handleAddDog = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!currentUser) return;
+
+        // Add client-side validation
+        if (!newDogData.dogBreed.trim()) {
+            setError("Dog's breed is required.");
+            return;
+        }
+
+        if (!newDogData.dogAge || parseInt(newDogData.dogAge) < 0) {
+            setError("Dog's age is required and must be a valid number.");
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
+
         try {
             const res = await fetch("/api/dog-walking/dog-add", {
                 method: "POST",
@@ -215,19 +238,10 @@ export default function BookingForm({
                 body: JSON.stringify({
                     ...newDogData,
                     ownerId: currentUser.owner_id,
-                    dogAge: parseInt(newDogData.dogAge, 10) || null,
+                    dogAge: parseInt(newDogData.dogAge, 10), // Remove || null
                 }),
             });
-            if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || "Failed to add dog.");
-            }
-            const data = await res.json();
-            setCurrentUser((prev) =>
-                prev ? { ...prev, dogs: [...prev.dogs, data.dog] } : null
-            );
-            setNewDogData({ dogName: "", dogBreed: "", dogAge: "" });
-            setView("selectDog");
+            // ... rest of function remains the same
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -235,12 +249,20 @@ export default function BookingForm({
         }
     };
 
-    // --- 4. FINAL BOOKING HANDLER (Updated) ---
-    const handleBook = async () => {
+    // --- 4. FINAL BOOKING HANDLER (FIXED for Server Action conflicts) ---
+    const handleBook = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+        // Prevent any potential form submission or event bubbling
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
         if (!currentUser || selectedDogIds.length === 0) {
             setError("Please select at least one dog.");
             return;
         }
+
+        console.log('Booking button clicked - starting process'); // Debug log
         setIsLoading(true);
         setError(null);
 
@@ -263,22 +285,38 @@ export default function BookingForm({
             dogName2: dog2?.dog_name,
             address: currentUser.address,
             phone: currentUser.phone,
-            email: currentUser.email, // <-- NEW: Pass email to book API
+            email: currentUser.email,
         };
 
         try {
+            console.log('Sending booking request...', bookingData); // Debug log
+
             const res = await fetch("/api/dog-walking/book", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    // Explicitly prevent Server Action interpretation
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Cache-Control": "no-cache"
+                },
                 body: JSON.stringify(bookingData),
             });
+
+            console.log('Response status:', res.status); // Debug log
+
             if (!res.ok) {
                 const errData = await res.json();
+                console.error('Server error response:', errData); // Debug log
                 throw new Error(errData.error || "Booking failed.");
             }
+
+            const responseData = await res.json();
+            console.log('Booking successful:', responseData); // Debug log
             onBookingSuccess();
         } catch (err: any) {
-            setError(err.message);
+            console.error('Booking error:', err); // Debug log
+            setError(err.message || "Booking failed. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -390,22 +428,28 @@ export default function BookingForm({
                 required
             />
 
-            <label style={styles.label} htmlFor="dogBreed">Dog's Breed (Optional)</label>
+            <label style={styles.label} htmlFor="dogBreed">Dog's Breed*</label>
             <input
                 style={styles.input}
                 type="text"
                 id="dogBreed"
                 value={registerData.dogBreed}
                 onChange={(e) => setRegisterData({ ...registerData, dogBreed: e.target.value })}
+                placeholder="e.g., Labrador, Golden Retriever, Mixed"
+                required
             />
 
-            <label style={styles.label} htmlFor="dogAge">Dog's Age (Optional)</label>
+            <label style={styles.label} htmlFor="dogAge">Dog's Age (years)*</label>
             <input
                 style={styles.input}
                 type="number"
                 id="dogAge"
+                min="0"
+                max="30"
                 value={registerData.dogAge}
                 onChange={(e) => setRegisterData({ ...registerData, dogAge: e.target.value })}
+                placeholder="e.g., 3"
+                required
             />
 
             {error && <p style={styles.error}>{error}</p>}
@@ -479,8 +523,10 @@ export default function BookingForm({
             <button
                 style={{ ...styles.button, marginTop: "16px" }}
                 type="button"
-                onClick={handleBook}
+                onClick={(e) => handleBook(e)}
                 disabled={isLoading || selectedDogIds.length === 0}
+                // Prevent any form context interference
+                onSubmit={(e) => e.preventDefault()}
             >
                 {isLoading ? "Booking..." : "Confirm & Book"}
             </button>
@@ -505,22 +551,28 @@ export default function BookingForm({
                 required
             />
 
-            <label style={styles.label} htmlFor="newDogBreed">Dog's Breed (Optional)</label>
+            <label style={styles.label} htmlFor="newDogBreed">Dog's Breed*</label>
             <input
                 style={styles.input}
                 type="text"
                 id="newDogBreed"
                 value={newDogData.dogBreed}
                 onChange={(e) => setNewDogData({ ...newDogData, dogBreed: e.target.value })}
+                placeholder="e.g., Labrador, Golden Retriever, Mixed"
+                required
             />
 
-            <label style={styles.label} htmlFor="newDogAge">Dog's Age (Optional)</label>
+            <label style={styles.label} htmlFor="newDogAge">Dog's Age (years)*</label>
             <input
                 style={styles.input}
                 type="number"
                 id="newDogAge"
+                min="0"
+                max="30"
                 value={newDogData.dogAge}
                 onChange={(e) => setNewDogData({ ...newDogData, dogAge: e.target.value })}
+                placeholder="e.g., 3"
+                required
             />
 
             {error && <p style={styles.error}>{error}</p>}

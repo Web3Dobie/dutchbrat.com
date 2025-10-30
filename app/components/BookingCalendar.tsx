@@ -254,12 +254,29 @@ export default function BookingCalendar() {
         return (
             <section style={{ maxWidth: "500px", textAlign: "center" }}>
                 <h2 style={{ color: "#10b981" }}>Booking Confirmed!</h2>
-                <p>Thank you for booking. You will receive a Google Calendar invitation shortly.</p>
+                <p>Thank you for booking. You will receive a confirmation email shortly with all the details.</p>
+
                 <p>
                     Your <strong>{selectedServiceName}</strong> on {" "}
                     <strong>{selectedBookingStart && format(selectedBookingStart, "EEEE, MMMM d")}</strong> at {" "}
                     <strong>{selectedBookingStart && format(selectedBookingStart, "HH:mm")}</strong> is complete.
                 </p>
+
+                {/* NEW: Spam folder note */}
+                <div style={{
+                    backgroundColor: "#fef3c7",
+                    border: "1px solid #f59e0b",
+                    borderRadius: "6px",
+                    padding: "12px",
+                    marginTop: "16px",
+                    fontSize: "0.9rem"
+                }}>
+                    <p style={{ margin: "0", color: "#92400e" }}>
+                        📧 <strong>Email Tip:</strong> If you don't see your confirmation email within a few minutes,
+                        please check your spam/junk folder and mark it as "not spam" for future emails.
+                    </p>
+                </div>
+
                 <button
                     style={{ marginTop: "16px", padding: "8px 12px", cursor: "pointer", fontSize: "1rem" }}
                     onClick={resetAndBookAnother}

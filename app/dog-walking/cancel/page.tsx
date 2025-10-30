@@ -1,21 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-// --- Configuration to Force Dynamic Rendering and Disable Caching ---
-// This configuration MUST be placed in the page.tsx file itself
-// and tells Next.js to skip the static export step that is causing the build failure.
-
-// 1. Force dynamic rendering at request time
+// --- Route Segment Configuration (MUST be at top level) ---
 export const dynamic = 'force-dynamic';
-
-// 2. Prevent the page from being cached statically
 export const fetchCache = 'force-no-store';
-// ------------------------------------------------------------------
+export const runtime = 'nodejs';
 
-
-export default function CancelPage() {
+// --- Cancellation Content Component (wrapped by Suspense) ---
+function CancellationContent() {
     const searchParams = useSearchParams();
     const bookingId = searchParams.get("id");
 
@@ -24,7 +18,6 @@ export default function CancelPage() {
     );
     const [message, setMessage] = useState("Verifying and processing cancellation...");
 
-    // The rest of the component logic remains correct.
     useEffect(() => {
         if (bookingId === null || bookingId === "") {
             if (bookingId === "") {
@@ -65,7 +58,6 @@ export default function CancelPage() {
         };
 
         handleCancellation();
-
     }, [bookingId]);
 
     // --- Render based on Status ---
@@ -119,5 +111,33 @@ export default function CancelPage() {
         }}>
             {renderContent()}
         </div>
+    );
+}
+
+// --- Loading Fallback Component ---
+function CancellationLoading() {
+    return (
+        <div style={{
+            maxWidth: "600px",
+            margin: "50px auto",
+            padding: "30px",
+            textAlign: "center",
+            backgroundColor: "#111827",
+            color: "#d1d5db",
+            borderRadius: "8px",
+            border: "1px solid #333",
+        }}>
+            <h1 style={{ color: "#3b82f6" }}>Loading Cancellation...</h1>
+            <p>Preparing cancellation page...</p>
+        </div>
+    );
+}
+
+// --- Main Page Component (with Suspense Boundary) ---
+export default function CancelPage() {
+    return (
+        <Suspense fallback={<CancellationLoading />}>
+            <CancellationContent />
+        </Suspense>
     );
 }

@@ -3,8 +3,11 @@ import { google } from "googleapis";
 import { Pool } from "pg";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
+import { Resend } from "resend";
 
 // --- Initialization ---
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Database Connection
 const pool = new Pool({
@@ -46,17 +49,18 @@ export async function POST(request: NextRequest) {
 
         // --- 1. Fetch Booking Details ---
         const selectQuery = `
-      SELECT 
-        b.google_event_id, b.start_time, b.end_time, b.service_type,
-        o.owner_name, o.phone,
-        d1.dog_name AS dog_name_1, d2.dog_name AS dog_name_2
-      FROM hunters_hounds.bookings b
-      JOIN hunters_hounds.owners o ON b.owner_id = o.id
-      JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
-      LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
-      WHERE b.id = $1 AND b.status = 'active'
-      FOR UPDATE; -- Lock the row to prevent double-cancellation
-    `;
+            SELECT 
+                b.google_event_id, b.start_time, b.end_time, b.service_type,
+                o.owner_name, o.phone, o.email,
+                d1.dog_name AS dog_name_1, d2.dog_name AS dog_name_2
+            FROM hunters_hounds.bookings b
+            JOIN hunters_hounds.owners o ON b.owner_id = o.id
+            JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
+            LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
+            WHERE b.id = $1 AND b.status = 'active'
+            FOR UPDATE OF b;
+        `;
+
 
         const bookingResult = await client.query(selectQuery, [data.bookingId]);
 
@@ -88,17 +92,50 @@ export async function POST(request: NextRequest) {
     `;
         await client.query(updateQuery, [data.bookingId]);
 
-        // --- 4. Send Telegram Notification ---
+        // --- 4. Send Cancellation Email to Customer ---
+        const dogNames = booking.dog_name_2
+            ? `${booking.dog_name_1} & ${booking.dog_name_2}`
+            : booking.dog_name_1;
+
+        await resend.emails.send({
+            from: 'bookings@hunters-hounds.london', // or use your verified domain
+            to: booking.email,
+            subject: `Booking Cancelled - ${displayDate}`,
+            html: `
+                <h1>Booking Cancellation Confirmed</h1>
+                <p>Hi ${booking.owner_name},</p>
+                <p>Your booking for a <strong>${booking.service_type}</strong> has been successfully cancelled.</p>
+                
+                <h3>Cancelled Booking Details:</h3>
+                <p><strong>Service:</strong> ${booking.service_type}</p>
+                <p><strong>Date & Time:</strong> ${displayDate}</p>
+                <p><strong>Dog(s):</strong> ${dogNames}</p>
+                <p><strong>Booking ID:</strong> ${data.bookingId}</p>
+                
+                <p><strong>No charges apply.</strong> Your time slot is now available for other customers.</p>
+                
+                <br>
+                <p>If you'd like to book another appointment, please visit our booking page.</p>
+                <p><strong>Questions?</strong> Feel free to reach out at 07932749772.</p>
+                
+                <br>
+                <p>Thank you for choosing Hunter's Hounds!</p>
+                <p><em>Ernesto</em></p>
+            `,
+        });
+
+
+        // --- 5. Send Telegram Notification ---
         const telegramMessage = `
-        ❌ <b>BOOKING CANCELLED</b> ❌
-        
-        <b>Service:</b> ${booking.service_type}
-        <b>Time:</b> ${displayDate}
-        <b>Client:</b> ${booking.owner_name} (${booking.phone})
-        <b>Dog(s):</b> ${dogs}
-        
-        <i>Slot is now free for re-booking.</i>
-    `;
+            ❌ <b>BOOKING CANCELLED</b> ❌
+            
+            <b>Service:</b> ${booking.service_type}
+            <b>Time:</b> ${displayDate}
+            <b>Client:</b> ${booking.owner_name} (${booking.phone})
+            <b>Dog(s):</b> ${dogs}
+            
+            <i>Slot is now free for re-booking.</i>
+        `;
         await sendTelegramNotification(telegramMessage);
 
         await client.query("COMMIT"); // Commit both DB update and event deletion
