@@ -6,3 +6,37 @@
 body {
   @apply bg-gray-950 text-white;
 }
+
+/* React Day Picker Dark Mode */
+:root {
+  --rdp-color: white;
+  --rdp-background-color: #111827;
+  /* gray-900 */
+
+  --rdp-accent-color: #3b82f6;
+  /* blue-500 */
+  --rdp-outline: 2px solid var(--rdp-accent-color);
+  --rdp-outline-selected: 2px solid var(--rdp-accent-color);
+
+  --rdp-background-color-selected: var(--rdp-accent-color);
+  --rdp-color-selected: white;
+
+  --rdp-font-size: 1rem;
+  --rdp-padding: 0.5rem;
+  --rdp-border-radius: 0.5rem;
+}
+
+.rdp {
+  margin: 1em 0;
+}
+
+.rdp-button:hover:not([disabled]) {
+  background-color: #1f2937;
+  /* gray-800 */
+}
+
+.rdp-day_today {
+  font-weight: bold;
+  color: #60a5fa;
+  /* blue-400 */
+}

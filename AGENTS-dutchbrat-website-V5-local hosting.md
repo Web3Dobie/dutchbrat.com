@@ -760,4 +760,72 @@ docker exec redis redis-cli KEYS "briefing:*"
 
 ---
 
+### Changes in V5 ###
+**🐶 Hunter's Hounds Booking System (NEW Service Integration)**
+This section documents the custom booking and availability management system created to replace external services like Calendly. It is integrated directly into the Next.js frontend container.
+
+**🌐 Service Architecture & Data Flow**
+The booking system operates on a three-tier principle: Frontend (UX) → Next.js API (Business Logic) → PostgreSQL (Data Storage) and Google Calendar (Availability Source).
+
+graph LR
+    User[User on /dog-walking page] --> A{BookingCalendar.tsx};
+    A --> B(GET /api/dog-walking/availability);
+    B --> C(Google Calendar API);
+    C --> B;
+    B --> A;
+    A --> D{BookingForm.tsx};
+    D --> E(POST /api/dog-walking/book);
+    E --> F[PostgreSQL DB: hunters_hounds schema];
+    E --> G(Google Calendar API: Create Event);
+    E --> H(Resend Email Service);
+    E --> I(Telegram Notification);
+    F -- Updates status/Saves Client Data --> J[DB Tables: owners, dogs, bookings];
+    G -- Frees up time --> B;
+
+    subgraph Backend Services
+        E
+        F
+        G
+        H
+        I
+    end
+
+**🗄️ Database Schema & Data Structure**
+The system uses a normalized relational database structure within the existing agents_platform PostgreSQL database to handle customer accounts and dog details efficiently.
+
+**New Schema and Tables (hunters_hounds)**
+Schema,Table,Purpose,Key Columns
+hunters_hounds,owners,Stores unique client accounts.,"id, owner_name, phone (UNIQUE), email (UNIQUE), address"
+hunters_hounds,dogs,Stores individual dog profiles.,"id, owner_id (FK), dog_name, dog_breed, dog_age"
+hunters_hounds,bookings,Stores completed appointments.,"id, owner_id (FK), dog_id_1, dog_id_2 (FK), service_type, start_time (UNIQUE), google_event_id"
+
+**Business Logic Integration**
+Time Slots: Availability is calculated based on Google Calendar events, with a 15-minute conditional buffer applied between appointments (not at the start/end of the workday).
+
+Dog Limits: The bookings table explicitly supports a primary dog (dog_id_1) and an optional second dog (dog_id_2) for a max of 2 per walk.
+
+**💻 API Routes & Logic**
+All new API routes for this service are isolated under the /api/dog-walking path.
+
+API Route,HTTP Method,Purpose,Key Logic
+/api/dog-walking/availability,GET,Returns free time slots.,"Reads Google Calendar busy events, applies 15-min buffers, and inverts to find availableRanges (9:00 - 20:00, Mon-Fri)."
+/api/dog-walking/user-lookup,GET,Checks if a user exists.,Searches owners table by phone number and returns all associated dogs.
+/api/dog-walking/user-register,POST,Creates a new account.,Creates records in both owners and dogs tables within a single database transaction.
+/api/dog-walking/dog-add,POST,Adds a dog to an existing owner.,Inserts a new record into the dogs table linked to an owner_id.
+/api/dog-walking/book,POST,Creates the final booking.,Atomic Transaction: 1. Inserts into bookings table. 2. Creates event on Google Calendar (calendar.events.insert). 3. Sends confirmation email (Resend). 4. Sends Telegram alert.
+/api/dog-walking/cancel,POST,Cancels an existing booking.,Atomic Transaction: 1. Deletes Google Calendar event. 2. Updates bookings.status to 'cancelled'. 3. Sends Telegram alert.
+
+**🔧 External Dependencies**
+Service,Environment Variable,Purpose
+Google Calendar,GOOGLE_CALENDAR_ID,Primary source of truth for availability (Read) and blocking (Write).
+Resend,RESEND_API_KEY,Sending branded booking confirmations and 24-hour reminders.
+Telegram,"TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID",Real-time notifications for new bookings and cancellations.
+
+**Component Structure**
+File,Type,Purpose
+app/components/BookingCalendar.tsx,Client,"Main controller. Displays calendar, manages time slot selection, and switches view state (picker, form, success)."
+app/components/BookingForm.tsx,Client,"Multi-step form handling: lookup, registration, dog selection/addition, and final submission to /api/dog-walking/book."
+lib/telegram.ts,Utility,Reusable function to send push notifications to the configured Telegram chat.
+scripts/send-reminders.js,Cron Job,Standalone Node.js script executed daily to query for next-day bookings and send email reminders.
+
 **For AI Agents**: This documentation reflects the current v3.0 architecture with PostgreSQL caching, Redis performance layer, and scalable archive navigation. The system uses a three-tier caching strategy (Redis → PostgreSQL → Notion) and supports efficient browsing of unlimited briefings through lazy-loaded tree navigation. Focus on the database schema in `hedgefund_agent` schema and the Redis service singleton pattern when making modifications.

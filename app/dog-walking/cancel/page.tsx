@@ -1,0 +1,123 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+
+// --- Configuration to Force Dynamic Rendering and Disable Caching ---
+// This configuration MUST be placed in the page.tsx file itself
+// and tells Next.js to skip the static export step that is causing the build failure.
+
+// 1. Force dynamic rendering at request time
+export const dynamic = 'force-dynamic';
+
+// 2. Prevent the page from being cached statically
+export const fetchCache = 'force-no-store';
+// ------------------------------------------------------------------
+
+
+export default function CancelPage() {
+    const searchParams = useSearchParams();
+    const bookingId = searchParams.get("id");
+
+    const [status, setStatus] = useState<"processing" | "success" | "error" | "invalid">(
+        "processing"
+    );
+    const [message, setMessage] = useState("Verifying and processing cancellation...");
+
+    // The rest of the component logic remains correct.
+    useEffect(() => {
+        if (bookingId === null || bookingId === "") {
+            if (bookingId === "") {
+                setStatus("invalid");
+                setMessage("Invalid cancellation link. The booking ID is missing.");
+            }
+            return;
+        }
+
+        if (!/^\d+$/.test(bookingId)) {
+            setStatus("invalid");
+            setMessage("Invalid cancellation link format.");
+            return;
+        }
+
+        const handleCancellation = async () => {
+            try {
+                const res = await fetch("/api/dog-walking/cancel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ bookingId: parseInt(bookingId) }),
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    setStatus("success");
+                    setMessage("Your booking has been successfully cancelled.");
+                } else {
+                    setStatus("error");
+                    setMessage(data.error || "Cancellation failed. Please try again.");
+                }
+            } catch (err) {
+                setStatus("error");
+                setMessage("A network error occurred. Please contact customer support.");
+                console.error("Cancellation fetch error:", err);
+            }
+        };
+
+        handleCancellation();
+
+    }, [bookingId]);
+
+    // --- Render based on Status ---
+    const renderContent = () => {
+        switch (status) {
+            case "processing":
+                return (
+                    <>
+                        <h1 style={{ color: "#3b82f6" }}>Processing Cancellation...</h1>
+                        <p>{message}</p>
+                        <p>Please wait, do not close this window.</p>
+                    </>
+                );
+            case "success":
+                return (
+                    <>
+                        <h1 style={{ color: "#10b981" }}>✅ CANCELLATION CONFIRMED</h1>
+                        <p>{message}</p>
+                        <p>You may also receive a notification if your email provider confirms the calendar event was removed.</p>
+                        <p style={{ marginTop: "15px", fontWeight: "bold" }}>Booking ID: {bookingId}</p>
+                        <a href="https://dutchbrat.com/dog-walking" style={{ display: "block", marginTop: "20px", color: "#3b82f6" }}>
+                            Book a new walk or return to the main page.
+                        </a>
+                    </>
+                );
+            case "error":
+            case "invalid":
+                return (
+                    <>
+                        <h1 style={{ color: "#ef4444" }}>❌ CANCELLATION FAILED</h1>
+                        <p>{message}</p>
+                        <p>If you believe this is an error, please contact us at **07932749772** immediately.</p>
+                        <p style={{ marginTop: "15px", fontWeight: "bold" }}>Booking ID: {bookingId || "N/A"}</p>
+                    </>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div style={{
+            maxWidth: "600px",
+            margin: "50px auto",
+            padding: "30px",
+            textAlign: "center",
+            backgroundColor: "#111827",
+            color: "#d1d5db",
+            borderRadius: "8px",
+            border: "1px solid #333",
+        }}>
+            {renderContent()}
+        </div>
+    );
+}

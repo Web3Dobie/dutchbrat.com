@@ -1,5 +1,8 @@
 FROM node:18-alpine AS base
 
+ARG RESEND_API_KEY 
+ENV RESEND_API_KEY=$RESEND_API_KEY
+
 # Install dependencies only when needed
 FROM base AS deps
 RUN apk add --no-cache libc6-compat

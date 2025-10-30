@@ -1,7 +1,7 @@
 // File: frontend/app/dog-walking/page.tsx
 
 import Image from 'next/image';
-import { BookingCalendar } from '@/app/components/BookingCalendar';
+import BookingCalendar from '../components/BookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 
 // UPDATED: Added an optional 'objectPositionClass' prop to fix cropping
