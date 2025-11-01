@@ -146,10 +146,7 @@ export default function TimeSlotGrid({
     // --- Main Render ---
     return (
         <div className="space-y-6">
-            <h3 className="text-lg font-semibold text-white">
-                3. Select Time
-            </h3>
-
+           
             {/* Mobile: Organized by time periods */}
             <div className="block sm:hidden space-y-6">
                 {morning.length > 0 && (

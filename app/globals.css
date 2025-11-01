@@ -112,3 +112,16 @@ button:active {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* Basic styling for react-day-picker in dark theme */
+.rdp {
+  --rdp-cell-size: 40px;
+  --rdp-accent-color: #3b82f6;
+  --rdp-background-color: #1f2937;
+  --rdp-accent-color-dark: #2563eb;
+}
+
+.rdp-day_selected {
+  background-color: var(--rdp-accent-color);
+  color: white;
+}

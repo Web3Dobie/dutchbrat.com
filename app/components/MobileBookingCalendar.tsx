@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
 import BookingForm from "./BookingForm";
 
-// Import new focused components (we'll build these next)
+// Import components
 import ServiceSelector from "./ServiceSelector";
 import ResponsiveDatePicker from "./ResponsiveDatePicker";
 import TimeSlotGrid from "./TimeSlotGrid";
@@ -48,12 +48,13 @@ export default function MobileBookingCalendar() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // --- Data Fetching (same API contract) ---
+    // --- Data Fetching (updated with service_type parameter) ---
     useEffect(() => {
         if (!selectedDay) return;
 
         const formattedDate = format(selectedDay, "yyyy-MM-dd");
-        const url = `/api/dog-walking/availability?date=${formattedDate}`;
+        // Add service_type parameter for service-specific hours
+        const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${selectedServiceId}`;
 
         setIsLoading(true);
         setError(null);
@@ -74,60 +75,66 @@ export default function MobileBookingCalendar() {
             .finally(() => {
                 setIsLoading(false);
             });
-    }, [selectedDay]);
+    }, [selectedDay, selectedServiceId]); // Added selectedServiceId to dependencies
 
-    // --- Event Handlers ---
+    // --- Service Change Handler ---
     const handleServiceChange = (serviceId: ServiceId) => {
         setSelectedServiceId(serviceId);
-        setView("picker");
+        setSelectedBookingStart(null);
+        setSelectedBookingEnd(null);
+        setError(null);
+        
+        // For dog sitting, we don't need the main selectedDay since it has its own date selection
+        if (serviceId === "sitting") {
+            setSelectedDay(undefined);
+        } else if (!selectedDay) {
+            setSelectedDay(new Date());
+        }
     };
 
+    // --- Time Slot Selection Handler ---
     const handleTimeSlotSelect = (startTime: Date, endTime: Date) => {
         setSelectedBookingStart(startTime);
         setSelectedBookingEnd(endTime);
         setView("form");
     };
 
+    // --- Success Handler ---
     const handleBookingSuccess = () => {
         setView("success");
     };
 
+    // --- Reset to Picker ---
     const handleBackToPicker = () => {
         setView("picker");
         setSelectedBookingStart(null);
         setSelectedBookingEnd(null);
+        setError(null);
     };
 
-    const handleBookAnother = () => {
-        setView("picker");
-        setSelectedBookingStart(null);
-        setSelectedBookingEnd(null);
-        setSelectedDay(new Date());
-    };
-
-    // --- Get current service info ---
+    // --- Get Selected Service ---
     const selectedService = SERVICES.find(s => s.id === selectedServiceId);
-    const selectedServiceName = selectedService?.name || "Service";
 
-    // --- Render Views ---
-    if (view === "success") {
-        return (
-            <BookingSuccess
-                serviceName={selectedServiceName}
-                bookingStart={selectedBookingStart}
-                onBookAnother={handleBookAnother}
-            />
-        );
-    }
-
-    if (view === "form" && selectedBookingStart && selectedBookingEnd) {
+    // --- View States ---
+    if (view === "form" && selectedBookingStart && selectedBookingEnd && selectedService) {
         return (
             <BookingForm
-                serviceName={selectedServiceName}
+                serviceName={selectedService.name}
                 startTime={selectedBookingStart}
                 endTime={selectedBookingEnd}
                 onBookingSuccess={handleBookingSuccess}
                 onCancel={handleBackToPicker}
+            />
+        );
+    }
+
+    if (view === "success") {
+        return (
+            <BookingSuccess
+                serviceName={selectedService?.name || "Service"}
+                bookingStart={selectedBookingStart}     // ✅ Fixed: Changed from startTime to bookingStart
+                endTime={selectedBookingEnd}            // ✅ Optional prop for multi-day support
+                onBookAnother={handleBackToPicker}      // ✅ Fixed: Changed from onBackToPicker to onBookAnother
             />
         );
     }
@@ -144,23 +151,21 @@ export default function MobileBookingCalendar() {
                     onServiceChange={handleServiceChange}
                 />
 
-                {/* Step 2: Date Selection */}
-                <ResponsiveDatePicker
-                    selectedDay={selectedDay}
-                    onDaySelect={setSelectedDay}
-                />
+                {/* Step 2: Date Selection - HIDDEN for Dog Sitting */}
+                {selectedServiceId !== "sitting" && (
+                    <div className="space-y-4">
+                        <ResponsiveDatePicker
+                            selectedDay={selectedDay}
+                            onDaySelect={setSelectedDay}
+                        />
+                    </div>
+                )}
 
-                {/* Step 3: Time Selection */}
+                {/* Step 3: Time Selection / Dog Sitting Details */}
                 <div className="min-h-[200px]">
                     {error && (
                         <div className="p-4 bg-red-900 border border-red-600 rounded-lg text-red-200 mb-4">
                             {error}
-                        </div>
-                    )}
-
-                    {!selectedDay && (
-                        <div className="p-6 text-center text-gray-400">
-                            Please select a date to see available times.
                         </div>
                     )}
 
@@ -172,13 +177,25 @@ export default function MobileBookingCalendar() {
                             onTimeSlotSelect={handleTimeSlotSelect}
                         />
                     ) : (
-                        <TimeSlotGrid
-                            selectedService={selectedService}
-                            selectedDay={selectedDay}
-                            apiRanges={apiRanges}
-                            isLoading={isLoading}
-                            onTimeSlotSelect={handleTimeSlotSelect}
-                        />
+                        <>
+                            <h2 className="text-xl font-semibold text-white">3. Select Time</h2>
+                            
+                            {!selectedDay && (
+                                <div className="p-6 text-center text-gray-400">
+                                    Please select a date to see available times.
+                                </div>
+                            )}
+
+                            {selectedDay && (
+                                <TimeSlotGrid
+                                    selectedService={selectedService}
+                                    selectedDay={selectedDay}
+                                    apiRanges={apiRanges}
+                                    isLoading={isLoading}
+                                    onTimeSlotSelect={handleTimeSlotSelect}
+                                />
+                            )}
+                        </>
                     )}
                 </div>
             </div>
