@@ -24,8 +24,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
+        console.log("Booking request body:", body);
         const {
-            owner_id,
+            ownerId, // <-- CHANGED: From owner_id to ownerId
             dog_id_1,
             dog_id_2,
             service_type,
@@ -42,20 +43,36 @@ export async function POST(request: NextRequest) {
 
         // Determine booking type based on presence of end_time and duration
         const booking_type = end_time && !duration_minutes ? 'multi_day' : 'single';
-        
+
         // Validate multi-day booking logic
-        if (booking_type === 'multi_day' && service_type !== 'dog-sitting') {
-            return NextResponse.json(
-                { error: "Multi-day bookings are only available for dog sitting" },
-                { status: 400 }
-            );
+        if (service_type === 'Dog Sitting' && booking_type !== 'multi_day') {
+            // Handle single-day sitting requests if needed, but for now, enforce duration for single day walks
+            if (booking_type === 'single') {
+                // No action, rely on duration_minutes for single day walk logic below
+            } else {
+                return NextResponse.json(
+                    { error: "Dog Sitting must be booked with an end time (multi-day flow)" },
+                    { status: 400 }
+                );
+            }
         }
+
+        if (booking_type === 'multi_day' && service_type !== 'Dog Sitting') {
+            // Use `service_type` property if Dog Sitting is not found (assuming Dog Sitting name is 'Dog Sitting')
+            if (service_type.toLowerCase().includes('walk') || service_type.toLowerCase().includes('greet')) {
+                return NextResponse.json(
+                    { error: `Multi-day bookings are only available for Dog Sitting. Service received: ${service_type}` },
+                    { status: 400 }
+                );
+            }
+        }
+
 
         // Generate cancellation token
         const cancellation_token = crypto.randomUUID();
 
         const client = await pool.connect();
-        
+
         try {
             await client.query('BEGIN');
 
@@ -66,14 +83,26 @@ export async function POST(request: NextRequest) {
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active') 
                 RETURNING id
             `;
-            
+
+            // Calculate end_time for single bookings
+            let calculatedEndTime;
+            if (booking_type === 'single' && duration_minutes) {
+                // Calculate end_time = start_time + duration_minutes
+                const startDateTime = new Date(start_time);
+                const endDateTime = new Date(startDateTime.getTime() + (duration_minutes * 60 * 1000));
+                calculatedEndTime = endDateTime.toISOString();
+            } else {
+                // Multi-day booking uses the provided end_time
+                calculatedEndTime = end_time;
+            }
+
             const bookingValues = [
-                owner_id,
+                ownerId,
                 dog_id_1,
                 dog_id_2 || null,
                 service_type,
                 start_time,
-                booking_type === 'multi_day' ? end_time : null,
+                calculatedEndTime, // ✅ Always provides a valid end_time
                 booking_type === 'single' ? duration_minutes : null,
                 booking_type,
                 cancellation_token
@@ -84,9 +113,9 @@ export async function POST(request: NextRequest) {
 
             // --- 2. Create Google Calendar Event ---
             const dogNames = dog_name_2 ? `${dog_name_1} & ${dog_name_2}` : dog_name_1;
-            
+
             let eventTitle, eventDescription;
-            
+
             if (booking_type === 'multi_day') {
                 const numDays = differenceInDays(new Date(end_time), new Date(start_time)) + 1;
                 eventTitle = `${service_type} - ${dogNames} (${numDays} days)`;
@@ -104,6 +133,10 @@ Booking Type: Multi-Day
                 `;
             } else {
                 eventTitle = `${service_type} - ${dogNames}`;
+
+                // Calculate end time for single day walks/greets for event
+                const walkEndTime = new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000).toISOString();
+
                 eventDescription = `
 Owner: ${owner_name}
 Dog(s): ${dogNames}
@@ -113,19 +146,22 @@ Address: ${address}
 Phone: ${phone}
 Email: ${email}
 Booking Type: Single Day
+Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
+End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 `;
             }
 
             const event = {
                 summary: eventTitle,
                 description: eventDescription,
-                start: { 
-                    dateTime: start_time, 
-                    timeZone: "Europe/London" 
+                start: {
+                    dateTime: start_time,
+                    timeZone: "Europe/London"
                 },
-                end: { 
-                    dateTime: booking_type === 'multi_day' ? end_time : new Date(new Date(start_time).getTime() + duration_minutes * 60000).toISOString(),
-                    timeZone: "Europe/London" 
+                end: {
+                    // Use end_time for multi-day, calculate end time using duration for single day
+                    dateTime: booking_type === 'multi_day' ? end_time : new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000).toISOString(),
+                    timeZone: "Europe/London"
                 },
             };
 
@@ -133,7 +169,7 @@ Booking Type: Single Day
                 calendarId: process.env.GOOGLE_CALENDAR_ID,
                 requestBody: event,
             });
-            
+
             const googleEventId = calendarResponse.data.id;
 
             // Update booking with Google Event ID
@@ -242,7 +278,7 @@ Booking Type: Single Day
 
             // --- 4. Send Telegram Notification ---
             let telegramMessage;
-            
+
             if (booking_type === 'multi_day') {
                 const numDays = differenceInDays(new Date(end_time), new Date(start_time)) + 1;
                 telegramMessage = `
@@ -287,23 +323,30 @@ Booking Type: Single Day
                 google_event_id: googleEventId,
                 cancellation_token: cancellation_token,
                 booking_type: booking_type,
-                message: booking_type === 'multi_day' 
+                message: booking_type === 'multi_day'
                     ? "Multi-day dog sitting booking confirmed!"
                     : "Single-day booking confirmed!"
             });
 
         } catch (error) {
             await client.query('ROLLBACK');
-            throw error;
+
+            // Log the error detail for debugging
+            console.error("Error creating booking:", error);
+
+            return NextResponse.json(
+                { error: "Error creating booking. Please check console for details." },
+                { status: 500 }
+            );
         } finally {
             client.release();
         }
 
     } catch (error) {
-        console.error("Error creating booking:", error);
+        console.error("Error parsing request body or general server failure:", error);
         return NextResponse.json(
-            { error: "Failed to create booking" },
-            { status: 500 }
+            { error: "Failed to process request" },
+            { status: 400 }
         );
     }
 }

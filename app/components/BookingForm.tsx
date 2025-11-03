@@ -272,17 +272,29 @@ export default function BookingForm({
                 ? currentUser.dogs.find((d) => d.id === selectedDogIds[1])
                 : undefined;
 
+        // Extract duration from service name dynamically
+        const getDurationFromService = (serviceName: string) => {
+            if (serviceName.includes('60 min')) return 60;
+            if (serviceName.includes('30 min')) return 30;
+            return 60; // default
+        };
+
         const bookingData = {
             ownerId: currentUser.owner_id,
-            dogId1: selectedDogIds[0],
-            dogId2: selectedDogIds.length > 1 ? selectedDogIds[1] : undefined,
-            serviceType: serviceName,
-            startTime: startTime.toISOString(),
-            endTime: endTime.toISOString(),
-            // Extra info for the calendar event
-            ownerName: currentUser.owner_name,
-            dogName1: dog1?.dog_name,
-            dogName2: dog2?.dog_name,
+            dog_id_1: selectedDogIds[0],
+            dog_id_2: selectedDogIds.length > 1 ? selectedDogIds[1] : undefined,
+            service_type: serviceName,
+            start_time: startTime.toISOString(),
+            
+            // ✅ Smart conditional data
+            ...(serviceName.includes('Dog Sitting') 
+                ? { end_time: endTime.toISOString() }
+                : { duration_minutes: getDurationFromService(serviceName) }
+            ),
+            
+            owner_name: currentUser.owner_name,
+            dog_name_1: dog1?.dog_name,
+            dog_name_2: dog2?.dog_name,
             address: currentUser.address,
             phone: currentUser.phone,
             email: currentUser.email,

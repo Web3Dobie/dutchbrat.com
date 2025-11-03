@@ -6,7 +6,7 @@ import BookingForm from "./BookingForm";
 
 // Import components
 import ServiceSelector from "./ServiceSelector";
-import ResponsiveDatePicker from "./ResponsiveDatePicker";
+import ResponsiveDatePicker from "./ResponsiveDatePicker"; // <-- NOW USING NEW FILE
 import TimeSlotGrid from "./TimeSlotGrid";
 import SittingBookingFlow from "./SittingBookingFlow";
 import BookingSuccess from "./BookingSuccess";
@@ -48,13 +48,24 @@ export default function MobileBookingCalendar() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // --- Data Fetching (updated with service_type parameter) ---
+    // --- Data Fetching (Only for walk services, dog sitting has its own API) ---
     useEffect(() => {
+        // Skip API calls for dog sitting - it manages its own API calls
+        if (selectedServiceId === "sitting") return;
         if (!selectedDay) return;
 
         const formattedDate = format(selectedDay, "yyyy-MM-dd");
-        // Add service_type parameter for service-specific hours
-        const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${selectedServiceId}`;
+
+        // Map frontend service ID to backend service type (dog sitting excluded)
+        const serviceTypeMap: Record<Exclude<ServiceId, 'sitting'>, string> = {
+            'meetgreet': 'meet-greet',
+            'solo': 'solo-walk',
+            'quick': 'quick-walk',
+        };
+
+        const serviceType = serviceTypeMap[selectedServiceId as Exclude<ServiceId, 'sitting'>];
+        console.log("API Call Debug:", { selectedServiceId, serviceType, formattedDate });
+        const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}`;
 
         setIsLoading(true);
         setError(null);
@@ -79,14 +90,16 @@ export default function MobileBookingCalendar() {
 
     // --- Service Change Handler ---
     const handleServiceChange = (serviceId: ServiceId) => {
+        console.log("Service changing from", selectedServiceId, "to", serviceId);
         setSelectedServiceId(serviceId);
         setSelectedBookingStart(null);
         setSelectedBookingEnd(null);
         setError(null);
-        
+
         // For dog sitting, we don't need the main selectedDay since it has its own date selection
         if (serviceId === "sitting") {
             setSelectedDay(undefined);
+            setApiRanges([]);
         } else if (!selectedDay) {
             setSelectedDay(new Date());
         }
@@ -172,14 +185,12 @@ export default function MobileBookingCalendar() {
                     {selectedServiceId === "sitting" ? (
                         <SittingBookingFlow
                             selectedDay={selectedDay}
-                            apiRanges={apiRanges}
-                            isLoading={isLoading}
                             onTimeSlotSelect={handleTimeSlotSelect}
                         />
                     ) : (
                         <>
                             <h2 className="text-xl font-semibold text-white">3. Select Time</h2>
-                            
+
                             {!selectedDay && (
                                 <div className="p-6 text-center text-gray-400">
                                     Please select a date to see available times.

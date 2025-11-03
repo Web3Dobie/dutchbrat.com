@@ -7,121 +7,66 @@ body {
   @apply bg-gray-950 text-white;
 }
 
-/* React Day Picker Dark Mode */
-:root {
-  --rdp-color: white;
-  --rdp-background-color: #111827;
-  /* gray-900 */
-
-  --rdp-accent-color: #3b82f6;
-  /* blue-500 */
-  --rdp-outline: 2px solid var(--rdp-accent-color);
-  --rdp-outline-selected: 2px solid var(--rdp-accent-color);
-
-  --rdp-background-color-selected: var(--rdp-accent-color);
-  --rdp-color-selected: white;
-
-  --rdp-font-size: 1rem;
-  --rdp-padding: 0.5rem;
-  --rdp-border-radius: 0.5rem;
-}
-
-.rdp {
-  margin: 1em 0;
-}
-
-.rdp-button:hover:not([disabled]) {
-  background-color: #1f2937;
-  /* gray-800 */
-}
-
-.rdp-day_today {
-  font-weight: bold;
-  color: #60a5fa;
-  /* blue-400 */
-}
-
 /* ===== MOBILE BOOKING STYLES ===== */
-
-/* Mobile-specific styles for the booking calendar */
-
-/* Ensure calendar is touch-friendly on mobile */
 .mobile-calendar {
   width: 100%;
   max-width: 100%;
 }
 
-/* Increase touch targets for mobile */
 @media (max-width: 640px) {
-  .mobile-calendar .rdp-cell {
-    height: 44px !important;
-    width: 44px !important;
-  }
-
   .mobile-calendar .rdp-day {
     height: 44px !important;
     width: 44px !important;
     font-size: 16px !important;
   }
-
-  .mobile-calendar .rdp-nav_button {
-    height: 44px !important;
-    width: 44px !important;
-  }
 }
 
-/* Improve calendar spacing on mobile */
-@media (max-width: 640px) {
-  .mobile-calendar .rdp-table {
-    font-size: 14px;
-  }
-
-  .mobile-calendar .rdp-caption {
-    padding-bottom: 1rem;
-  }
-
-  .mobile-calendar .rdp-head_cell {
-    padding: 0.5rem 0;
-  }
-}
-
-/* Prevent text selection on touch devices for buttons */
 .mobile-calendar,
 button {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
-  -khtml-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
   user-select: none;
 }
 
-/* Improve button touch feedback */
 button {
   -webkit-tap-highlight-color: transparent;
 }
 
-button:active {
-  transform: scale(0.98);
-}
-
-/* Ensure proper scrolling on mobile */
-@media (max-width: 640px) {
-  .mobile-booking-container {
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* Basic styling for react-day-picker in dark theme */
+/* ===== SMART CALENDAR - WIDER CONTAINER, NO INTERNAL OVERRIDES ===== */
+.rdp-custom,
+.rdp-custom-compact,
 .rdp {
-  --rdp-cell-size: 40px;
-  --rdp-accent-color: #3b82f6;
-  --rdp-background-color: #1f2937;
-  --rdp-accent-color-dark: #2563eb;
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #d1d5db;
+  width: 100%;
+  max-width: 420px;
+  /* ✅ Give it more room */
+  min-width: 350px;
+  /* ✅ Ensure minimum width */
+  margin: 0 auto;
 }
 
-.rdp-day_selected {
-  background-color: var(--rdp-accent-color);
-  color: white;
+/* Colors only - no layout interference */
+.rdp-custom *,
+.rdp-custom-compact *,
+.rdp * {
+  color: #111827 !important;
+}
+
+.rdp-custom [aria-selected="true"],
+.rdp-custom-compact [aria-selected="true"],
+.rdp [aria-selected="true"] {
+  background: #3b82f6 !important;
+  color: white !important;
+  font-weight: bold !important;
+  border-radius: 6px !important;
+}
+
+.rdp-custom button:hover:not([aria-selected="true"]),
+.rdp-custom-compact button:hover:not([aria-selected="true"]),
+.rdp button:hover:not([aria-selected="true"]) {
+  background: #f3f4f6 !important;
+  border-radius: 6px !important;
 }
