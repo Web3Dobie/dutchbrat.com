@@ -4,69 +4,191 @@
 
 /* Dark theme only - no light mode variations */
 body {
-  @apply bg-gray-950 text-white;
+    @apply bg-gray-950 text-white;
 }
 
 /* ===== MOBILE BOOKING STYLES ===== */
 .mobile-calendar {
-  width: 100%;
-  max-width: 100%;
+    width: 100%;
+    max-width: 100%;
 }
 
 @media (max-width: 640px) {
-  .mobile-calendar .rdp-day {
-    height: 44px !important;
-    width: 44px !important;
-    font-size: 16px !important;
-  }
+    .mobile-calendar .rdp-day {
+        height: 44px !important;
+        width: 44px !important;
+        font-size: 16px !important;
+    }
 }
 
 .mobile-calendar,
 button {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 button {
-  -webkit-tap-highlight-color: transparent;
+    -webkit-tap-highlight-color: transparent;
 }
 
-/* ===== SMART CALENDAR - WIDER CONTAINER, NO INTERNAL OVERRIDES ===== */
-.rdp-custom,
-.rdp-custom-compact,
-.rdp {
-  background: white;
-  border-radius: 8px;
-  padding: 20px;
-  border: 1px solid #d1d5db;
-  width: 100%;
-  max-width: 420px;
-  /* ✅ Give it more room */
-  min-width: 350px;
-  /* ✅ Ensure minimum width */
-  margin: 0 auto;
+/* ===== MINIMAL CALENDAR FIXES ===== */
+/* Only fix the visual issues, don't touch the layout */
+
+/* White background and basic container styling */
+.rdp-custom-compact {
+    background: white !important;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #d1d5db;
+    color: #111827 !important;
+    max-width: 400px;
+    margin: 0 auto;
 }
 
-/* Colors only - no layout interference */
-.rdp-custom *,
-.rdp-custom-compact *,
-.rdp * {
-  color: #111827 !important;
+/* Add spacing between days without breaking table structure */
+.rdp-custom-compact .rdp-table {
+    border-spacing: 4px !important;
 }
 
-.rdp-custom [aria-selected="true"],
-.rdp-custom-compact [aria-selected="true"],
-.rdp [aria-selected="true"] {
-  background: #3b82f6 !important;
-  color: white !important;
-  font-weight: bold !important;
-  border-radius: 6px !important;
+/* Make day buttons more visible and clickable */
+.rdp-custom-compact .rdp-day {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 6px !important;
+    padding: 8px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    color: #374151 !important;
+    transition: all 0.2s ease !important;
 }
 
-.rdp-custom button:hover:not([aria-selected="true"]),
-.rdp-custom-compact button:hover:not([aria-selected="true"]),
-.rdp button:hover:not([aria-selected="true"]) {
-  background: #f3f4f6 !important;
-  border-radius: 6px !important;
+/* Hover state */
+.rdp-custom-compact .rdp-day:hover:not(.rdp-day_selected) {
+    background: #f3f4f6 !important;
+    border-color: #d1d5db !important;
+}
+
+/* SELECTED DATE - MUCH MORE VISIBLE blue selection */
+.rdp-custom-compact .rdp-day_selected,
+.rdp-custom-compact [aria-selected="true"] {
+    background: #2563eb !important;
+    color: white !important;
+    border: 2px solid #1d4ed8 !important;
+    font-weight: 700 !important;
+    transform: scale(1.05) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* TODAY'S DATE - MUCH MORE VISIBLE indicator */
+.rdp-custom-compact .rdp-day_today:not(.rdp-day_selected) {
+    background: #dbeafe !important;
+    color: #1e40af !important;
+    border: 2px solid #3b82f6 !important;
+    font-weight: 700 !important;
+    position: relative !important;
+}
+
+/* Extra today indicator - dot below the number */
+.rdp-custom-compact .rdp-day_today:not(.rdp-day_selected)::after {
+    content: '' !important;
+    position: absolute !important;
+    bottom: 2px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 4px !important;
+    height: 4px !important;
+    background: #1e40af !important;
+    border-radius: 50% !important;
+}
+
+/* Disabled dates */
+.rdp-custom-compact .rdp-day:disabled {
+    color: #d1d5db !important;
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+}
+
+/* Month header */
+.rdp-custom-compact .rdp-caption_label {
+    color: #111827 !important;
+    font-weight: 600 !important;
+}
+
+/* Day headers (Su Mo Tu We etc) */
+.rdp-custom-compact .rdp-head_cell {
+    color: #6b7280 !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+}
+
+/* Navigation buttons */
+.rdp-custom-compact .rdp-nav_button {
+    background: #f9fafb !important;
+    border: 1px solid #d1d5db !important;
+    color: #6b7280 !important;
+    border-radius: 4px !important;
+}
+
+.rdp-custom-compact .rdp-nav_button:hover {
+    background: #e5e7eb !important;
+    color: #374151 !important;
+}
+
+/* DARK THEME for dog sitting */
+.rdp-custom-compact-dark {
+    background: #1f2937 !important;
+    border: 1px solid #374151 !important;
+    color: #e5e7eb !important;
+}
+
+.rdp-custom-compact-dark .rdp-caption_label {
+    color: #f9fafb !important;
+}
+
+.rdp-custom-compact-dark .rdp-head_cell {
+    color: #9ca3af !important;
+}
+
+.rdp-custom-compact-dark .rdp-day {
+    color: #e5e7eb !important;
+}
+
+.rdp-custom-compact-dark .rdp-day:hover:not(.rdp-day_selected) {
+    background: #374151 !important;
+    border-color: #4b5563 !important;
+}
+
+/* Dark theme selected date */
+.rdp-custom-compact-dark .rdp-day_selected,
+.rdp-custom-compact-dark [aria-selected="true"] {
+    background: #2563eb !important;
+    color: white !important;
+    border: 2px solid #1d4ed8 !important;
+    font-weight: 700 !important;
+    transform: scale(1.05) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* Dark theme today indicator */
+.rdp-custom-compact-dark .rdp-day_today:not(.rdp-day_selected) {
+    background: #1e3a8a !important;
+    color: #60a5fa !important;
+    border: 2px solid #3b82f6 !important;
+    font-weight: 700 !important;
+}
+
+.rdp-custom-compact-dark .rdp-day_today:not(.rdp-day_selected)::after {
+    background: #60a5fa !important;
+}
+
+.rdp-custom-compact-dark .rdp-nav_button {
+    background: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #9ca3af !important;
+}
+
+.rdp-custom-compact-dark .rdp-nav_button:hover {
+    background: #4b5563 !important;
+    color: #e5e7eb !important;
 }
