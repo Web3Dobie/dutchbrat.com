@@ -277,8 +277,20 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                     {/* Show restriction message if can't manage */}
                     {['confirmed', 'active'].includes(booking.status) && !canManage && !isPast(startTime) && (
                         <div className="mt-3 pt-3 border-t border-gray-700">
-                            <p className="text-gray-400 text-xs">
-                                Changes must be made at least 2 hours before appointment
+                            <p className="text-amber-400 text-sm font-medium mb-1">
+                                ⏰ Changes must be made at least 2 hours before appointment
+                            </p>
+                            <p className="text-gray-300 text-sm">
+                                Please contact <a href="tel:07932749772" className="text-blue-400 hover:text-blue-300 font-semibold">07932749772</a> for cancellation
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Show contact info for past bookings */}
+                    {(isPast(startTime) || ['cancelled', 'completed'].includes(booking.status)) && (
+                        <div className="mt-3 pt-3 border-t border-gray-700">
+                            <p className="text-gray-400 text-sm">
+                                Questions about this booking? Contact <a href="tel:07932749772" className="text-blue-400 hover:text-blue-300 font-semibold">07932749772</a>
                             </p>
                         </div>
                     )}
