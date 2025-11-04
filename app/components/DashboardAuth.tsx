@@ -194,7 +194,7 @@ export default function DashboardAuth({ onAuthSuccess }: DashboardAuthProps) {
                     <p>Can't find your account?</p>
                     <p style={{ marginTop: "4px" }}>
                         <a 
-                            href="mailto:info@hunters-hounds.london" 
+                            href="mailto:ernesto@hunters-hounds.london" 
                             style={{ color: "#3b82f6", textDecoration: "underline" }}
                         >
                             Contact us

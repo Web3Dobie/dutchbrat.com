@@ -152,14 +152,14 @@ export default function CustomerDashboard() {
                         📞 07932749772
                     </a>
                     <a 
-                        href="mailto:info@hunters-hounds.london" 
+                        href="mailto:ernesto@hunters-hounds.london" 
                         style={{ 
                             color: "#3b82f6", 
                             textDecoration: "none",
                             fontSize: "0.9rem"
                         }}
                     >
-                        ✉️ info@hunters-hounds.london
+                        ✉️ ernesto@hunters-hounds.london
                     </a>
                     <a 
                         href="/dog-walking" 

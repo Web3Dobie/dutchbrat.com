@@ -244,7 +244,7 @@ ${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)
                             <strong>Hunter's Hounds</strong><br>
                             Professional Dog Walking Service<br>
                             Phone: 07932749772<br>
-                            Email: info@hunters-hounds.london<br>
+                            Email: ernesto@hunters-hounds.london<br>
                         </p>
                     </div>
                 `
