@@ -16,6 +16,7 @@ interface SittingAvailabilityResponse {
     startDayRanges?: ApiRange[];
     endDayRanges?: ApiRange[];
     conflicts?: string[];
+    conflictDetails?: string[];
     message?: string;
 }
 
@@ -360,10 +361,54 @@ export default function SittingBookingFlow({
                 </div>
                 {/* --- END OF CORRECTED CALENDAR STACK FIX --- */}
 
-                {/* Availability Status */}
+                {/* Enhanced Availability Status */}
                 {apiData && (
-                    <div className={`p-3 rounded-lg ${apiData.available ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200'}`}>
-                        {apiData.message || (apiData.available ? "Available" : "Not available")}
+                    <div className="space-y-3">
+                        {/* Main availability message */}
+                        <div className={`p-3 rounded-lg ${apiData.available ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200'}`}>
+                            {apiData.available 
+                                ? (apiData.type === 'single' 
+                                    ? `${availableStartTimes.length} time slots available on ${format(startDate!, "MMM d")}`
+                                    : apiData.message || "Available for multi-day booking"
+                                )
+                                : (apiData.message || "Not available")
+                            }
+                        </div>
+
+                        {/* ✨ NEW: Detailed conflict information */}
+                        {!apiData.available && apiData.conflicts && apiData.conflicts.length > 0 && (
+                            <div className="p-3 rounded-lg bg-yellow-800 text-yellow-200 border border-yellow-600">
+                                <p className="font-semibold mb-2">Unavailable Days:</p>
+                                <div className="space-y-1 text-sm">
+                                    {apiData.conflictDetails ? (
+                                        // Show detailed conflict info if available
+                                        apiData.conflictDetails.map((detail, index) => (
+                                            <div key={index} className="flex justify-between">
+                                                <span>• {detail}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        // Fallback to basic conflict list
+                                        apiData.conflicts.map((date, index) => (
+                                            <div key={index}>• {date}: Existing booking</div>
+                                        ))
+                                    )}
+                                </div>
+                                <p className="text-xs mt-2 opacity-90">
+                                    💡 Tip: Try booking around these dates or choose a different date range
+                                </p>
+                            </div>
+                        )}
+
+                        {/* ✨ NEW: Walk conflicts notice (when sitting is available but walks exist) */}
+                        {apiData.available && apiData.type === 'multi' && (
+                            <div className="p-3 rounded-lg bg-blue-800 text-blue-200 border border-blue-600">
+                                <p className="text-sm">
+                                    ℹ️ <strong>Note:</strong> Dog walking appointments may be scheduled during your sitting period. 
+                                    This is normal - I can walk other dogs while caring for your pet.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 

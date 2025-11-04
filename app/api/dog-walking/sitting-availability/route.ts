@@ -43,6 +43,7 @@ interface AvailabilityResult {
     startDayRanges?: { start: string; end: string; }[];
     endDayRanges?: { start: string; end: string; }[];
     conflicts?: string[];
+    conflictDetails?: string[];
     message?: string;
 }
 
@@ -143,7 +144,7 @@ async function checkSingleDayAvailability(date: string): Promise<AvailabilityRes
     };
 }
 
-// Function to check multi-day availability
+// Enhanced function to check multi-day availability with smart conflict detection
 async function checkMultiDayAvailability(startDate: string, endDate: string): Promise<AvailabilityResult> {
     const startDateObj = new TZDate(startDate, TIMEZONE);
     const endDateObj = new TZDate(endDate, TIMEZONE);
@@ -164,13 +165,16 @@ async function checkMultiDayAvailability(startDate: string, endDate: string): Pr
     const periodEnd = endOfDay(endDateObj);
     const busyEvents = await getBusyEvents(periodStart, periodEnd);
 
-    // Check each day for conflicts
+    // Analyze conflicts day by day with SERVICE TYPE awareness
     const conflicts: string[] = [];
+    const conflictDetails: string[] = [];
+    let availableDays = 0;
     let currentDate = startDateObj;
 
     while (!isAfter(currentDate, endDateObj)) {
         const dayStart = startOfDay(currentDate);
         const dayEnd = endOfDay(currentDate);
+        const dateKey = format(currentDate, 'MMM d');
 
         // Check if any busy events conflict with this day
         const dayConflicts = busyEvents.filter(event => {
@@ -188,35 +192,72 @@ async function checkMultiDayAvailability(startDate: string, endDate: string): Pr
         });
 
         if (dayConflicts.length > 0) {
-            conflicts.push(format(currentDate, 'MMM d'));
+            // ✨ NEW: Analyze the TYPE of conflicts
+            const sittingConflicts = dayConflicts.filter(event => 
+                event.summary?.toLowerCase().includes('sitting') || 
+                event.summary?.toLowerCase().includes('boarding')
+            );
+            
+            const walkConflicts = dayConflicts.filter(event => 
+                event.summary?.toLowerCase().includes('walk') || 
+                event.summary?.toLowerCase().includes('meet')
+            );
+
+            if (sittingConflicts.length > 0) {
+                // DOG SITTING conflicts - BLOCK this day
+                conflicts.push(dateKey);
+                conflictDetails.push(`${dateKey}: Dog sitting conflict`);
+            } else if (walkConflicts.length > 0) {
+                // WALK conflicts - ALLOW (you can walk other dogs during sitting)
+                availableDays++;
+                // Note: You might want to add a note about walks scheduled
+            } else {
+                // OTHER conflicts - BLOCK to be safe
+                conflicts.push(dateKey);
+                conflictDetails.push(`${dateKey}: Existing booking`);
+            }
+        } else {
+            // No conflicts - available
+            availableDays++;
         }
 
         currentDate = addDays(currentDate, 1);
     }
 
-    // If there are conflicts, booking is not available
-    if (conflicts.length > 0) {
+    // Determine availability based on conflicts
+    if (conflicts.length === 0) {
+        // ✅ FULLY AVAILABLE
+        const startDayAvailability = await checkSingleDayAvailability(startDate);
+        const endDayAvailability = isSameDay(startDateObj, endDateObj)
+            ? startDayAvailability
+            : await checkSingleDayAvailability(endDate);
+
+        return {
+            available: true,
+            type: 'multi',
+            startDayRanges: startDayAvailability.availableRanges,
+            endDayRanges: endDayAvailability.availableRanges,
+            message: `Available for all ${totalDays} days (${format(startDateObj, 'MMM d')} - ${format(endDateObj, 'MMM d')})`
+        };
+    } else if (availableDays > 0) {
+        // ⚠️ PARTIALLY AVAILABLE
         return {
             available: false,
             type: 'multi',
             conflicts,
-            message: `Conflicts found on: ${conflicts.join(', ')}`
+            conflictDetails,
+            message: `Multi-day sitting unavailable. Conflicts on: ${conflicts.join(', ')}. Try different dates or book around these days.`
+        };
+    } else {
+        // ❌ FULLY UNAVAILABLE
+        return {
+            available: false,
+            type: 'multi',
+            conflicts,
+            conflictDetails,
+            message: `No availability for ${totalDays}-day period. All days have dog sitting conflicts.`
         };
     }
-
-    // If no conflicts, get available hours for start and end days
-    const startDayAvailability = await checkSingleDayAvailability(startDate);
-    const endDayAvailability = isSameDay(startDateObj, endDateObj)
-        ? startDayAvailability
-        : await checkSingleDayAvailability(endDate);
-
-    return {
-        available: true,
-        type: 'multi',
-        startDayRanges: startDayAvailability.availableRanges,
-        endDayRanges: endDayAvailability.availableRanges,
-        message: `Available for ${totalDays} days (${format(startDateObj, 'MMM d')} - ${format(endDateObj, 'MMM d')})`
-    };
 }
 
 export async function GET(request: NextRequest) {
