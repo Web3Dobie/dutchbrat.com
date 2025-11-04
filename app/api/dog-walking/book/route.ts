@@ -279,7 +279,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
             // --- 4. Send Confirmation Email ---
             try {
                 await resend.emails.send({
-                    from: "Hunter's Hounds <bookings@dutchbrat.com>",
+                    from: "Hunter's Hounds <bookings@hunters-hounds.london>",
                     to: [email],
                     subject: emailSubject,
                     html: emailContent,
