@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format, isPast, isToday, isTomorrow, addHours, isBefore } from "date-fns";
+import { format, isPast, isToday, isTomorrow, addHours, isBefore, addMinutes } from "date-fns";
+
+// Import existing calendar components
+import ResponsiveDatePicker from "./ResponsiveDatePicker";
+import TimeSlotGrid from "./TimeSlotGrid";
 
 // --- Types ---
 interface Dog {
@@ -32,6 +36,12 @@ interface ApiRange {
     end: string; // "HH:mm"
 }
 
+interface Service {
+    id: string;
+    name: string;
+    duration: number | null;
+}
+
 interface BookingManagerProps {
     bookingId: number;
     onBack: () => void;
@@ -48,142 +58,82 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    // Reschedule specific state
-    const [newDate, setNewDate] = useState<Date | undefined>(undefined);
-    const [availableSlots, setAvailableSlots] = useState<ApiRange[]>([]);
-    const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>("");
+    // Reschedule specific state - using correct TimeSlotGrid interface
+    const [selectedDay, setSelectedDay] = useState<Date | undefined>(undefined);
+    const [apiRanges, setApiRanges] = useState<ApiRange[]>([]);
     const [loadingSlots, setLoadingSlots] = useState(false);
-    
-    // Cancel specific state
-    const [cancelReason, setCancelReason] = useState("");
+    const [selectedStartTime, setSelectedStartTime] = useState<Date | null>(null);
+    const [selectedEndTime, setSelectedEndTime] = useState<Date | null>(null);
 
-    // --- Styles ---
-    const styles = {
-        container: {
-            maxWidth: "600px",
-            margin: "0 auto",
-            padding: "16px",
-        } as React.CSSProperties,
-        card: {
-            backgroundColor: "#111827",
-            border: "1px solid #374151",
-            borderRadius: "8px",
-            padding: "20px",
-            marginBottom: "16px",
-        } as React.CSSProperties,
-        button: {
-            padding: "8px 16px",
-            fontSize: "0.9rem",
-            fontWeight: "600",
-            borderRadius: "4px",
-            border: "none",
-            cursor: "pointer",
-            transition: "all 0.2s",
-        } as React.CSSProperties,
-        primaryButton: {
-            backgroundColor: "#3b82f6",
-            color: "#fff",
-        } as React.CSSProperties,
-        secondaryButton: {
-            backgroundColor: "#374151",
-            color: "#d1d5db",
-        } as React.CSSProperties,
-        dangerButton: {
-            backgroundColor: "#dc2626",
-            color: "#fff",
-        } as React.CSSProperties,
-        input: {
-            width: "100%",
-            padding: "8px",
-            marginBottom: "16px",
-            borderRadius: "4px",
-            border: "1px solid #444",
-            backgroundColor: "#1f2937",
-            color: "#fff",
-            fontSize: "1rem",
-        } as React.CSSProperties,
-        textarea: {
-            width: "100%",
-            padding: "8px",
-            marginBottom: "16px",
-            borderRadius: "4px",
-            border: "1px solid #444",
-            backgroundColor: "#1f2937",
-            color: "#fff",
-            fontSize: "1rem",
-            minHeight: "80px",
-            resize: "vertical" as const,
-        } as React.CSSProperties,
-        label: {
-            display: "block",
-            marginBottom: "4px",
-            fontSize: "0.9rem",
-            color: "#d1d5db",
-        } as React.CSSProperties,
-    };
-
-    // --- Data Fetching ---
+    // --- Effects ---
     useEffect(() => {
         fetchBookingDetails();
     }, [bookingId]);
 
+    // Fetch available slots when date changes (for reschedule)
+    useEffect(() => {
+        if (view === "reschedule" && selectedDay && booking) {
+            fetchAvailableSlots();
+        }
+    }, [selectedDay, view, booking]);
+
+    // --- API Functions ---
     const fetchBookingDetails = async () => {
         setIsLoading(true);
         setError(null);
-
+        
         try {
-            const response = await fetch(`/api/dog-walking/booking-details?id=${bookingId}`, {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-            });
-
+            const response = await fetch(`/api/dog-walking/booking-details?id=${bookingId}`);
             const data = await response.json();
-
+            
             if (!response.ok) {
-                throw new Error(data.error || "Failed to load booking details");
+                throw new Error(data.error || "Failed to fetch booking details");
             }
-
+            
             setBooking(data.booking);
         } catch (err: any) {
-            console.error("Failed to fetch booking:", err);
+            console.error("Failed to fetch booking details:", err);
             setError(err.message || "Could not load booking details. Please try again.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- Availability Fetching for Reschedule ---
-    const fetchAvailableSlots = async (date: Date) => {
-        if (!booking) return;
-
+    const fetchAvailableSlots = async () => {
+        if (!selectedDay || !booking) return;
+        
         setLoadingSlots(true);
         setError(null);
-
+        
         try {
-            const formattedDate = format(date, "yyyy-MM-dd");
-            const response = await fetch(
-                `/api/dog-walking/availability?date=${formattedDate}&service_type=${booking.service_type}`,
-                {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                }
-            );
-
-            const data = await response.json();
-
+            const formattedDate = format(selectedDay, "yyyy-MM-dd");
+            
+            // Map service type for API call
+            const serviceTypeMap: Record<string, string> = {
+                'meetgreet': 'meet-greet',
+                'solo': 'solo-walk', 
+                'quick': 'quick-walk',
+                'sitting': 'dog-sitting',
+            };
+            
+            const serviceType = serviceTypeMap[booking.service_type] || booking.service_type;
+            const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}`;
+            
+            const response = await fetch(url);
+            
             if (!response.ok) {
-                throw new Error(data.error || "Failed to load available times");
+                throw new Error("Failed to fetch availability");
             }
-
-            setAvailableSlots(data.availableRanges || []);
+            
+            const data = await response.json();
+            setApiRanges(data.availableRanges || []);
+            setSelectedStartTime(null); // Reset time selection
+            setSelectedEndTime(null);
+            
         } catch (err: any) {
-            console.error("Failed to fetch availability:", err);
-            setError(err.message || "Could not load available times.");
-            setAvailableSlots([]);
+            console.error("Failed to fetch available slots:", err);
+            setError("Could not load available times. Please try again.");
+            setApiRanges([]);
         } finally {
             setLoadingSlots(false);
         }
@@ -197,14 +147,13 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         setError(null);
 
         try {
-            const response = await fetch("/api/dog-walking/cancel", {  // ← Use existing route
+            const response = await fetch("/api/dog-walking/cancel", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    bookingId: booking.id,  // ← Your existing route accepts this
-                    // Note: Could add reason field to existing route if desired
+                    bookingId: booking.id,
                 }),
             });
 
@@ -226,21 +175,12 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
     };
 
     const handleRescheduleBooking = async () => {
-        if (!booking || !newDate || !selectedTimeSlot) return;
+        if (!booking || !selectedStartTime || !selectedEndTime) return;
 
         setIsProcessing(true);
         setError(null);
 
         try {
-            // Create new start time
-            const [hours, minutes] = selectedTimeSlot.split(':').map(Number);
-            const newStartTime = new Date(newDate);
-            newStartTime.setHours(hours, minutes, 0, 0);
-
-            // Calculate end time based on duration
-            const newEndTime = new Date(newStartTime);
-            newEndTime.setMinutes(newEndTime.getMinutes() + booking.duration_minutes);
-
             const response = await fetch("/api/dog-walking/reschedule-booking", {
                 method: "POST",
                 headers: {
@@ -248,8 +188,8 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                 },
                 body: JSON.stringify({
                     booking_id: booking.id,
-                    new_start_time: newStartTime.toISOString(),
-                    new_end_time: newEndTime.toISOString(),
+                    new_start_time: selectedStartTime.toISOString(),
+                    new_end_time: selectedEndTime.toISOString(),
                 }),
             });
 
@@ -268,6 +208,11 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         } finally {
             setIsProcessing(false);
         }
+    };
+
+    const handleTimeSlotSelect = (startTime: Date, endTime: Date) => {
+        setSelectedStartTime(startTime);
+        setSelectedEndTime(endTime);
     };
 
     // --- Helper Functions ---
@@ -295,27 +240,45 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         return canCancelBooking(); // Same logic for now
     };
 
-    // --- Generate Time Slots ---
-    const generateTimeSlots = (ranges: ApiRange[], duration: number): string[] => {
-        const slots: string[] = [];
-        
-        for (const range of ranges) {
-            const [startHour, startMin] = range.start.split(':').map(Number);
-            const [endHour, endMin] = range.end.split(':').map(Number);
-            
-            let current = new Date();
-            current.setHours(startHour, startMin, 0, 0);
-            
-            const rangeEnd = new Date();
-            rangeEnd.setHours(endHour, endMin, 0, 0);
-            
-            while (current.getTime() + (duration * 60 * 1000) <= rangeEnd.getTime()) {
-                slots.push(format(current, "HH:mm"));
-                current.setMinutes(current.getMinutes() + 30); // 30-minute intervals
-            }
-        }
-        
-        return slots;
+    // Create a Service object for TimeSlotGrid
+    const createServiceFromBooking = (booking: BookingDetails): Service => {
+        return {
+            id: booking.service_type,
+            name: getServiceDisplayName(booking.service_type),
+            duration: booking.duration_minutes
+        };
+    };
+
+    // --- Style Constants ---
+    const styles = {
+        card: {
+            backgroundColor: '#1f2937',
+            border: '1px solid #374151',
+            borderRadius: '8px',
+            padding: '24px',
+            marginBottom: '16px',
+        },
+        button: {
+            padding: '12px 24px',
+            borderRadius: '6px',
+            fontWeight: '600',
+            fontSize: '14px',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+        },
+        primaryButton: {
+            backgroundColor: '#3b82f6',
+            color: 'white',
+        },
+        dangerButton: {
+            backgroundColor: '#dc2626',
+            color: 'white',
+        },
+        secondaryButton: {
+            backgroundColor: '#6b7280',
+            color: 'white',
+        },
     };
 
     // --- Render Functions ---
@@ -349,61 +312,41 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                         {getServiceDisplayName(booking.service_type)}
                     </h2>
                     
-                    <div className="space-y-3 text-sm">
-                        <div className="flex justify-between">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
                             <span className="text-gray-400">Date:</span>
-                            <span className="text-white font-medium">
+                            <span className="text-white font-medium ml-2">
                                 {format(startTime, "EEEE, MMMM d, yyyy")}
                             </span>
                         </div>
-                        
-                        <div className="flex justify-between">
+                        <div>
                             <span className="text-gray-400">Time:</span>
-                            <span className="text-white font-medium">
+                            <span className="text-white font-medium ml-2">
                                 {format(startTime, "h:mm a")}
                                 {endTime && ` - ${format(endTime, "h:mm a")}`}
                             </span>
                         </div>
-                        
-                        <div className="flex justify-between">
+                        <div>
                             <span className="text-gray-400">Duration:</span>
-                            <span className="text-white font-medium">
+                            <span className="text-white font-medium ml-2">
                                 {booking.duration_minutes} minutes
                             </span>
                         </div>
-                        
-                        <div className="flex justify-between">
+                        <div>
                             <span className="text-gray-400">Dogs:</span>
-                            <span className="text-white font-medium">
-                                {booking.dogs.map(dog => `${dog.dog_name} (${dog.dog_breed})`).join(", ")}
+                            <span className="text-white font-medium ml-2">
+                                {booking.dogs.map(dog => dog.dog_name).join(", ")}
                             </span>
                         </div>
-                        
-                        <div className="flex justify-between">
+                        <div>
                             <span className="text-gray-400">Status:</span>
-                            <span 
-                                className="font-medium capitalize"
-                                style={{ 
-                                    color: booking.status === 'confirmed' ? '#10b981' : 
-                                           booking.status === 'cancelled' ? '#ef4444' : '#6b7280'
-                                }}
-                            >
+                            <span className="text-green-400 font-medium ml-2 capitalize">
                                 {booking.status}
                             </span>
                         </div>
-                        
-                        {booking.price_pounds && (
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Price:</span>
-                                <span className="text-white font-medium">
-                                    £{booking.price_pounds.toFixed(2)}
-                                </span>
-                            </div>
-                        )}
-                        
-                        <div className="flex justify-between">
+                        <div>
                             <span className="text-gray-400">Booked:</span>
-                            <span className="text-gray-300">
+                            <span className="text-white font-medium ml-2">
                                 {format(new Date(booking.created_at), "MMM d, yyyy 'at' h:mm a")}
                             </span>
                         </div>
@@ -411,37 +354,138 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                 </div>
 
                 {/* Actions */}
-                {booking.status === 'confirmed' && !isPast(startTime) && (
-                    <div style={styles.card}>
-                        <h3 className="text-white text-md font-medium mb-4">Actions</h3>
+                <div style={styles.card}>
+                    <h3 className="text-white text-md font-medium mb-4">Actions</h3>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        {canRescheduleBooking() && (
+                            <button
+                                style={{ ...styles.button, ...styles.primaryButton }}
+                                onClick={() => setView("reschedule")}
+                                className="hover:bg-blue-600"
+                            >
+                                Reschedule Booking
+                            </button>
+                        )}
                         
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            {canRescheduleBooking() && (
-                                <button
-                                    style={{ ...styles.button, ...styles.primaryButton }}
-                                    onClick={() => setView("reschedule")}
-                                    className="hover:bg-blue-600"
-                                >
-                                    Reschedule Booking
-                                </button>
-                            )}
-                            
-                            {canCancelBooking() && (
-                                <button
-                                    style={{ ...styles.button, ...styles.dangerButton }}
-                                    onClick={() => setView("cancel")}
-                                    className="hover:bg-red-700"
-                                >
-                                    Cancel Booking
-                                </button>
-                            )}
-                        </div>
+                        {canCancelBooking() && (
+                            <button
+                                style={{ ...styles.button, ...styles.dangerButton }}
+                                onClick={() => setView("cancel")}
+                                className="hover:bg-red-700"
+                            >
+                                Cancel Booking
+                            </button>
+                        )}
                         
-                        {!canCancelBooking() && booking.status === 'confirmed' && (
-                            <p className="text-gray-400 text-sm mt-3">
-                                Bookings can only be cancelled or rescheduled up to 2 hours before the appointment time.
+                        {!canCancelBooking() && (
+                            <p className="text-gray-400 text-sm">
+                                Bookings can only be modified more than 2 hours before the start time.
                             </p>
                         )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderRescheduleView = () => {
+        if (!booking) return null;
+
+        const selectedService = createServiceFromBooking(booking);
+
+        return (
+            <div>
+                {/* Header */}
+                <div style={styles.card}>
+                    <div className="flex justify-between items-start mb-4">
+                        <h1 className="text-white text-xl font-bold">
+                            Reschedule Booking
+                        </h1>
+                        <button
+                            style={{ ...styles.button, ...styles.secondaryButton }}
+                            onClick={() => setView("details")}
+                            className="hover:bg-gray-600"
+                        >
+                            ← Back
+                        </button>
+                    </div>
+                </div>
+
+                {/* Current Booking Info */}
+                <div style={styles.card}>
+                    <h3 className="text-white text-md font-medium mb-2">Current Booking</h3>
+                    <p className="text-gray-300 text-sm mb-4">
+                        {getServiceDisplayName(booking.service_type)} on{" "}
+                        {format(new Date(booking.start_time), "EEEE, MMMM d, yyyy 'at' h:mm a")}
+                    </p>
+                </div>
+
+                {/* New Date Selection - Using Calendar Interface */}
+                <div style={styles.card}>
+                    <h3 className="text-white text-md font-medium mb-4">Select New Date</h3>
+                    
+                    <ResponsiveDatePicker
+                        selectedDay={selectedDay}
+                        onDaySelect={setSelectedDay}
+                    />
+                </div>
+
+                {/* Time Selection - Using TimeSlotGrid with correct props */}
+                {selectedDay && (
+                    <div style={styles.card}>
+                        <h3 className="text-white text-md font-medium mb-4">Select New Time</h3>
+                        
+                        <TimeSlotGrid
+                            selectedService={selectedService}
+                            selectedDay={selectedDay}
+                            apiRanges={apiRanges}
+                            isLoading={loadingSlots}
+                            onTimeSlotSelect={handleTimeSlotSelect}
+                        />
+                    </div>
+                )}
+
+                {/* Confirm Reschedule */}
+                {selectedDay && selectedStartTime && selectedEndTime && (
+                    <div style={styles.card}>
+                        {error && (
+                            <div className="mb-4 p-3 bg-red-900 border border-red-600 rounded text-red-200 text-sm">
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="mb-4 p-4 bg-blue-900 border border-blue-600 rounded">
+                            <p className="text-blue-200 font-medium">New Booking Time:</p>
+                            <p className="text-white text-lg">
+                                {format(selectedDay, "EEEE, MMMM d, yyyy")} at {format(selectedStartTime, "h:mm a")}
+                                {selectedEndTime && ` - ${format(selectedEndTime, "h:mm a")}`}
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <button
+                                style={{ 
+                                    ...styles.button, 
+                                    ...styles.primaryButton,
+                                    ...(isProcessing ? { opacity: 0.6, cursor: 'not-allowed' } : {})
+                                }}
+                                onClick={handleRescheduleBooking}
+                                disabled={isProcessing}
+                                className="hover:bg-blue-600"
+                            >
+                                {isProcessing ? "Rescheduling..." : "Confirm Reschedule"}
+                            </button>
+                            
+                            <button
+                                style={{ ...styles.button, ...styles.secondaryButton }}
+                                onClick={() => setView("details")}
+                                disabled={isProcessing}
+                                className="hover:bg-gray-600"
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
@@ -469,30 +513,15 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                     </div>
                 </div>
 
-                {/* Cancellation Form */}
+                {/* Confirmation */}
                 <div style={styles.card}>
-                    <div className="mb-4">
-                        <h2 className="text-white text-lg font-medium mb-2">
-                            Cancel: {getServiceDisplayName(booking.service_type)}
-                        </h2>
-                        <p className="text-gray-400 text-sm">
-                            {format(new Date(booking.start_time), "EEEE, MMMM d, yyyy 'at' h:mm a")}
-                        </p>
-                    </div>
-
-                    <div className="mb-4">
-                        <label style={styles.label} htmlFor="cancelReason">
-                            Reason for cancellation (optional)
-                        </label>
-                        <textarea
-                            style={styles.textarea}
-                            id="cancelReason"
-                            value={cancelReason}
-                            onChange={(e) => setCancelReason(e.target.value)}
-                            placeholder="Let us know why you're cancelling (optional)"
-                            disabled={isProcessing}
-                        />
-                    </div>
+                    <h3 className="text-white text-md font-medium mb-4">
+                        Cancel: {getServiceDisplayName(booking.service_type)}
+                    </h3>
+                    
+                    <p className="text-gray-300 mb-4">
+                        {format(new Date(booking.start_time), "EEEE, MMMM d, yyyy 'at' h:mm a")}
+                    </p>
 
                     {error && (
                         <div className="mb-4 p-3 bg-red-900 border border-red-600 rounded text-red-200 text-sm">
@@ -500,9 +529,10 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                         </div>
                     )}
 
-                    <div className="bg-yellow-900 border border-yellow-600 rounded p-3 mb-4">
-                        <p className="text-yellow-200 text-sm">
-                            <strong>Please note:</strong> This action cannot be undone. You will receive a cancellation confirmation email.
+                    <div className="mb-6 p-4 bg-yellow-900 border border-yellow-600 rounded">
+                        <p className="text-yellow-200 font-medium">Please note:</p>
+                        <p className="text-yellow-100 text-sm">
+                            This action cannot be undone. You will receive a cancellation confirmation email.
                         </p>
                     </div>
 
@@ -534,171 +564,42 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         );
     };
 
-    const renderRescheduleView = () => {
-        if (!booking) return null;
-
-        const timeSlots = availableSlots.length > 0 ? 
-            generateTimeSlots(availableSlots, booking.duration_minutes) : [];
-
-        return (
-            <div>
-                {/* Header */}
-                <div style={styles.card}>
-                    <div className="flex justify-between items-start mb-4">
-                        <h1 className="text-white text-xl font-bold">
-                            Reschedule Booking
-                        </h1>
-                        <button
-                            style={{ ...styles.button, ...styles.secondaryButton }}
-                            onClick={() => setView("details")}
-                            className="hover:bg-gray-600"
-                        >
-                            ← Back
-                        </button>
-                    </div>
-                </div>
-
-                {/* Current Booking Info */}
-                <div style={styles.card}>
-                    <h3 className="text-white text-md font-medium mb-2">Current Booking</h3>
-                    <p className="text-gray-300 text-sm mb-4">
-                        {getServiceDisplayName(booking.service_type)} on{" "}
-                        {format(new Date(booking.start_time), "EEEE, MMMM d, yyyy 'at' h:mm a")}
-                    </p>
-                </div>
-
-                {/* New Date Selection */}
-                <div style={styles.card}>
-                    <label style={styles.label} htmlFor="newDate">
-                        Select New Date
-                    </label>
-                    <input
-                        style={styles.input}
-                        type="date"
-                        id="newDate"
-                        value={newDate ? format(newDate, "yyyy-MM-dd") : ""}
-                        onChange={(e) => {
-                            const date = new Date(e.target.value);
-                            setNewDate(date);
-                            fetchAvailableSlots(date);
-                            setSelectedTimeSlot("");
-                        }}
-                        min={format(new Date(), "yyyy-MM-dd")}
-                        disabled={isProcessing}
-                    />
-
-                    {/* Time Selection */}
-                    {newDate && (
-                        <div>
-                            <label style={styles.label} htmlFor="timeSlot">
-                                Select New Time
-                            </label>
-                            
-                            {loadingSlots ? (
-                                <div className="text-center py-4">
-                                    <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-                                    <p className="text-gray-400 text-sm">Loading available times...</p>
-                                </div>
-                            ) : timeSlots.length > 0 ? (
-                                <select
-                                    style={styles.input}
-                                    id="timeSlot"
-                                    value={selectedTimeSlot}
-                                    onChange={(e) => setSelectedTimeSlot(e.target.value)}
-                                    disabled={isProcessing}
-                                >
-                                    <option value="">Select a time</option>
-                                    {timeSlots.map((slot) => (
-                                        <option key={slot} value={slot}>
-                                            {slot}
-                                        </option>
-                                    ))}
-                                </select>
-                            ) : (
-                                <div className="text-center py-4 text-gray-400">
-                                    No available time slots for this date.
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* Actions */}
-                {newDate && selectedTimeSlot && (
-                    <div style={styles.card}>
-                        {error && (
-                            <div className="mb-4 p-3 bg-red-900 border border-red-600 rounded text-red-200 text-sm">
-                                {error}
-                            </div>
-                        )}
-
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <button
-                                style={{ 
-                                    ...styles.button, 
-                                    ...styles.primaryButton,
-                                    ...(isProcessing ? { opacity: 0.6, cursor: 'not-allowed' } : {})
-                                }}
-                                onClick={handleRescheduleBooking}
-                                disabled={isProcessing}
-                                className="hover:bg-blue-600"
-                            >
-                                {isProcessing ? "Rescheduling..." : "Confirm Reschedule"}
-                            </button>
-                            
-                            <button
-                                style={{ ...styles.button, ...styles.secondaryButton }}
-                                onClick={() => setView("details")}
-                                disabled={isProcessing}
-                                className="hover:bg-gray-600"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
     // --- Main Render ---
     if (isLoading) {
         return (
-            <div style={styles.container}>
-                <div style={styles.card}>
-                    <div className="text-center py-8">
-                        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                        <p className="text-gray-400">Loading booking details...</p>
-                    </div>
-                </div>
+            <div className="text-center py-8">
+                <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-400">Loading booking details...</p>
             </div>
         );
     }
 
-    if (error && !booking) {
+    if (!booking) {
         return (
-            <div style={styles.container}>
-                <div style={styles.card}>
-                    <div className="text-center py-8">
-                        <p className="text-red-400 mb-4">{error}</p>
-                        <button
-                            style={{ ...styles.button, ...styles.secondaryButton }}
-                            onClick={onBack}
-                            className="hover:bg-gray-600"
-                        >
-                            ← Back to Dashboard
-                        </button>
-                    </div>
+            <div style={styles.card}>
+                <div className="text-center py-8">
+                    <p className="text-red-400 font-medium mb-4">Booking not found</p>
+                    <button
+                        style={{ ...styles.button, ...styles.secondaryButton }}
+                        onClick={onBack}
+                        className="hover:bg-gray-600"
+                    >
+                        ← Back to Dashboard
+                    </button>
                 </div>
             </div>
         );
     }
 
-    return (
-        <div style={styles.container}>
-            {view === "details" && renderDetailsView()}
-            {view === "cancel" && renderCancelView()}
-            {view === "reschedule" && renderRescheduleView()}
-        </div>
-    );
+    // Render based on current view
+    switch (view) {
+        case "details":
+            return renderDetailsView();
+        case "reschedule":
+            return renderRescheduleView();
+        case "cancel":
+            return renderCancelView();
+        default:
+            return renderDetailsView();
+    }
 }

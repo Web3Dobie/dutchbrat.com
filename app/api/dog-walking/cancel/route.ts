@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
             JOIN hunters_hounds.owners o ON b.owner_id = o.id
             JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
-            WHERE b.id = $1 AND b.status = 'active'
+            WHERE b.id = $1 AND b.status = 'confirmed'
             FOR UPDATE OF b;
         `;
 
