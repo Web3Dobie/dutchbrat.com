@@ -276,6 +276,20 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 `;
             }
 
+            // --- 3.1 Send Actual Confirmation Email ---
+            try {
+                await resend.emails.send({
+                    from: "Hunter's Hounds <bookings@hunters-hounds.london>",
+                    to: [email],
+                    subject: emailSubject,
+                    html: emailContent,
+                });
+                console.log("Confirmation email sent successfully to:", email);
+            } catch (emailError) {
+                console.error("Failed to send confirmation email:", emailError);
+                // Don't fail the booking if email fails - continue with Telegram
+            }
+
             // --- 4. Send Telegram Notification ---
             let telegramMessage;
 
