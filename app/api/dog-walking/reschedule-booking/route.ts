@@ -210,7 +210,7 @@ ${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)
 
         try {
             await resend.emails.send({
-                from: "Hunter's Hounds <bookings@dutchbrat.com>",
+                from: "Hunter's Hounds <bookings@hunters-hounds.london>",
                 to: [booking.email],
                 subject: `Booking Rescheduled - ${serviceDisplayName}`,
                 html: `
@@ -244,7 +244,7 @@ ${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)
                             <strong>Hunter's Hounds</strong><br>
                             Professional Dog Walking Service<br>
                             Phone: 07932749772<br>
-                            Email: info@dutchbrat.com
+                            Email: info@hunters-hounds.london<br>
                         </p>
                     </div>
                 `
