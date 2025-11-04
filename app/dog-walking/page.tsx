@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import MobileBookingCalendar from '../components/MobileBookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
+import { DashboardServiceCard } from '@/app/components/DashboardServiceCard';
 
 // UPDATED: Added an optional 'objectPositionClass' prop to fix cropping
 // Updated PlayfulImage component with responsive aspect ratios
@@ -85,7 +86,9 @@ export default function DogWalkingPage() {
               and discuss their needs.
             </p>
           </div>
+          {/* Service Cards Grid - Mobile: stack, Tablet: 3 per row, Desktop: 3+empty+2 layout */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Row 1: Meet & Greet, Solo Walk, Quick Walk */}
             <ServiceCard
               title="Meet & Greet"
               description="Free 30-minute introduction session for new clients. Get to know each other and discuss your dog's specific needs."
@@ -101,11 +104,19 @@ export default function DogWalkingPage() {
               description="A fun, quick play in the park, to break up the day."
               price="£10 / 30-mins"
             />
+            
+            {/* Row 2: Dog Sitting, Empty Space (desktop only), View Bookings */}
             <ServiceCard
               title="Dog sitting"
               description="Customized visits during the day or the evening, when your dog does not want to be on its own."
               price="POA / visit"
             />
+            
+            {/* Empty space for desktop layout - hidden on mobile/tablet */}
+            <div className="hidden lg:block"></div>
+            
+            {/* Dashboard Card - Distinctive styling */}
+            <DashboardServiceCard />
           </div>
         </section>
 
@@ -172,4 +183,4 @@ export default function DogWalkingPage() {
       </div>
     </main>
   );
-} 
+}
