@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
             const insertBookingQuery = `
                 INSERT INTO hunters_hounds.bookings 
                 (owner_id, dog_id_1, dog_id_2, service_type, start_time, end_time, duration_minutes, booking_type, cancellation_token, status) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active') 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'confirmed') 
                 RETURNING id
             `;
 
@@ -276,10 +276,10 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 `;
             }
 
-            // --- 3.1 Send Actual Confirmation Email ---
+            // --- 4. Send Confirmation Email ---
             try {
                 await resend.emails.send({
-                    from: "Hunter's Hounds <bookings@hunters-hounds.london>",
+                    from: "Hunter's Hounds <bookings@dutchbrat.com>",
                     to: [email],
                     subject: emailSubject,
                     html: emailContent,
@@ -290,7 +290,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 // Don't fail the booking if email fails - continue with Telegram
             }
 
-            // --- 4. Send Telegram Notification ---
+            // --- 5. Send Telegram Notification ---
             let telegramMessage;
 
             if (booking_type === 'multi_day') {
