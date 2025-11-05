@@ -1,12 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
 import { google } from "googleapis";
-import { Resend } from "resend";
+import { sendEmail } from "@/lib/emailService";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
-
-// Resend setup
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Database Connection
 const pool = new Pool({
@@ -145,14 +142,13 @@ export async function POST(request: NextRequest) {
         // Calculate new duration (in case it's different)
         const newDurationMinutes = Math.round((newEndTime.getTime() - newStartTime.getTime()) / (1000 * 60));
 
-        // 1. Update booking in database
+        // 1. Update booking in database (removed updated_at reference)
         const updateQuery = `
             UPDATE hunters_hounds.bookings 
             SET 
                 start_time = $2,
                 end_time = $3,
-                duration_minutes = $4,
-                updated_at = CURRENT_TIMESTAMP
+                duration_minutes = $4
             WHERE id = $1;
         `;
 
@@ -202,16 +198,15 @@ ${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)
             }
         }
 
-        // 3. Send reschedule confirmation email
+        // 3. Send reschedule confirmation email using new email service
         const oldFormattedDate = format(new Date(booking.old_start_time), "EEEE, MMMM d, yyyy");
         const oldFormattedTime = format(new Date(booking.old_start_time), "h:mm a");
         const newFormattedDate = format(newStartTime, "EEEE, MMMM d, yyyy");
         const newFormattedTime = format(newStartTime, "h:mm a");
 
         try {
-            await resend.emails.send({
-                from: "Hunter's Hounds <bookings@hunters-hounds.london>",
-                to: [booking.email],
+            await sendEmail({
+                to: booking.email,
                 subject: `Booking Rescheduled - ${serviceDisplayName}`,
                 html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -244,10 +239,12 @@ ${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)
                             <strong>Hunter's Hounds</strong><br>
                             Professional Dog Walking Service<br>
                             Phone: 07932749772<br>
-                            Email: ernesto@hunters-hounds.london<br>
+                            Email: bookings@hunters-hounds.london
                         </p>
                     </div>
-                `
+                `,
+                // BCC to bookings@hunters-hounds.london automatically added
+                // From address automatically set to "Hunter's Hounds <bookings@hunters-hounds.london>"
             });
             console.log("Reschedule confirmation email sent");
         } catch (emailError) {

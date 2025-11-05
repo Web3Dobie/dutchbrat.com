@@ -138,10 +138,10 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
 
     const getBookingDateDisplay = (startTime: string, endTime?: string) => {
         const start = new Date(startTime);
-        
+
         if (isToday(start)) return "Today";
         if (isTomorrow(start)) return "Tomorrow";
-        
+
         // For multi-day bookings, show date range
         if (endTime) {
             const end = new Date(endTime);
@@ -151,50 +151,56 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                 return `${startDate} - ${endDate}`;
             }
         }
-        
+
         return format(start, "EEEE, MMM d");
     };
 
     const getTimeDisplay = (startTime: string, endTime?: string) => {
         const start = new Date(startTime);
-        
+
         if (endTime) {
             const end = new Date(endTime);
             return `${format(start, "h:mm a")} - ${format(end, "h:mm a")}`;
         }
-        
+
         return format(start, "h:mm a");
     };
 
     const getBookingStatusColor = (booking: Booking) => {
         const startTime = new Date(booking.start_time);
-        
+
         if (booking.status === 'cancelled') return '#dc2626'; // Red
         if (booking.status === 'completed') return '#059669'; // Green
         if (isPast(startTime)) return '#6b7280'; // Gray (past)
-        
+
         return '#3b82f6'; // Blue (upcoming)
     };
 
     const canManageBooking = (booking: Booking) => {
         // Only allow management of confirmed/active bookings
         if (!['confirmed', 'active'].includes(booking.status)) return false;
-        
+
         const startTime = new Date(booking.start_time);
         const now = new Date();
-        
+
         // Can manage if booking is more than 2 hours away
         return isBefore(addHours(now, 2), startTime);
     };
 
     // --- Separate bookings into categories ---
-    const upcomingBookings = bookings.filter(booking => 
-        ['confirmed', 'active'].includes(booking.status) && !isPast(new Date(booking.start_time))
-    );
-    
-    const pastBookings = bookings.filter(booking => 
-        !['confirmed', 'active'].includes(booking.status) || isPast(new Date(booking.start_time))
-    );
+    // Upcoming: Soonest first (ASC)
+    const upcomingBookings = bookings
+        .filter(booking =>
+            booking.status === 'confirmed' && !isPast(new Date(booking.start_time))
+        )
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+    // History: Most recent first (DESC) 
+    const pastBookings = bookings
+        .filter(booking =>
+            booking.status !== 'confirmed' || isPast(new Date(booking.start_time))
+        )
+        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
 
     // --- Render Booking Card ---
     const renderBookingCard = (booking: Booking) => {
@@ -384,7 +390,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                         {pastBookings.slice(0, 5).map(renderBookingCard)}
                         {pastBookings.length > 5 && (
                             <p className="text-gray-400 text-center mt-4">
-                                Showing 5 most recent. Contact us to view older bookings.
+                                Booking History
                             </p>
                         )}
                     </div>

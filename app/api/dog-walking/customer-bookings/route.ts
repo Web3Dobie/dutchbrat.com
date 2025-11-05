@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.owner_id = $1
             GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, b.status, b.price_pounds, b.created_at
-            ORDER BY b.start_time DESC;
+            ORDER BY b.start_time ASC;
         `;
 
         const result = await client.query(query, [ownerIdNum]);

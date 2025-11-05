@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { google } from "googleapis";
 import { format, differenceInDays } from "date-fns";
 import { Pool } from "pg";
-import { Resend } from "resend";
+import { sendEmail } from "@/lib/emailService";
 import { getServicePrice } from '@/lib/pricing';
 
 // --- Database Connection ---
@@ -18,9 +18,6 @@ const auth = new google.auth.GoogleAuth({
     scopes: ["https://www.googleapis.com/auth/calendar"],
 });
 const calendar = google.calendar({ version: "v3", auth });
-
-// --- Email Service ---
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: NextRequest) {
     try {
@@ -78,7 +75,7 @@ export async function POST(request: NextRequest) {
         // Map service types to pricing config IDs
         const serviceTypeMap: Record<string, string> = {
             'Meet & Greet - for new clients': 'meetgreet',
-            'Solo Walk (60 min)': 'solo', 
+            'Solo Walk (60 min)': 'solo',
             'Quick Walk (30 min)': 'quick',
             'Dog Sitting (Variable)': 'sitting'
         };
@@ -199,7 +196,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
             );
 
             // --- 3. Send Confirmation Email ---
-            const cancellationLink = `${process.env.NEXT_PUBLIC_BASE_URL}/cancel?token=${cancellation_token}`;
+            const cancellationLink = `${process.env.NEXT_PUBLIC_BASE_URL}/dog-walking/cancel?token=${cancellation_token}`;
             const dashboardLink = `${process.env.NEXT_PUBLIC_BASE_URL}/dog-walking/dashboard`;
 
             let emailSubject, emailContent;
@@ -296,13 +293,14 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 `;
             }
 
-            // --- 4. Send Confirmation Email ---
+            // --- 4. Send Confirmation Email Using New Email Service ---
             try {
-                await resend.emails.send({
-                    from: "Hunter's Hounds <bookings@hunters-hounds.london>",
-                    to: [email],
+                await sendEmail({
+                    to: email,
                     subject: emailSubject,
                     html: emailContent,
+                    // BCC to bookings@hunters-hounds.london automatically added
+                    // From address automatically set to "Hunter's Hounds <bookings@hunters-hounds.london>"
                 });
                 console.log("Confirmation email sent successfully to:", email);
             } catch (emailError) {
