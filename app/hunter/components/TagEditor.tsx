@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MediaFile } from '../../../lib/hunterMedia'
 import { getOrientationStyle } from '../../../lib/imageOrientationUtils'
 
@@ -14,9 +14,41 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
   const [description, setDescription] = useState(media.description || '')
   const [locationName, setLocationName] = useState(media.location_name || '')
   const [newTag, setNewTag] = useState({ type: 'person', value: '' })
+  const [availableTags, setAvailableTags] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [tagSuggestions, setTagSuggestions] = useState<any[]>([])
 
-  const tagTypes = ['person', 'dog', 'activity', 'location', 'mood', 'event', 'object']
+  useEffect(() => {
+    setDescription(media.description || '')
+    setLocationName(media.location_name || '')
+    fetchAvailableTags()
+  }, [media])
+
+  useEffect(() => {
+    // Get suggestions for current tag type and input
+    if (newTag.value) {
+      const suggestions = availableTags
+        .filter(tag =>
+          tag.type === newTag.type &&
+          tag.value.toLowerCase().includes(newTag.value.toLowerCase()) &&
+          !media.tags?.some((mediaTag: any) => (mediaTag.value || mediaTag.tag_value) === tag.value)
+        )
+        .slice(0, 5)
+      setTagSuggestions(suggestions)
+    } else {
+      setTagSuggestions([])
+    }
+  }, [newTag, availableTags, media.tags])
+
+  const fetchAvailableTags = async () => {
+    try {
+      const response = await fetch('/api/hunter/tags')
+      const tags = await response.json()
+      setAvailableTags(tags)
+    } catch (error) {
+      console.error('Error fetching tags:', error)
+    }
+  }
 
   const formatDate = (date: string | undefined) => {
     if (!date) return 'Unknown'
@@ -50,7 +82,7 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
       })
 
       if (!response.ok) throw new Error('Failed to update media')
-      
+
       const updatedMedia = await response.json()
       onUpdate(updatedMedia)
     } catch (error) {
@@ -61,8 +93,9 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
     }
   }
 
-  const handleAddTag = async () => {
-    if (!newTag.value.trim()) return
+  const handleAddTag = async (tagValue?: string) => {
+    const valueToAdd = tagValue || newTag.value.trim()
+    if (!valueToAdd) return
 
     try {
       const response = await fetch('/api/hunter/tags', {
@@ -71,11 +104,21 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
         body: JSON.stringify({
           mediaId: media.id,
           tagType: newTag.type,
-          tagValue: newTag.value.trim()
+          tagValue: valueToAdd
         })
       })
 
-      if (!response.ok) throw new Error('Failed to add tag')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `HTTP ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (!result) {
+        // Tag might already exist - just refresh to show current state
+        console.log(`Tag "${valueToAdd}" (${newTag.type}) might already exist, refreshing...`)
+      }
 
       // Refresh media data
       const mediaResponse = await fetch(`/api/hunter/media/${media.id}`)
@@ -84,19 +127,26 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
         onUpdate(updatedMedia)
       }
 
-      setNewTag({ type: 'person', value: '' })
+      setNewTag({ ...newTag, value: '' })
+      setTagSuggestions([])
+      fetchAvailableTags() // Refresh available tags
     } catch (error) {
       console.error('Error adding tag:', error)
-      alert('Failed to add tag. Please try again.')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      alert(`Failed to add tag: ${errorMessage}`)
     }
   }
 
-  const handleRemoveTag = async (tagId: number) => {
+  const handleRemoveTag = async (tagType: string, tagValue: string) => {
     try {
       const response = await fetch('/api/hunter/tags', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tagId })
+        body: JSON.stringify({
+          mediaId: media.id,
+          tagType,
+          tagValue
+        })
       })
 
       if (!response.ok) throw new Error('Failed to remove tag')
@@ -111,6 +161,21 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
       console.error('Error removing tag:', error)
       alert('Failed to remove tag. Please try again.')
     }
+  }
+
+  const tagTypeOptions = [
+    { value: 'person', label: 'Person', icon: '👤' },
+    { value: 'dog', label: 'Dog Friend', icon: '🐕' },
+    { value: 'activity', label: 'Activity', icon: '🎾' },
+    { value: 'location', label: 'Location', icon: '📍' },
+    { value: 'mood', label: 'Mood', icon: '😊' },
+    { value: 'event', label: 'Event', icon: '🎉' },
+    { value: 'object', label: 'Object', icon: '📦' }
+  ]
+
+  const getTagIcon = (type: string) => {
+    const option = tagTypeOptions.find(opt => opt.value === type)
+    return option?.icon || '🏷️'
   }
 
   // Get orientation styles for the thumbnail
@@ -200,20 +265,21 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
       {/* Tags Section */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-white">Tags</h3>
-        
+
         {/* Existing Tags */}
         {media.tags && media.tags.length > 0 && (
           <div>
             <h4 className="text-sm font-medium text-gray-300 mb-2">Current Tags</h4>
             <div className="flex flex-wrap gap-2">
-              {media.tags.map((tag) => (
+              {media.tags.map((tag, index) => (
                 <div
-                  key={tag.id}
+                  key={index}
                   className="flex items-center gap-1 bg-blue-600 text-white px-2 py-1 rounded-full text-sm"
                 >
-                  <span>{tag.tag_value}</span>
+                  <span className="mr-1">{getTagIcon(tag.type || tag.tag_type)}</span>
+                  <span>{tag.value || tag.tag_value}</span>
                   <button
-                    onClick={() => handleRemoveTag(tag.id)}
+                    onClick={() => handleRemoveTag(tag.type || tag.tag_type, tag.value || tag.tag_value)}
                     className="text-blue-200 hover:text-white ml-1"
                   >
                     ×
@@ -227,36 +293,74 @@ export function TagEditor({ media, onUpdate, onDelete }: TagEditorProps) {
         {/* Add New Tag */}
         <div>
           <h4 className="text-sm font-medium text-gray-300 mb-2">Add Tag</h4>
-          <div className="flex gap-2">
-            <select
-              value={newTag.type}
-              onChange={(e) => setNewTag(prev => ({ ...prev, type: e.target.value }))}
-              className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {tagTypes.map(type => (
-                <option key={type} value={type}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </option>
-              ))}
-            </select>
-            
+
+          {/* Tag Type Selector - Button Grid */}
+          <div className="grid grid-cols-4 gap-1 mb-3">
+            {tagTypeOptions.map(option => (
+              <button
+                key={option.value}
+                onClick={() => setNewTag({ ...newTag, type: option.value })}
+                className={`p-2 text-xs rounded-lg transition-colors ${newTag.type === option.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  }`}
+              >
+                <div>{option.icon}</div>
+                <div>{option.label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Tag Value Input with Autocomplete */}
+          <div className="relative">
             <input
               type="text"
               value={newTag.value}
-              onChange={(e) => setNewTag(prev => ({ ...prev, value: e.target.value }))}
-              placeholder="Tag value..."
-              className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => setNewTag({ ...newTag, value: e.target.value })}
+              placeholder={`Enter ${newTag.type}...`}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
             />
-            
-            <button
-              onClick={handleAddTag}
-              disabled={!newTag.value.trim()}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              Add
-            </button>
+
+            {/* Tag Suggestions */}
+            {tagSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg">
+                {tagSuggestions.map(suggestion => (
+                  <button
+                    key={suggestion.value}
+                    onClick={() => handleAddTag(suggestion.value)}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-700 transition-colors text-white first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    <span className="mr-1">{getTagIcon(suggestion.type)}</span>
+                    {suggestion.value}
+                    <span className="text-gray-400 text-xs ml-2">
+                      (used {suggestion.count} times)
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          <button
+            onClick={() => handleAddTag()}
+            disabled={!newTag.value.trim()}
+            className="w-full mt-2 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            Add {getTagIcon(newTag.type)} {tagTypeOptions.find(opt => opt.value === newTag.type)?.label}
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Tag Examples */}
+      <div className="bg-gray-800 rounded-lg p-4">
+        <div className="text-sm font-medium text-gray-300 mb-2">Quick tag ideas:</div>
+        <div className="text-xs text-gray-400 space-y-1">
+          <div><strong>People:</strong> Mom, Dad, Grandma, Uncle John...</div>
+          <div><strong>Dog Friends:</strong> Max, Bella, Charlie, Buddy...</div>
+          <div><strong>Activities:</strong> Playing fetch, Swimming, Walking, Sleeping, Eating...</div>
+          <div><strong>Locations:</strong> Beach, Dog park, Garden, Living room...</div>
+          <div><strong>Moods:</strong> Happy, Playful, Sleepy, Alert, Excited...</div>
         </div>
       </div>
 

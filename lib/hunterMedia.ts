@@ -736,6 +736,9 @@ export async function updateMediaFile(id: number, updates: Partial<MediaFile>): 
   return result.rows[0] || null
 }
 
+// Fixed addMediaTag function for lib/hunterMedia.ts
+// This should replace the existing addMediaTag function
+
 export async function addMediaTag(mediaId: number, tagType: TagType | string, tagValue: string, addedBy: string = 'system'): Promise<MediaTag> {
   const pool = getPool()
 
@@ -744,15 +747,35 @@ export async function addMediaTag(mediaId: number, tagType: TagType | string, ta
     throw new Error(`Invalid tag type: ${tagType}`)
   }
 
-  const query = `
+  // First, try to insert the tag
+  const insertQuery = `
     INSERT INTO hunter_media.tags (media_id, tag_type, tag_value, added_by)
     VALUES ($1, $2, $3, $4)
     ON CONFLICT (media_id, tag_type, tag_value) DO NOTHING
     RETURNING *
   `
 
-  const result = await pool.query(query, [mediaId, tagType, tagValue, addedBy])
-  return result.rows[0]
+  const insertResult = await pool.query(insertQuery, [mediaId, tagType, tagValue, addedBy])
+
+  // If we got a result, the tag was successfully inserted
+  if (insertResult.rows.length > 0) {
+    return insertResult.rows[0]
+  }
+
+  // If no result, the tag already existed, so fetch the existing tag
+  const selectQuery = `
+    SELECT * FROM hunter_media.tags 
+    WHERE media_id = $1 AND tag_type = $2 AND tag_value = $3
+  `
+
+  const selectResult = await pool.query(selectQuery, [mediaId, tagType, tagValue])
+
+  if (selectResult.rows.length > 0) {
+    return selectResult.rows[0]
+  }
+
+  // This should never happen, but just in case
+  throw new Error(`Failed to add or find tag: ${tagType}=${tagValue} for media ${mediaId}`)
 }
 
 export async function removeMediaTag(tagId: number): Promise<boolean> {
