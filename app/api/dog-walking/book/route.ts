@@ -6,6 +6,7 @@ import { google } from "googleapis";
 import { format, differenceInDays } from "date-fns";
 import { Pool } from "pg";
 import { Resend } from "resend";
+import { getServicePrice } from '@/lib/pricing';
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -71,6 +72,24 @@ export async function POST(request: NextRequest) {
         // Generate cancellation token
         const cancellation_token = crypto.randomUUID();
 
+        // --- Calculate Price Based on Service Type ---
+        let finalPrice: number | null = null;
+
+        // Map service types to pricing config IDs
+        const serviceTypeMap: Record<string, string> = {
+            'Meet & Greet - for new clients': 'meetgreet',
+            'Solo Walk (60 min)': 'solo', 
+            'Quick Walk (30 min)': 'quick',
+            'Dog Sitting (Variable)': 'sitting'
+        };
+
+        const pricingServiceId = serviceTypeMap[service_type];
+        if (pricingServiceId) {
+            finalPrice = getServicePrice(pricingServiceId);
+        }
+
+        console.log(`Service: ${service_type} -> Pricing ID: ${pricingServiceId} -> Price: ${finalPrice}`);
+
         const client = await pool.connect();
 
         try {
@@ -79,8 +98,8 @@ export async function POST(request: NextRequest) {
             // --- 1. Insert Booking Record ---
             const insertBookingQuery = `
                 INSERT INTO hunters_hounds.bookings 
-                (owner_id, dog_id_1, dog_id_2, service_type, start_time, end_time, duration_minutes, booking_type, cancellation_token, status) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'confirmed') 
+                (owner_id, dog_id_1, dog_id_2, service_type, start_time, end_time, duration_minutes, price_pounds, booking_type, cancellation_token, status) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed') 
                 RETURNING id
             `;
 
@@ -104,6 +123,7 @@ export async function POST(request: NextRequest) {
                 start_time,
                 calculatedEndTime, // ✅ Always provides a valid end_time
                 booking_type === 'single' ? duration_minutes : null,
+                finalPrice, // ← ADD THIS: Will be 0, 10, 17.50, or NULL
                 booking_type,
                 cancellation_token
             ];

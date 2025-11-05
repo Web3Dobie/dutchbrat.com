@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { format, isPast, isToday, isTomorrow, addHours, isBefore } from "date-fns";
+import { formatPrice } from '@/lib/pricing';
 
 // --- Types ---
 interface Dog {
@@ -247,11 +248,9 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                             <p className="text-white font-medium">{dateDisplay}</p>
                             <p className="text-gray-400 text-sm">{timeDisplay}</p>
                         </div>
-                        {booking.price_pounds && (
-                            <p className="text-green-400 font-semibold">
-                                £{booking.price_pounds.toFixed(2)}
-                            </p>
-                        )}
+                        <p className="text-green-400 font-semibold">
+                            {formatPrice(booking.price_pounds)}
+                        </p>
                     </div>
 
                     {/* Action buttons - This is the key fix! */}

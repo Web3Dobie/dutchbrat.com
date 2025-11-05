@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { parse, addMinutes, format, differenceInMinutes, isBefore, isEqual, isAfter, isSameDay, differenceInDays, addDays } from "date-fns";
+import { parse, isSameDay, differenceInDays, differenceInMinutes, isBefore, isEqual, addDays, isAfter, addMinutes, format, startOfMonth, isSameMonth } from "date-fns";
 import { DayPicker } from "react-day-picker";
 // NOTE: Styles are loaded via globals.css
 
@@ -147,6 +147,8 @@ export default function SittingBookingFlow({
     const [endDate, setEndDate] = useState<Date | undefined>(undefined);
     const [selectedStartTime, setSelectedStartTime] = useState<string>("");
     const [selectedEndTime, setSelectedEndTime] = useState<string>("");
+    const [displayMonth, setDisplayMonth] = useState<Date>(new Date());
+    const [previousStartDate, setPreviousStartDate] = useState<Date | undefined>(startDate);
 
     // API state
     const [apiData, setApiData] = useState<SittingAvailabilityResponse | null>(null);
@@ -158,21 +160,43 @@ export default function SittingBookingFlow({
 
     // Auto-detect if this should be multi-day based on date selection
     useEffect(() => {
-        // Reset times when dates change
-        setSelectedStartTime("");
-        setSelectedEndTime("");
-
-        if (startDate && endDate && !isSameDay(startDate, endDate)) {
-            setIsMultiDay(true);
-            checkAvailability();
-        } else if (startDate && (!endDate || isSameDay(startDate, endDate))) {
-            setIsMultiDay(false);
-            checkAvailability();
-        } else {
-            setIsMultiDay(false);
-            setApiData(null);
+        // Only reset times when start date changes, not end date
+        if (startDate !== previousStartDate) {
+            setSelectedStartTime("");
+            setSelectedEndTime("");
         }
+
+        // Add a small delay to prevent rapid state changes
+        const timeoutId = setTimeout(() => {
+            if (startDate && endDate && !isSameDay(startDate, endDate)) {
+                setIsMultiDay(true);
+                checkAvailability();
+            } else if (startDate && (!endDate || isSameDay(startDate, endDate))) {
+                setIsMultiDay(false);
+                if (startDate) { // Only call API if we have a start date
+                    checkAvailability();
+                }
+            } else {
+                setIsMultiDay(false);
+                setApiData(null);
+            }
+        }, 100); // 100ms delay to debounce rapid changes
+
+        return () => clearTimeout(timeoutId); // Cleanup timeout on unmount
     }, [startDate, endDate]);
+
+    useEffect(() => {
+        if (startDate) {
+            const targetMonth = startOfMonth(startDate);
+            if (!isSameMonth(displayMonth, targetMonth)) {
+                setDisplayMonth(targetMonth);
+            }
+        }
+    }, [startDate, displayMonth]);
+
+    useEffect(() => {
+        setPreviousStartDate(startDate);
+    }, [startDate]);
 
     // Check availability using the new API
     const checkAvailability = async () => {
@@ -185,10 +209,13 @@ export default function SittingBookingFlow({
         try {
             let url: string;
 
-            if (isMultiDay && endDate) {
+            // Calculate multi-day directly from dates (no race condition)
+            const isCurrentlyMultiDay = endDate && !isSameDay(startDate, endDate);
+
+            if (isCurrentlyMultiDay) {
                 // Multi-day query
                 const startDateStr = format(startDate, 'yyyy-MM-dd');
-                const endDateStr = format(endDate, 'yyyy-MM-dd');
+                const endDateStr = format(endDate!, 'yyyy-MM-dd'); // ! because we know endDate exists
                 url = `/api/dog-walking/sitting-availability?type=multi&start_date=${startDateStr}&end_date=${endDateStr}`;
             } else {
                 // Single day query
@@ -330,6 +357,8 @@ export default function SittingBookingFlow({
                                 onSelect={setStartDate}
                                 disabled={{ before: new Date() }}
                                 className="rdp-custom-compact"
+                                month={displayMonth}
+                                onMonthChange={setDisplayMonth}
                             />
                         </div>
                     </div>
@@ -347,6 +376,8 @@ export default function SittingBookingFlow({
                                 onSelect={setEndDate}
                                 disabled={{ before: startDate || new Date() }}
                                 className="rdp-custom-compact"
+                                month={displayMonth}
+                                onMonthChange={setDisplayMonth}
                             />
                         </div>
                         {startDate && (
@@ -420,7 +451,7 @@ export default function SittingBookingFlow({
             </div>
 
             {/* Single Day Flow */}
-            {!isMultiDay && startDate && apiData?.available && apiData.type === 'single' && availableStartTimes.length > 0 && (
+            {startDate && (!endDate || isSameDay(startDate, endDate)) && apiData?.available && availableStartTimes.length > 0 && (
                 <div className="space-y-4">
                     {/* Start Time Selection */}
                     <div className="space-y-3">
@@ -494,7 +525,7 @@ export default function SittingBookingFlow({
             )}
 
             {/* Multi-Day Flow */}
-            {isMultiDay && apiData?.available && apiData.type === 'multi' && startDate && endDate && (
+            {startDate && endDate && !isSameDay(startDate, endDate) && apiData?.available && (
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Start Time */}

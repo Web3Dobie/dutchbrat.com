@@ -591,15 +591,25 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         );
     }
 
-    // Render based on current view
-    switch (view) {
-        case "details":
-            return renderDetailsView();
-        case "reschedule":
-            return renderRescheduleView();
-        case "cancel":
-            return renderCancelView();
-        default:
-            return renderDetailsView();
-    }
+    // Render based on current view - WRAPPED IN CENTERED CONTAINER
+    return (
+        <div style={{ 
+            maxWidth: "800px", 
+            margin: "0 auto", 
+            padding: "0 16px" 
+        }}>
+            {(() => {
+                switch (view) {
+                    case "details":
+                        return renderDetailsView();
+                    case "reschedule":
+                        return renderRescheduleView();
+                    case "cancel":
+                        return renderCancelView();
+                    default:
+                        return renderDetailsView();
+                }
+            })()}
+        </div>
+    );
 }
