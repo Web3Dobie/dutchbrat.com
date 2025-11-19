@@ -97,7 +97,7 @@ export default function BookingSuccess({
             <div className="space-y-3">
                 {/* Primary Action - Book Another Service */}
                 <button
-                    onClick={() => window.location.href = '/dog-walking'}
+                    onClick={() => window.location.href = '/book-now'}
                     className="w-full p-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors duration-200"
                 >
                     Book Another Service
@@ -105,7 +105,7 @@ export default function BookingSuccess({
 
                 {/* Secondary Action - View Dashboard */}
                 <button
-                    onClick={() => window.location.href = '/dog-walking/dashboard'}
+                    onClick={() => window.location.href = '/my-account'}
                     className="w-full p-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200"
                 >
                     View My Bookings
@@ -113,7 +113,7 @@ export default function BookingSuccess({
 
                 {/* Tertiary Action - Back to Service Page */}
                 <button
-                    onClick={() => window.location.href = '/dog-walking'}
+                    onClick={() => window.location.href = '/services'}
                     className="w-full p-3 bg-transparent border border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white font-medium rounded-lg transition-colors duration-200"
                 >
                     Back to Service Page

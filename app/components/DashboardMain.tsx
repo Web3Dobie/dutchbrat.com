@@ -351,7 +351,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                     </div>
                     <div className="flex gap-3">
                         <a
-                            href="/dog-walking"
+                            href="/book-now"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             className="hover:bg-blue-600 text-center no-underline"
                         >
@@ -412,7 +412,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                             Ready to book your first dog walking service?
                         </p>
                         <a
-                            href="/dog-walking"
+                            href="/book-now"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             className="hover:bg-blue-600 text-center no-underline"
                         >

@@ -1,0 +1,339 @@
+// app/dog-walking/page.tsx - Clean booking experience with domain detection
+import Image from 'next/image';
+import MobileBookingCalendar from '../components/MobileBookingCalendar';
+import { ServiceCard } from '@/app/components/ServiceCard';
+import { DashboardServiceCard } from '@/app/components/DashboardServiceCard';
+import { SERVICE_PRICING } from '@/lib/pricing';
+import { isHuntersHoundsDomain } from '@/lib/domainDetection';
+import Link from 'next/link';
+
+// Playful Image Component (reused from current)
+function PlayfulImage({
+  src,
+  alt,
+  rotationClass,
+  aspectRatio = 'aspect-square',
+  objectPositionClass = 'object-center'
+}: {
+  src: string,
+  alt: string,
+  rotationClass: string,
+  aspectRatio?: string,
+  objectPositionClass?: string
+}) {
+  return (
+    <div className={`relative w-full ${aspectRatio} rounded-lg overflow-hidden shadow-2xl transition-transform duration-300 ease-in-out hover:scale-105 ${rotationClass}`}>
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className={`object-cover ${objectPositionClass}`}
+        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+      />
+    </div>
+  );
+}
+
+// CLEAN Hunter's Hounds Booking Experience
+function HuntersHoundsBooking() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        
+        {/* Header Section */}
+        <div className="text-center mb-16">
+          <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+            Book Your Walk
+          </h1>
+          <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+            Choose your service and pick the perfect time for your furry friend
+          </p>
+          
+          {/* Quick Links */}
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            <Link 
+              href="/services" 
+              className="text-blue-400 hover:text-blue-300 underline transition-colors duration-300"
+            >
+              View Service Details & Pricing
+            </Link>
+            <span className="text-gray-500">•</span>
+            <Link 
+              href="/my-account" 
+              className="text-green-400 hover:text-green-300 underline transition-colors duration-300"
+            >
+              Manage Existing Bookings
+            </Link>
+            <span className="text-gray-500">•</span>
+            <a 
+              href="https://wa.me/447932749772" 
+              className="text-purple-400 hover:text-purple-300 underline transition-colors duration-300"
+            >
+              WhatsApp: 07932 749 772
+            </a>
+          </div>
+        </div>
+
+        {/* Booking Section */}
+        <section className="mb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-center">
+
+            {/* Left Image - Hidden on mobile */}
+            <div className="hidden lg:flex justify-center">
+              <PlayfulImage
+                src="/images/dog-walking/photo1.jpg"
+                alt="Happy dog ready for a walk"
+                rotationClass="-rotate-3 hover:-rotate-1"
+                aspectRatio="aspect-[3/4]"
+              />
+            </div>
+
+            {/* Booking Calendar - Center */}
+            <div className="max-w-2xl mx-auto w-full">
+              <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50">
+                <h2 className="text-3xl font-semibold text-center mb-8 text-blue-400">
+                  Select Your Service & Time
+                </h2>
+                <MobileBookingCalendar />
+              </div>
+            </div>
+
+            {/* Right Image - Hidden on mobile */}
+            <div className="hidden lg:flex justify-center">
+              <PlayfulImage
+                src="/images/dog-walking/photo2.jpg"
+                alt="Beautiful park setting"
+                rotationClass="rotate-3 hover:rotate-1"
+                aspectRatio="aspect-[3/4]"
+                objectPositionClass="object-center"
+              />
+            </div>
+          </div>
+
+          {/* Mobile Gallery - Visible on mobile/tablet only */}
+          <div className="mt-12 lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <PlayfulImage
+              src="/images/dog-walking/photo1.jpg"
+              alt="Happy dog in the park"
+              rotationClass="-rotate-1"
+              aspectRatio="aspect-[4/3]"
+            />
+            <PlayfulImage
+              src="/images/dog-walking/photo2.jpg"
+              alt="Beautiful park scenery"
+              rotationClass="rotate-1"
+              aspectRatio="aspect-[4/3]"
+              objectPositionClass="object-center"
+            />
+          </div>
+        </section>
+
+        {/* Quick Service Info */}
+        <section className="mb-16">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-semibold text-center mb-8">Quick Service Overview</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              
+              <div className="bg-gray-800/30 rounded-xl p-6 text-center border border-green-500/30">
+                <h3 className="text-lg font-semibold text-green-400 mb-2">Meet & Greet</h3>
+                <p className="text-2xl font-bold text-white mb-2">FREE</p>
+                <p className="text-sm text-gray-300">30 min • New clients</p>
+              </div>
+              
+              <div className="bg-gray-800/30 rounded-xl p-6 text-center border border-blue-500/30">
+                <h3 className="text-lg font-semibold text-blue-400 mb-2">Quick Walk</h3>
+                <p className="text-2xl font-bold text-white mb-2">£10</p>
+                <p className="text-sm text-gray-300">30 minutes</p>
+              </div>
+              
+              <div className="bg-gray-800/30 rounded-xl p-6 text-center border border-purple-500/30">
+                <h3 className="text-lg font-semibold text-purple-400 mb-2">Solo Walk</h3>
+                <p className="text-lg font-bold text-white mb-2">£17.50 / £25</p>
+                <p className="text-sm text-gray-300">1 hour • 1 or 2 dogs</p>
+              </div>
+              
+              <div className="bg-gray-800/30 rounded-xl p-6 text-center border border-yellow-500/30">
+                <h3 className="text-lg font-semibold text-yellow-400 mb-2">Dog Sitting</h3>
+                <p className="text-lg font-bold text-white mb-2">From £25</p>
+                <p className="text-sm text-gray-300">2+ hours</p>
+              </div>
+            </div>
+            <div className="text-center mt-8">
+              <Link
+                href="/services"
+                className="inline-block text-blue-400 hover:text-blue-300 font-semibold underline transition-colors duration-300"
+              >
+                View complete pricing & service details →
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Need Help Section */}
+        <section className="text-center bg-gradient-to-r from-green-900/30 to-blue-900/30 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50">
+          <h2 className="text-3xl font-semibold mb-4">Need Help Booking?</h2>
+          <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+            First time booking or have special requirements? I'm here to help!
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <a
+              href="https://wa.me/447932749772"
+              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 text-lg shadow-lg transform hover:scale-105"
+            >
+              💬 WhatsApp: 07932 749 772
+            </a>
+            <Link
+              href="/services"
+              className="text-green-400 hover:text-green-300 font-semibold text-lg underline transition-colors duration-300"
+            >
+              View all services & pricing
+            </Link>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// ORIGINAL DutchBrat Experience (unchanged)
+function DutchBratDogWalking() {
+  return (
+    <main className="bg-gray-950 text-white">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16">
+
+        {/* Section 1: Hero / Introduction */}
+        <section className="text-center mb-16">
+          <h1 className="text-5xl font-bold mb-4">Hunter's Hounds</h1>
+          <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
+            Professional & Loving Dog Walking Services, Inspired by a Best Friend.
+          </p>
+
+          <div className="relative w-full max-w-2xl mx-auto aspect-square rounded-lg overflow-hidden shadow-2xl">
+            <Image
+              src="/images/dog-walking/hunter-and-me.jpg"
+              alt="Myself with my Dobermann, Hunter"
+              fill
+              className="object-cover object-center"
+              priority
+            />
+          </div>
+        </section>
+
+        {/* Section 2: Our Story */}
+        <section className="max-w-3xl mx-auto mb-16">
+          <h2 className="text-3xl font-semibold mb-4 text-center">Our Story</h2>
+          <p className="text-gray-300 leading-relaxed">
+            My name is Ernesto, and for 7 years, my best friend was Hunter, a loyal and loving Dobermann.
+            Playing in the park with him was the best part of my day. After he passed, I wanted to
+            find a way to honour his memory. Hunter's Hounds is my way of sharing the care, joy, and
+            attention I gave him with other wonderful dogs in our community. I am reliable, experienced,
+            and will treat your dog with the same love and respect I gave my sweet Boy.
+          </p>
+        </section>
+
+        {/* Section 3: Services */}
+        <section className="mb-16">
+          <h2 className="text-3xl font-semibold mb-8 text-center">Services</h2>
+          <div className="max-w-3xl mx-auto mb-12">
+            <p className="text-gray-300 leading-relaxed">
+              Highbury Fields and Clissold Park are my favourite spots to walk dogs. I offer a range of services
+              to suit your dog's needs, from solo walks (1 hour & 30 minutes) to longer dog sitting sessions.
+              All walks include plenty of exercise, socialisation, and love. Your dog's happiness and well-being
+              are my top priorities.
+
+              New clients are welcome to book a free 30 minute meet-and-greet session, so I can get to know your dog
+              and discuss their needs.
+            </p>
+          </div>
+        
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {Object.values(SERVICE_PRICING).slice(0, 3).map(service => (
+              <ServiceCard
+                key={service.id}
+                title={service.name}
+                description={service.description}
+                price={service.priceDisplay}
+              />
+            ))}
+            
+            {Object.values(SERVICE_PRICING).slice(3).map(service => (
+              <ServiceCard
+                key={service.id}
+                title={service.name}
+                description={service.description}
+                price={service.priceDisplay}
+              />
+            ))}
+            
+            <div className="hidden md:block"></div>
+            <DashboardServiceCard />
+          </div>
+        </section>
+
+        {/* Section 4: Booking Calendar */}
+        <section>
+          <h2 className="text-3xl font-bold mb-8 text-center text-blue-400">Book a Walk</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+            <div className="hidden lg:flex justify-center">
+              <PlayfulImage
+                src="/images/dog-walking/photo1.jpg"
+                alt="A happy dog in the park"
+                rotationClass="-rotate-3 hover:-rotate-1"
+                aspectRatio="aspect-[3/4]"
+              />
+            </div>
+
+            <div className="max-w-xl mx-auto w-full bg-gray-900 rounded-lg p-2 lg:col-span-1">
+              <MobileBookingCalendar />
+            </div>
+
+            <div className="hidden lg:flex justify-center">
+              <PlayfulImage
+                src="/images/dog-walking/photo2.jpg"
+                alt="Hunter enjoying the park scenery"
+                rotationClass="rotate-3 hover:rotate-1"
+                aspectRatio="aspect-[3/4]"
+                objectPositionClass="object-center"
+              />
+            </div>
+          </div>
+
+          <div className="mt-8 lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <PlayfulImage
+              src="/images/dog-walking/photo1.jpg"
+              alt="A happy dog in the park"
+              rotationClass="-rotate-1"
+              aspectRatio="aspect-[4/3]"
+            />
+            <PlayfulImage
+              src="/images/dog-walking/photo2.jpg"
+              alt="Hunter enjoying the park scenery"
+              rotationClass="rotate-1"
+              aspectRatio="aspect-[4/3]"
+              objectPositionClass="object-center"
+            />
+          </div>
+
+          <div className="mt-8 max-w-lg mx-auto">
+            <PlayfulImage
+              src="/images/dog-walking/photo3.jpg"
+              alt="A sunny day in the park"
+              rotationClass="rotate-2"
+              aspectRatio="aspect-[4/3] lg:aspect-[3/4]"
+            />
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export default function DogWalkingPage() {
+  // Check domain and render appropriate experience
+  if (isHuntersHoundsDomain()) {
+    return <HuntersHoundsBooking />;
+  }
+
+  // DutchBrat domain gets original experience
+  return <DutchBratDogWalking />;
+}

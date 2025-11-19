@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
 import { sendTelegramNotification } from "@/lib/telegram";
+import { sendEmail } from "@/lib/emailService";
+import { generateWelcomeEmail, type WelcomeEmailData } from "@/lib/emailTemplates";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -12,15 +14,15 @@ const pool = new Pool({
     ssl: false,
 });
 
-// --- Helper Type (Updated) ---
+// --- Helper Type ---
 interface RegisterRequest {
     ownerName: string;
     phone: string;
     email: string;
     address: string;
     dogName: string;
-    dogBreed: string;  // Remove the ? to make it required
-    dogAge: number;    // Remove the ? to make it required
+    dogBreed: string;
+    dogAge: number;
 }
 
 // --- Main POST Function ---
@@ -34,8 +36,8 @@ export async function POST(request: NextRequest) {
         !data.email ||
         !data.address ||
         !data.dogName ||
-        !data.dogBreed ||     // NEW: Required validation
-        data.dogAge === undefined || data.dogAge === null // NEW: Required validation
+        !data.dogBreed ||
+        data.dogAge === undefined || data.dogAge === null
     ) {
         return NextResponse.json(
             { error: "All fields including dog's breed and age are required" },
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
     try {
         await client.query("BEGIN");
 
-        // --- Step 1: Create the Owner (unchanged) ---
+        // --- Step 1: Create the Owner ---
         const ownerQuery = `
             INSERT INTO hunters_hounds.owners (owner_name, phone, email, address)
             VALUES ($1, $2, $3, $4)
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
         const ownerResult = await client.query(ownerQuery, ownerValues);
         const newOwnerId = ownerResult.rows[0].id;
 
-        // --- Step 2: Create the first Dog (UPDATED - no null values) ---
+        // --- Step 2: Create the first Dog ---
         const dogQuery = `
             INSERT INTO hunters_hounds.dogs (owner_id, dog_name, dog_breed, dog_age)
             VALUES ($1, $2, $3, $4)
@@ -82,32 +84,60 @@ export async function POST(request: NextRequest) {
         const dogValues = [
             newOwnerId,
             data.dogName,
-            data.dogBreed,  // Remove || null
-            data.dogAge,    // Remove || null
+            data.dogBreed,
+            data.dogAge,
         ];
         const dogResult = await client.query(dogQuery, dogValues);
         const newDog = dogResult.rows[0];
 
-        // Send Telegram notification for new customer registration
-        const telegramMessage = `
-        👋 <b>NEW CUSTOMER REGISTERED!</b>
-        
-        <b>Customer:</b> ${data.ownerName}
-        <b>Phone:</b> ${data.phone}
-        <b>Email:</b> ${data.email}
-        <b>Address:</b> ${data.address}
-        
-        <b>First Dog:</b> ${data.dogName}
-        <b>Breed:</b> ${data.dogBreed}
-        <b>Age:</b> ${data.dogAge} years
-        
-        <i>Customer registered but hasn't booked a service yet.</i>
-        `;
-        await sendTelegramNotification(telegramMessage);
+        // --- Step 3: Send Welcome Email ---
+        try {
+            const welcomeEmailData: WelcomeEmailData = {
+                ownerName: data.ownerName,
+                dogName: data.dogName,
+                dogBreed: data.dogBreed,
+                dogAge: data.dogAge,
+            };
+
+            await sendEmail({
+                to: data.email,
+                subject: `Welcome to Hunter's Hounds, ${data.ownerName}! 🐕`,
+                html: generateWelcomeEmail(welcomeEmailData),
+                // BCC to bookings@hunters-hounds.london automatically added by emailService
+                // From address automatically set to "Hunter's Hounds <bookings@hunters-hounds.london>"
+            });
+
+            console.log(`Welcome email sent successfully to: ${data.email}`);
+        } catch (emailError) {
+            console.error("Failed to send welcome email:", emailError);
+            // Don't fail registration if email fails - continue with Telegram notification
+        }
+
+        // --- Step 4: Send Telegram notification for new customer registration ---
+        try {
+            const telegramMessage = `
+👋 <b>NEW CUSTOMER REGISTERED!</b>
+
+<b>Customer:</b> ${data.ownerName}
+<b>Phone:</b> ${data.phone}
+<b>Email:</b> ${data.email}
+<b>Address:</b> ${data.address}
+
+<b>First Dog:</b> ${data.dogName}
+<b>Breed:</b> ${data.dogBreed}
+<b>Age:</b> ${data.dogAge} years
+
+<i>Customer registered and welcome email sent!</i>
+            `;
+            await sendTelegramNotification(telegramMessage);
+        } catch (telegramError) {
+            console.error("Failed to send Telegram notification:", telegramError);
+            // Don't fail registration if Telegram fails
+        }
 
         await client.query("COMMIT");
 
-        // --- Success Response (unchanged) ---
+        // --- Success Response ---
         return NextResponse.json(
             {
                 user: {
@@ -126,7 +156,7 @@ export async function POST(request: NextRequest) {
         await client.query("ROLLBACK");
         console.error("Registration failed:", error);
 
-        // Existing error handling for database constraints...
+        // Handle database constraints
         if (error.code === "23505") {
             if (error.constraint === "owners_phone_key") {
                 return NextResponse.json(
@@ -140,12 +170,6 @@ export async function POST(request: NextRequest) {
                     { status: 409 }
                 );
             }
-        }
-
-        // NEW: Don't fail registration if only Telegram fails
-        if (error.message && error.message.includes('Telegram')) {
-            console.warn("Registration succeeded but Telegram notification failed:", error);
-            // Continue with successful registration response
         }
 
         return NextResponse.json(

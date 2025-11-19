@@ -162,7 +162,7 @@ export default function CustomerDashboard() {
                         ✉️ ernesto@hunters-hounds.london
                     </a>
                     <a 
-                        href="/dog-walking" 
+                        href="/book-now" 
                         style={{ 
                             color: "#10b981", 
                             textDecoration: "none",

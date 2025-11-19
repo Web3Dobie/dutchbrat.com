@@ -197,7 +197,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
 
             // --- 3. Send Confirmation Email ---
             const cancellationLink = `${process.env.NEXT_PUBLIC_BASE_URL}/dog-walking/cancel?token=${cancellation_token}`;
-            const dashboardLink = `${process.env.NEXT_PUBLIC_BASE_URL}/dog-walking/dashboard`;
+            const dashboardLink = `${process.env.NEXT_PUBLIC_BASE_URL}/my-account`;
 
             let emailSubject, emailContent;
 

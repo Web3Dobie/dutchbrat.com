@@ -72,7 +72,7 @@ function CancellationContent() {
                         <p>{message}</p>
                         <p>You may also receive a notification if your email provider confirms the calendar event was removed.</p>
                         <p style={{ marginTop: "15px", fontWeight: "bold" }}>Cancellation Token: {token}</p> {/* ← Updated label */}
-                        <a href="https://dutchbrat.com/dog-walking" style={{ display: "block", marginTop: "20px", color: "#3b82f6" }}>
+                        <a href="https://hunters-hounds.london/book-now" style={{ color: "#3b82f6", display: "block", marginTop: "20px" }}>
                             Book a new walk or return to the main page.
                         </a>
                     </>
