@@ -1,12 +1,12 @@
-// Enhanced booking API route with multi-day support
-// This is the modifications needed for /app/api/dog-walking/book/route.ts
+// Enhanced booking API route with duration-based pricing for solo walks
+// This is the updated /app/api/dog-walking/book/route.ts
 
 import { NextResponse, type NextRequest } from "next/server";
 import { google } from "googleapis";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, differenceInHours, isSameDay } from "date-fns"; // Added isSameDay and differenceInHours
 import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
-import { getServicePrice } from '@/lib/pricing';
+import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // NEW: Import solo walk pricing
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -24,13 +24,13 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         console.log("Booking request body:", body);
         const {
-            ownerId, // <-- CHANGED: From owner_id to ownerId
+            ownerId,
             dog_id_1,
             dog_id_2,
             service_type,
             start_time,
-            end_time, // NEW: for multi-day bookings
-            duration_minutes, // For single-day bookings
+            end_time,
+            duration_minutes,
             owner_name,
             phone,
             email,
@@ -39,12 +39,23 @@ export async function POST(request: NextRequest) {
             dog_name_2
         } = body;
 
-        // Determine booking type based on presence of end_time and duration
-        const booking_type = end_time && !duration_minutes ? 'multi_day' : 'single';
+        // Determine booking type based on actual date comparison (FIXED)
+        let booking_type: string;
+        if (end_time && duration_minutes) {
+            // Has both end_time AND duration_minutes (shouldn't happen, but handle it)
+            booking_type = 'single';
+        } else if (end_time && !duration_minutes) {
+            // Has end_time but no duration_minutes - check if same day
+            const startDate = new Date(start_time);
+            const endDate = new Date(end_time);
+            booking_type = isSameDay(startDate, endDate) ? 'single_day_sitting' : 'multi_day';
+        } else {
+            // Has duration_minutes or neither (standard walk booking)
+            booking_type = 'single';
+        }
 
         // Validate multi-day booking logic
         if (service_type === 'Dog Sitting' && booking_type !== 'multi_day') {
-            // Handle single-day sitting requests if needed, but for now, enforce duration for single day walks
             if (booking_type === 'single') {
                 // No action, rely on duration_minutes for single day walk logic below
             } else {
@@ -56,7 +67,6 @@ export async function POST(request: NextRequest) {
         }
 
         if (booking_type === 'multi_day' && service_type !== 'Dog Sitting') {
-            // Use `service_type` property if Dog Sitting is not found (assuming Dog Sitting name is 'Dog Sitting')
             if (service_type.toLowerCase().includes('walk') || service_type.toLowerCase().includes('greet')) {
                 return NextResponse.json(
                     { error: `Multi-day bookings are only available for Dog Sitting. Service received: ${service_type}` },
@@ -65,27 +75,36 @@ export async function POST(request: NextRequest) {
             }
         }
 
-
         // Generate cancellation token
         const cancellation_token = crypto.randomUUID();
 
-        // --- Calculate Price Based on Service Type ---
+        // --- Calculate Price Based on Service Type (UPDATED for Duration-Based Pricing) ---
         let finalPrice: number | null = null;
 
-        // Map service types to pricing config IDs
-        const serviceTypeMap: Record<string, string> = {
-            'Meet & Greet - for new clients': 'meetgreet',
-            'Solo Walk (60 min)': 'solo',
-            'Quick Walk (30 min)': 'quick',
-            'Dog Sitting (Variable)': 'sitting'
-        };
+        // NEW: Check if this is a solo walk with duration-based pricing
+        const isSoloWalk = service_type.toLowerCase().includes('solo walk');
 
-        const pricingServiceId = serviceTypeMap[service_type];
-        if (pricingServiceId) {
-            finalPrice = getServicePrice(pricingServiceId);
+        if (isSoloWalk && duration_minutes) {
+            // NEW: Calculate solo walk price based on duration and dog count
+            const dogCount = dog_id_2 ? 2 : 1;
+            finalPrice = getSoloWalkPrice(duration_minutes, dogCount);
+            console.log(`Solo Walk Duration Pricing: ${duration_minutes}min, ${dogCount} dogs -> £${finalPrice}`);
+        } else {
+            // Fallback to static pricing for other services
+            const serviceTypeMap: Record<string, string> = {
+                'Meet & Greet - for new clients': 'meetgreet',
+                'Solo Walk (60 min)': 'solo', // Legacy compatibility
+                'Quick Walk (30 min)': 'quick',
+                'Dog Sitting (Variable)': 'sitting'
+            };
+
+            const pricingServiceId = serviceTypeMap[service_type];
+            if (pricingServiceId) {
+                finalPrice = getServicePrice(pricingServiceId);
+            }
         }
 
-        console.log(`Service: ${service_type} -> Pricing ID: ${pricingServiceId} -> Price: ${finalPrice}`);
+        console.log(`Service: ${service_type} -> Final Price: £${finalPrice}`);
 
         const client = await pool.connect();
 
@@ -118,9 +137,9 @@ export async function POST(request: NextRequest) {
                 dog_id_2 || null,
                 service_type,
                 start_time,
-                calculatedEndTime, // ✅ Always provides a valid end_time
+                calculatedEndTime,
                 booking_type === 'single' ? duration_minutes : null,
-                finalPrice, // ← ADD THIS: Will be 0, 10, 17.50, or NULL
+                finalPrice, // ✅ Now includes duration-based pricing for solo walks
                 booking_type,
                 cancellation_token
             ];
@@ -159,6 +178,7 @@ Owner: ${owner_name}
 Dog(s): ${dogNames}
 Service: ${service_type}
 Duration: ${duration_minutes} minutes
+${finalPrice ? `Price: £${finalPrice.toFixed(2)}` : ''} 
 Address: ${address}
 Phone: ${phone}
 Email: ${email}
@@ -195,7 +215,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 [googleEventId, bookingId]
             );
 
-            // --- 3. Send Confirmation Email ---
+            // --- 3. Send Confirmation Email (ENHANCED with Pricing) ---
             const cancellationLink = `${process.env.NEXT_PUBLIC_BASE_URL}/dog-walking/cancel?token=${cancellation_token}`;
             const dashboardLink = `${process.env.NEXT_PUBLIC_BASE_URL}/my-account`;
 
@@ -218,7 +238,6 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p>Please save this confirmation email for your records. I'll be in touch closer to the start date to coordinate details.</p>
                     <br>
                     
-                    <!-- NEW: Dashboard link for multi-day -->
                     <p><strong>Manage Your Booking:</strong></p>
                     <a href="${dashboardLink}" style="
                         display: inline-block;
@@ -248,9 +267,65 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. For multi-day bookings, please provide as much notice as possible.</p>
                     <p>Thank you!</p>
                 `;
+            } else if (booking_type === 'single_day_sitting') {
+                // NEW: Same-day dog sitting (like 10:30-19:30)
+                const numHours = differenceInHours(new Date(end_time), new Date(start_time));
+                const displayDate = format(new Date(start_time), "EEEE, dd MMMM");
+                const startTimeOnly = format(new Date(start_time), "HH:mm");
+                const endTimeOnly = format(new Date(end_time), "HH:mm");
+
+                emailSubject = `Hunter's Hounds ${numHours} Hour Dog Sitting Confirmed`;
+                emailContent = `
+                    <h1>${numHours} Hour Dog Sitting Confirmed!</h1>
+                    <p>Hi ${owner_name},</p>
+                    <p>Your <strong>${numHours}-hour dog sitting booking</strong> is confirmed!</p>
+                    <p><strong>Date:</strong> ${displayDate}</p>
+                    <p><strong>Time:</strong> ${startTimeOnly} - ${endTimeOnly}</p>
+                    <p><strong>Dog(s):</strong> ${dogNames}</p>
+                    <p><strong>Duration:</strong> ${numHours} hours</p>
+                    <br>
+                    <p>I'll be providing dedicated care for your dog(s) during this ${numHours}-hour session. We'll discuss the specific arrangements and pricing (POA) before the scheduled time.</p>
+                    <br>
+                    <p>Please save this confirmation email for your records. I'll be in touch if I need any additional details.</p>
+                    <br>
+                    
+                    <p><strong>Manage Your Booking:</strong></p>
+                    <a href="${dashboardLink}" style="
+                        display: inline-block;
+                        padding: 10px 20px;
+                        font-weight: bold;
+                        color: white;
+                        background-color: #3b82f6;
+                        border-radius: 4px;
+                        text-decoration: none;
+                        margin-right: 10px;
+                        margin-bottom: 10px;">
+                        View Dashboard
+                    </a>
+                    
+                    <p>If you need to cancel this appointment, please click the button below:</p>
+                    <a href="${cancellationLink}" style="
+                        display: inline-block;
+                        padding: 10px 20px;
+                        font-weight: bold;
+                        color: white;
+                        background-color: #ef4444;
+                        border-radius: 4px;
+                        text-decoration: none;">
+                        Cancel Booking
+                    </a>
+                    <br><br>
+                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p>Thank you!</p>
+                `;
             } else {
+                // Standard walk bookings
                 const displayDate = format(new Date(start_time), "EEEE, dd MMMM 'at' HH:mm");
                 emailSubject = `Hunter's Hounds Booking Confirmation: ${displayDate}`;
+
+                // Include pricing in email for confirmed bookings
+                const priceDisplay = finalPrice ? `<p><strong>Total Price:</strong> £${finalPrice.toFixed(2)}</p>` : '';
+
                 emailContent = `
                     <h1>Booking Confirmed!</h1>
                     <p>Hi ${owner_name},</p>
@@ -258,10 +333,10 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p><strong>Date & Time:</strong> ${displayDate}</p>
                     <p><strong>Dog(s):</strong> ${dogNames}</p>
                     <p><strong>Duration:</strong> ${duration_minutes} minutes</p>
+                    ${priceDisplay}
                     <p>Please save this confirmation email for your records. We'll see you at the scheduled time!</p>
                     <br>
                     
-                    <!-- NEW: Dashboard link for single bookings -->
                     <p><strong>Manage Your Booking:</strong></p>
                     <a href="${dashboardLink}" style="
                         display: inline-block;
@@ -299,8 +374,6 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     to: email,
                     subject: emailSubject,
                     html: emailContent,
-                    // BCC to bookings@hunters-hounds.london automatically added
-                    // From address automatically set to "Hunter's Hounds <bookings@hunters-hounds.london>"
                 });
                 console.log("Confirmation email sent successfully to:", email);
             } catch (emailError) {
@@ -308,7 +381,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 // Don't fail the booking if email fails - continue with Telegram
             }
 
-            // --- 5. Send Telegram Notification ---
+            // --- 5. Send Telegram Notification (ENHANCED with proper booking types) ---
             let telegramMessage;
 
             if (booking_type === 'multi_day') {
@@ -322,7 +395,22 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
 📍 ${address}
 📧 ${email}
                 `;
+            } else if (booking_type === 'single_day_sitting') {
+                // NEW: Same-day dog sitting notification
+                const numHours = differenceInHours(new Date(end_time), new Date(start_time));
+                telegramMessage = `
+🐕 NEW ${numHours}H DOG SITTING BOOKING
+
+📅 ${format(new Date(start_time), "EEE, MMM d")} ${format(new Date(start_time), "HH:mm")} → ${format(new Date(end_time), "HH:mm")}
+👤 ${owner_name} (${phone})
+🐾 ${dogNames}
+⏱️ ${numHours} hours
+📍 ${address}
+📧 ${email}
+                `;
             } else {
+                // Standard walk bookings
+                const priceInfo = finalPrice ? `💰 £${finalPrice.toFixed(2)}` : '';
                 telegramMessage = `
 🐕 NEW BOOKING: ${service_type.toUpperCase()}
 
@@ -330,6 +418,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
 👤 ${owner_name} (${phone})
 🐾 ${dogNames}
 ⏱️ ${duration_minutes} minutes
+${priceInfo}
 📍 ${address}
 📧 ${email}
                 `;
@@ -355,9 +444,12 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 google_event_id: googleEventId,
                 cancellation_token: cancellation_token,
                 booking_type: booking_type,
+                price: finalPrice, // NEW: Return calculated price
                 message: booking_type === 'multi_day'
                     ? "Multi-day dog sitting booking confirmed!"
-                    : "Single-day booking confirmed!"
+                    : booking_type === 'single_day_sitting'
+                        ? "Same-day dog sitting booking confirmed!"
+                        : "Single-day booking confirmed!"
             });
 
         } catch (error) {

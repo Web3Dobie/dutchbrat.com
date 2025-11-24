@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
                 whereClause = "WHERE b.status = 'completed' AND b.price_pounds > 0";
         }
 
-        // Fetch bookings with customer and dog information
+        // Fetch bookings with customer and dog information INCLUDING walk_summary
         const bookingsQuery = `
             SELECT 
                 b.id,
@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
                 b.duration_minutes,
                 b.price_pounds,
                 b.status,
+                b.walk_summary,
                 b.created_at,
                 o.owner_name,
                 o.phone,
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
             ${whereClause}
             GROUP BY 
                 b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, 
-                b.price_pounds, b.status, b.created_at,
+                b.price_pounds, b.status, b.walk_summary, b.created_at,
                 o.owner_name, o.phone, o.email
             ORDER BY b.start_time DESC;
         `;
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
                         ELSE 0 
                     END), 0) as total_paid_this_month,
                     
-                    -- Count of bookings paid this month
+                    -- This month's paid bookings count
                     COUNT(CASE 
                         WHEN status = 'completed & paid' 
                         AND price_pounds > 0
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
                         THEN 1 
                     END) as paid_bookings_this_month,
                     
-                    -- This year's paid amount (YTD)
+                    -- This year's paid amount
                     COALESCE(SUM(CASE 
                         WHEN status = 'completed & paid' 
                         AND price_pounds > 0
@@ -115,13 +116,14 @@ export async function GET(request: NextRequest) {
                         ELSE 0 
                     END), 0) as total_paid_this_year,
                     
-                    -- Count of bookings paid this year (YTD)
+                    -- This year's paid bookings count
                     COUNT(CASE 
                         WHEN status = 'completed & paid' 
                         AND price_pounds > 0
                         AND EXTRACT(YEAR FROM start_time) = EXTRACT(YEAR FROM CURRENT_DATE)
                         THEN 1 
                     END) as paid_bookings_this_year
+                    
                 FROM hunters_hounds.bookings
             )
             SELECT * FROM payment_stats;
@@ -129,7 +131,7 @@ export async function GET(request: NextRequest) {
 
         const statsResult = await client.query(statsQuery);
 
-        // Format bookings data
+        // Transform bookings data
         const bookings = bookingsResult.rows.map(row => ({
             id: row.id,
             service_type: row.service_type,
@@ -138,6 +140,7 @@ export async function GET(request: NextRequest) {
             duration_minutes: row.duration_minutes,
             price_pounds: row.price_pounds ? parseFloat(row.price_pounds) : null,
             status: row.status,
+            walk_summary: row.walk_summary, // Include walk summary in response
             owner_name: row.owner_name,
             phone: row.phone,
             email: row.email,

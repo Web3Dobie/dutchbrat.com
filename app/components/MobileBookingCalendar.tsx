@@ -6,10 +6,11 @@ import BookingForm from "./BookingForm";
 
 // Import components
 import ServiceSelector from "./ServiceSelector";
-import ResponsiveDatePicker from "./ResponsiveDatePicker"; // <-- NOW USING NEW FILE
+import ResponsiveDatePicker from "./ResponsiveDatePicker";
 import TimeSlotGrid from "./TimeSlotGrid";
 import SittingBookingFlow from "./SittingBookingFlow";
 import BookingSuccess from "./BookingSuccess";
+import SoloWalkDurationSelector from "./SoloWalkDurationSelector"; // NEW: Duration selector
 
 // --- Types (kept from original) ---
 type ApiRange = {
@@ -24,10 +25,10 @@ type AvailabilityResponse = {
 type ServiceId = "meetgreet" | "solo" | "quick" | "sitting";
 type ViewState = "picker" | "form" | "success";
 
-// --- Service Definitions (kept from original) ---
+// --- Updated Service Definitions ---
 export const SERVICES = [
     { id: "meetgreet", name: "Meet & Greet - for new clients", duration: 30 },
-    { id: "solo", name: "Solo Walk (60 min)", duration: 60 },
+    { id: "solo", name: "Solo Walk", duration: null }, // ← UPDATED: Remove hardcoded duration
     { id: "quick", name: "Quick Walk (30 min)", duration: 30 },
     { id: "sitting", name: "Dog Sitting (Variable)", duration: null },
 ] as const;
@@ -38,6 +39,9 @@ export default function MobileBookingCalendar() {
     const [view, setView] = useState<ViewState>("picker");
     const [selectedServiceId, setSelectedServiceId] = useState<ServiceId>("solo");
     const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
+
+    // --- NEW: Duration State for Solo Walks ---
+    const [selectedDuration, setSelectedDuration] = useState<number>(60); // Default: 1 hour
 
     // --- Booking State ---
     const [selectedBookingStart, setSelectedBookingStart] = useState<Date | null>(null);
@@ -64,7 +68,7 @@ export default function MobileBookingCalendar() {
         };
 
         const serviceType = serviceTypeMap[selectedServiceId as Exclude<ServiceId, 'sitting'>];
-        console.log("API Call Debug:", { selectedServiceId, serviceType, formattedDate });
+        console.log("API Call Debug:", { selectedServiceId, serviceType, formattedDate, selectedDuration });
         const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}`;
 
         setIsLoading(true);
@@ -86,7 +90,7 @@ export default function MobileBookingCalendar() {
             .finally(() => {
                 setIsLoading(false);
             });
-    }, [selectedDay, selectedServiceId]); // Added selectedServiceId to dependencies
+    }, [selectedDay, selectedServiceId]); // Note: Don't include selectedDuration in deps since it doesn't affect availability
 
     // --- Service Change Handler ---
     const handleServiceChange = (serviceId: ServiceId) => {
@@ -96,6 +100,11 @@ export default function MobileBookingCalendar() {
         setSelectedBookingEnd(null);
         setError(null);
 
+        // Reset duration when changing away from solo walk
+        if (serviceId !== "solo") {
+            setSelectedDuration(60); // Reset to default
+        }
+
         // For dog sitting, we don't need the main selectedDay since it has its own date selection
         if (serviceId === "sitting") {
             setSelectedDay(undefined);
@@ -103,6 +112,15 @@ export default function MobileBookingCalendar() {
         } else if (!selectedDay) {
             setSelectedDay(new Date());
         }
+    };
+
+    // --- NEW: Duration Change Handler ---
+    const handleDurationChange = (duration: number) => {
+        console.log("Duration changing to:", duration);
+        setSelectedDuration(duration);
+        // Reset time selection when duration changes
+        setSelectedBookingStart(null);
+        setSelectedBookingEnd(null);
     };
 
     // --- Time Slot Selection Handler ---
@@ -128,13 +146,23 @@ export default function MobileBookingCalendar() {
     // --- Get Selected Service ---
     const selectedService = SERVICES.find(s => s.id === selectedServiceId);
 
+    // --- NEW: Build Service Name with Duration (for solo walks) ---
+    const getServiceNameWithDuration = () => {
+        if (selectedServiceId === "solo") {
+            const hourDisplay = selectedDuration === 60 ? "1 hour" : "2 hours";
+            return `Solo Walk (${hourDisplay})`;
+        }
+        return selectedService?.name || "Service";
+    };
+
     // --- View States ---
     if (view === "form" && selectedBookingStart && selectedBookingEnd && selectedService) {
         return (
             <BookingForm
-                serviceName={selectedService.name}
+                serviceName={getServiceNameWithDuration()} // ← UPDATED: Include duration
                 startTime={selectedBookingStart}
                 endTime={selectedBookingEnd}
+                selectedDuration={selectedDuration} // ← NEW: Pass duration to BookingForm
                 onBookingSuccess={handleBookingSuccess}
                 onCancel={handleBackToPicker}
             />
@@ -144,10 +172,10 @@ export default function MobileBookingCalendar() {
     if (view === "success") {
         return (
             <BookingSuccess
-                serviceName={selectedService?.name || "Service"}
-                bookingStart={selectedBookingStart}     // ✅ Fixed: Changed from startTime to bookingStart
-                endTime={selectedBookingEnd}            // ✅ Optional prop for multi-day support
-                onBookAnother={handleBackToPicker}      // ✅ Fixed: Changed from onBackToPicker to onBookAnother
+                serviceName={getServiceNameWithDuration()} // ← UPDATED: Include duration
+                bookingStart={selectedBookingStart}
+                endTime={selectedBookingEnd}
+                onBookAnother={handleBackToPicker}
             />
         );
     }
@@ -163,6 +191,17 @@ export default function MobileBookingCalendar() {
                     selectedServiceId={selectedServiceId}
                     onServiceChange={handleServiceChange}
                 />
+
+                {/* Step 1.5: Duration Selection (Only for Solo Walks) - NEW SECTION */}
+                {selectedServiceId === "solo" && (
+                    <div className="animate-in slide-in-from-top-2 duration-300">
+                        <SoloWalkDurationSelector
+                            selectedDuration={selectedDuration}
+                            dogCount={1} // Default to 1 dog for price display - will be corrected in BookingForm
+                            onDurationChange={handleDurationChange}
+                        />
+                    </div>
+                )}
 
                 {/* Step 2: Date Selection - HIDDEN for Dog Sitting */}
                 {selectedServiceId !== "sitting" && (
@@ -189,7 +228,9 @@ export default function MobileBookingCalendar() {
                         />
                     ) : (
                         <>
-                            <h2 className="text-xl font-semibold text-white">3. Select Time</h2>
+                            <h2 className="text-xl font-semibold text-white">
+                                {selectedServiceId === "solo" ? "3. Select Time" : "3. Select Time"}
+                            </h2>
 
                             {!selectedDay && (
                                 <div className="p-6 text-center text-gray-400">
@@ -199,7 +240,10 @@ export default function MobileBookingCalendar() {
 
                             {selectedDay && (
                                 <TimeSlotGrid
-                                    selectedService={selectedService}
+                                    selectedService={{
+                                        ...selectedService!,
+                                        duration: selectedServiceId === "solo" ? selectedDuration : selectedService!.duration
+                                    }} // ← UPDATED: Pass actual duration for solo walks
                                     selectedDay={selectedDay}
                                     apiRanges={apiRanges}
                                     isLoading={isLoading}

@@ -14,6 +14,7 @@ const pool = new Pool({
 
 interface MarkCompletedRequest {
     booking_ids: number[];
+    walk_summary?: string; // Optional summary when marking as completed
 }
 
 export async function POST(request: NextRequest) {
@@ -76,15 +77,22 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            // Update bookings to 'completed'
-            const updateQuery = `
-                UPDATE hunters_hounds.bookings 
-                SET status = 'completed', updated_at = CURRENT_TIMESTAMP
-                WHERE id = ANY($1) AND status = 'confirmed'
-                RETURNING id;
-            `;
+            // Update bookings to 'completed' with optional walk summary
+            const updateQuery = data.walk_summary 
+                ? `UPDATE hunters_hounds.bookings 
+                   SET status = 'completed', walk_summary = $2, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ANY($1) AND status = 'confirmed'
+                   RETURNING id;`
+                : `UPDATE hunters_hounds.bookings 
+                   SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ANY($1) AND status = 'confirmed'
+                   RETURNING id;`;
 
-            const updateResult = await client.query(updateQuery, [data.booking_ids]);
+            const updateParams = data.walk_summary 
+                ? [data.booking_ids, data.walk_summary]
+                : [data.booking_ids];
+
+            const updateResult = await client.query(updateQuery, updateParams);
             const updatedCount = updateResult.rows.length;
 
             if (updatedCount === 0) {
@@ -105,17 +113,21 @@ export async function POST(request: NextRequest) {
                     return `#${booking.id}: ${booking.owner_name} - ${booking.service_type} (${dogNames}) - ${price}`;
                 }).join('\n');
 
-                const telegramMessage = `
+                let telegramMessage = `
 ✅ <b>SERVICES COMPLETED</b> ✅
 
 <b>Marked as Completed:</b> ${updatedCount} booking(s)
 
 ${bookingDetails}
 
-<i>Status updated to 'completed' (awaiting payment)</i>
-                `.trim();
+<i>Status updated to 'completed' (awaiting payment)</i>`;
 
-                await sendTelegramNotification(telegramMessage);
+                // Add walk summary to notification if provided
+                if (data.walk_summary) {
+                    telegramMessage += `\n\n📝 <b>Walk Summary:</b>\n${data.walk_summary}`;
+                }
+
+                await sendTelegramNotification(telegramMessage.trim());
             } catch (telegramError) {
                 console.error("Failed to send Telegram notification:", telegramError);
                 // Don't fail the operation if Telegram fails
@@ -124,7 +136,7 @@ ${bookingDetails}
             return NextResponse.json({
                 success: true,
                 updated_count: updatedCount,
-                message: `${updatedCount} booking(s) marked as completed`
+                message: `${updatedCount} booking(s) marked as completed${data.walk_summary ? ' with summary' : ''}`
             });
 
         } catch (error) {

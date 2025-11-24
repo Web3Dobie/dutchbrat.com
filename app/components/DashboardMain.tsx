@@ -27,10 +27,11 @@ interface Booking {
     start_time: string;
     end_time: string;
     duration_minutes: number;
-    status: 'confirmed' | 'cancelled' | 'completed' | 'active'; // Added 'active' for compatibility
+    status: 'confirmed' | 'cancelled' | 'completed' | 'completed & paid' | 'active'; // ← Add 'completed & paid'
     price_pounds: number;
     dog_names: string[];
     created_at: string;
+    walk_summary?: string | null; // New field for walk summaries
 }
 
 interface DashboardMainProps {
@@ -259,6 +260,36 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                         </p>
                     </div>
 
+                    {/* Walk Summary Section - ADD THIS */}
+                    {(booking.status === 'completed' || booking.status === 'completed & paid') && booking.walk_summary && (
+                        <div style={{
+                            marginTop: "12px",
+                            padding: "12px",
+                            backgroundColor: "#1f2937",
+                            borderRadius: "6px",
+                            border: "1px solid #374151"
+                        }}>
+                            <div style={{
+                                color: "#10b981",
+                                fontSize: "0.875rem",
+                                fontWeight: "600",
+                                marginBottom: "8px",
+                                display: "flex",
+                                alignItems: "center"
+                            }}>
+                                📝 Walk Report
+                            </div>
+                            <div style={{
+                                color: "#d1d5db",
+                                fontSize: "0.875rem",
+                                lineHeight: "1.5",
+                                whiteSpace: "pre-line"
+                            }}>
+                                {booking.walk_summary}
+                            </div>
+                        </div>
+                    )}
+                    
                     {/* Action buttons - This is the key fix! */}
                     {canManage && (
                         <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-700">

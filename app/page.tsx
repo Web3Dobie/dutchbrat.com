@@ -1,5 +1,5 @@
-// app/page.tsx - Beautiful Hunter's Hounds homepage with domain detection
-import { isHuntersHoundsDomain } from '@/lib/domainDetection'
+// app/page.tsx - Updated with domain detection for three domains
+import { getDomainType } from '@/lib/domainDetection'
 import Link from 'next/link'
 import Image from 'next/image'
 
@@ -8,6 +8,10 @@ import HeroIntro from './components/HeroIntro'
 import HunterBlock from './components/HunterBlock'
 import CryptoPriceBlock from './components/CryptoPriceBlock'
 
+// Hunter Memorial component
+import HunterMemorialHomepage from './components/HunterMemorialHomepage'
+
+// Hunter's Hounds Homepage
 function HuntersHomePage() {
   return (
     <div className="bg-gray-950 text-white">
@@ -102,7 +106,7 @@ function HuntersHomePage() {
                   <div className="text-green-300 font-medium">FREE for new clients</div>
                 </div>
               </Link>
-              
+
               {/* Quick Walk */}
               <Link href="/services" className="group block">
                 <div className="bg-gray-800/70 rounded-xl p-6 border border-blue-500/30 group-hover:border-blue-500 transition-all duration-300 h-full">
@@ -111,7 +115,7 @@ function HuntersHomePage() {
                   <div className="text-blue-300 font-medium">30 minutes</div>
                 </div>
               </Link>
-              
+
               {/* Solo Walk */}
               <Link href="/services" className="group block">
                 <div className="bg-gray-800/70 rounded-xl p-6 border border-purple-500/30 group-hover:border-purple-500 transition-all duration-300 h-full">
@@ -120,7 +124,7 @@ function HuntersHomePage() {
                   <div className="text-purple-300 font-medium">60 minutes</div>
                 </div>
               </Link>
-              
+
               {/* Dog Sitting */}
               <Link href="/services" className="group block">
                 <div className="bg-gray-800/70 rounded-xl p-6 border border-yellow-500/30 group-hover:border-yellow-500 transition-all duration-300 h-full">
@@ -146,11 +150,11 @@ function HuntersHomePage() {
           <h2 className="text-3xl font-semibold mb-6">My Story</h2>
           <div className="bg-gray-800/30 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50">
             <p className="text-lg text-gray-300 leading-relaxed mb-6">
-              My name is Ernesto, and for 7 wonderful years, my best friend was Hunter, a loyal and loving Dobermann. 
+              My name is Ernesto, and for 7 wonderful years, my best friend was Hunter, a loyal and loving Dobermann.
               He taught me what unconditional love looks like and showed me how much joy a dog can bring to everyday life.
             </p>
             <p className="text-lg text-gray-300 leading-relaxed mb-8">
-              After Hunter passed, I wanted to find a way to honor his memory by sharing the same care, attention, and love 
+              After Hunter passed, I wanted to find a way to honor his memory by sharing the same care, attention, and love
               with other wonderful dogs in my London community. That's how Hunter's Hounds was born.
             </p>
             <Link
@@ -188,14 +192,8 @@ function HuntersHomePage() {
   )
 }
 
-export default function Home() {
-  // Check if this is a Hunter's Hounds domain
-  if (isHuntersHoundsDomain()) {
-    // Render beautiful Hunter's Hounds homepage
-    return <HuntersHomePage />
-  }
-
-  // ORIGINAL DutchBrat homepage layout - unchanged
+// DutchBrat Homepage (cleaned up - no Hunter references)
+function DutchBratHomepage() {
   return (
     <main className="min-h-screen bg-gray-950 text-white px-6 py-10">
       <CryptoPriceBlock />
@@ -203,4 +201,20 @@ export default function Home() {
       <HunterBlock />
     </main>
   )
+}
+
+export default function HomePage() {
+  const domainType = getDomainType()
+
+  // Route to appropriate homepage based on domain
+  if (domainType === 'hunters-hounds') {
+    return <HuntersHomePage />
+  }
+
+  if (domainType === 'hunter-memorial') {
+    return <HunterMemorialHomepage />
+  }
+
+  // Default to DutchBrat
+  return <DutchBratHomepage />
 }

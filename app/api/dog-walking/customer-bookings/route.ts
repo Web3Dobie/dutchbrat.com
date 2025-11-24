@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const client = await pool.connect();
 
     try {
-        // Fetch all bookings for the customer with dog information
+        // Fetch all bookings for the customer with dog information AND walk_summary
         const query = `
             SELECT 
                 b.id,
@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
                 b.duration_minutes,
                 b.status,
                 b.price_pounds,
+                b.walk_summary,
                 b.created_at,
                 -- Aggregate dog names for this booking
                 array_agg(
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.owner_id = $1
-            GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, b.status, b.price_pounds, b.created_at
+            GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, b.status, b.price_pounds, b.walk_summary, b.created_at
             ORDER BY b.start_time ASC;
         `;
 
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
             duration_minutes: row.duration_minutes,
             status: row.status,
             price_pounds: row.price_pounds ? parseFloat(row.price_pounds) : null,
+            walk_summary: row.walk_summary, // NEW: Include walk summary
             dog_names: row.dog_names || [],
             created_at: row.created_at
         }));

@@ -8,6 +8,7 @@ import {
     isAfter,
     max,
     min,
+    getDay, // NEW: Import getDay for weekend checking
 } from "date-fns";
 import {
     TZDate
@@ -35,6 +36,7 @@ interface TimeRange {
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const dateQuery = searchParams.get("date"); // e.g., "2023-10-31"
+    const serviceType = searchParams.get("service_type"); // NEW: Get service type
 
     if (!dateQuery) {
         return NextResponse.json(
@@ -47,11 +49,23 @@ export async function GET(request: NextRequest) {
         // 1. Get the target date using the TZDate constructor
         const targetDate = new TZDate(dateQuery, TIMEZONE);
 
-        // 2. Define the day's boundaries
+        // NEW: 2. Check if it's a weekend for walk services
+        const dayOfWeek = getDay(targetDate); // 0 = Sunday, 6 = Saturday
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+        // NEW: Block weekends for walk services
+        if (isWeekend && serviceType && (serviceType.includes('walk') || serviceType.includes('greet'))) {
+            return NextResponse.json({
+                availableRanges: [],
+                message: "Walk services are only available Monday to Friday"
+            });
+        }
+
+        // 3. Define the day's boundaries
         const dayStart = startOfDay(targetDate);
         const dayEnd = endOfDay(targetDate);
 
-        // 3. Fetch Google Calendar events
+        // 4. Fetch Google Calendar events
         const res = await calendar.events.list({
             calendarId: process.env.GOOGLE_CALENDAR_ID,
             timeMin: dayStart.toISOString(),
@@ -62,14 +76,14 @@ export async function GET(request: NextRequest) {
 
         const busyEvents = res.data.items || [];
 
-        // 4. Define working hours for walk services (9:00-20:00)
+        // 5. Define working hours for walk services (9:00-20:00)
         const workDayStart = new TZDate(targetDate, TIMEZONE);
         workDayStart.setHours(WORKING_HOURS_START, 0, 0, 0);
 
         const workDayEnd = new TZDate(targetDate, TIMEZONE);
         workDayEnd.setHours(WORKING_HOURS_END, 0, 0, 0);
 
-        // 5. Sanitize and "Pad" all busy events with conditional logic
+        // 6. Sanitize and "Pad" all busy events with conditional logic
         const paddedBusyTimes: TimeRange[] = busyEvents
             .filter((event) => event.start?.dateTime && event.end?.dateTime)
             .map((event) => {
@@ -97,7 +111,7 @@ export async function GET(request: NextRequest) {
                 };
             });
 
-        // 6. Merge overlapping padded events
+        // 7. Merge overlapping padded events
         const mergedBusyTimes: TimeRange[] = [];
         if (paddedBusyTimes.length > 0) {
             paddedBusyTimes.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -114,7 +128,7 @@ export async function GET(request: NextRequest) {
             mergedBusyTimes.push(currentMerge);
         }
 
-        // 7. Invert: Find free ranges within working hours
+        // 8. Invert: Find free ranges within working hours
         const availableRanges: TimeRange[] = [];
         let currentFreeStart = workDayStart;
 
@@ -135,7 +149,7 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // 8. Format the final ranges
+        // 9. Format the final ranges
         const finalRanges = availableRanges.map((range) => {
             return {
                 start: format(range.start, "HH:mm"),

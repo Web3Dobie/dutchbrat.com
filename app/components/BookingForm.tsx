@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { format } from "date-fns";
+import { getSoloWalkPrice, formatSoloWalkPrice } from "@/lib/pricing"; // NEW: Import pricing functions
 
 // --- Types ---
 interface Dog {
@@ -15,7 +16,7 @@ interface User {
     owner_id: number;
     owner_name: string;
     phone: string;
-    email: string; // <-- NEW
+    email: string;
     address: string;
     dogs: Dog[];
 }
@@ -24,6 +25,7 @@ interface BookingFormProps {
     serviceName: string;
     startTime: Date;
     endTime: Date;
+    selectedDuration?: number; // NEW: Optional duration for solo walks
     onBookingSuccess: () => void;
     onCancel: () => void;
 }
@@ -35,6 +37,7 @@ export default function BookingForm({
     serviceName,
     startTime,
     endTime,
+    selectedDuration, // NEW: Duration prop
     onBookingSuccess,
     onCancel,
 }: BookingFormProps) {
@@ -47,9 +50,9 @@ export default function BookingForm({
 
     // --- Form Data State ---
     const [phone, setPhone] = useState("");
-    const [registerData, setRegisterData] = useState({ // <-- UPDATED
+    const [registerData, setRegisterData] = useState({
         ownerName: "",
-        email: "", // <-- NEW
+        email: "",
         address: "",
         dogName: "",
         dogBreed: "",
@@ -62,8 +65,33 @@ export default function BookingForm({
     });
     const [selectedDogIds, setSelectedDogIds] = useState<number[]>([]);
 
+    // NEW: Helper function to check if service is Solo Walk
+    const isSoloWalk = serviceName.toLowerCase().includes('solo walk');
+
+    // NEW: Helper function to determine action text based on service type
+    const getServiceActionText = (serviceType: string): string => {
+        const lowerService = serviceType.toLowerCase();
+        if (lowerService.includes('walk')) {
+            return 'walk';
+        } else if (lowerService.includes('sitting')) {
+            return 'booking';
+        } else if (lowerService.includes('meet') || lowerService.includes('greet')) {
+            return 'appointment';
+        } else {
+            return 'booking'; // Default fallback
+        }
+    };
+
+    // NEW: Calculate exact price for current selection
+    const calculatePrice = () => {
+        if (!isSoloWalk || !selectedDuration) {
+            return null; // No pricing for non-solo walks or missing duration
+        }
+        const dogCount = selectedDogIds.length || 1; // Default to 1 for display
+        return getSoloWalkPrice(selectedDuration, dogCount);
+    };
+
     // --- Styles ---
-    // (Styles are unchanged)
     const styles = {
         form: {
             padding: "24px",
@@ -103,7 +131,7 @@ export default function BookingForm({
             padding: "8px 12px",
             fontSize: "0.9rem",
             color: "#fff",
-            backgroundColor: "#374151", // gray-700
+            backgroundColor: "#374151",
             border: "none",
             borderRadius: "4px",
             cursor: "pointer",
@@ -144,6 +172,16 @@ export default function BookingForm({
             marginBottom: "8px",
             cursor: "pointer",
         } as React.CSSProperties,
+        // NEW: Price display style
+        priceDisplay: {
+            backgroundColor: "#065f46",
+            color: "#10b981",
+            padding: "8px 12px",
+            borderRadius: "4px",
+            fontWeight: "bold",
+            textAlign: "center" as const,
+            marginTop: "8px",
+        } as React.CSSProperties,
     };
 
     // --- 1. LOOKUP HANDLER (Unchanged) ---
@@ -171,11 +209,11 @@ export default function BookingForm({
         }
     };
 
-    // --- 2. REGISTER HANDLER (Updated) ---
+    // --- 2. REGISTER HANDLER (Unchanged) ---
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        console.log("🚀 Starting registration...", registerData); // DEBUG
+        console.log("🚀 Starting registration...", registerData);
         setIsLoading(true);
         setError(null);
 
@@ -190,7 +228,7 @@ export default function BookingForm({
                 }),
             });
 
-            console.log("📥 Response status:", res.status); // DEBUG
+            console.log("📥 Response status:", res.status);
 
             if (!res.ok) {
                 const errData = await res.json();
@@ -198,14 +236,14 @@ export default function BookingForm({
             }
 
             const data = await res.json();
-            console.log("✅ Response data:", data); // DEBUG
+            console.log("✅ Response data:", data);
 
             setCurrentUser(data.user);
-            console.log("🔄 Setting view to selectDog"); // DEBUG
+            console.log("🔄 Setting view to selectDog");
             setView("selectDog");
 
         } catch (err: any) {
-            console.error("💥 Error:", err); // DEBUG
+            console.error("💥 Error:", err);
             setError(err.message);
         } finally {
             setIsLoading(false);
@@ -217,7 +255,6 @@ export default function BookingForm({
         e.preventDefault();
         if (!currentUser) return;
 
-        // Add client-side validation
         if (!newDogData.dogBreed.trim()) {
             setError("Dog's breed is required.");
             return;
@@ -238,10 +275,20 @@ export default function BookingForm({
                 body: JSON.stringify({
                     ...newDogData,
                     ownerId: currentUser.owner_id,
-                    dogAge: parseInt(newDogData.dogAge, 10), // Remove || null
+                    dogAge: parseInt(newDogData.dogAge, 10),
                 }),
             });
-            // ... rest of function remains the same
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Failed to add dog.");
+            }
+
+            const data = await res.json();
+            setCurrentUser(data.user);
+            setView("selectDog");
+            setNewDogData({ dogName: "", dogBreed: "", dogAge: "" });
+
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -249,9 +296,8 @@ export default function BookingForm({
         }
     };
 
-    // --- 4. FINAL BOOKING HANDLER (FIXED for Server Action conflicts) ---
+    // --- 4. FINAL BOOKING HANDLER (UPDATED for Duration Support) ---
     const handleBook = async (event?: React.MouseEvent<HTMLButtonElement>) => {
-        // Prevent any potential form submission or event bubbling
         if (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -262,7 +308,7 @@ export default function BookingForm({
             return;
         }
 
-        console.log('Booking button clicked - starting process'); // Debug log
+        console.log('Booking button clicked - starting process');
         setIsLoading(true);
         setError(null);
 
@@ -272,10 +318,16 @@ export default function BookingForm({
                 ? currentUser.dogs.find((d) => d.id === selectedDogIds[1])
                 : undefined;
 
-        // Extract duration from service name dynamically
-        const getDurationFromService = (serviceName: string) => {
-            if (serviceName.includes('60 min')) return 60;
+        // UPDATED: Smart duration detection
+        const getDurationFromService = (serviceName: string): number => {
+            // For Solo Walk with duration prop, use the prop
+            if (isSoloWalk && selectedDuration) {
+                return selectedDuration;
+            }
+            // Fallback: extract from service name for other services
+            if (serviceName.includes('60 min') || serviceName.includes('1 hour')) return 60;
             if (serviceName.includes('30 min')) return 30;
+            if (serviceName.includes('2 hour')) return 120;
             return 60; // default
         };
 
@@ -285,13 +337,13 @@ export default function BookingForm({
             dog_id_2: selectedDogIds.length > 1 ? selectedDogIds[1] : undefined,
             service_type: serviceName,
             start_time: startTime.toISOString(),
-            
-            // ✅ Smart conditional data
-            ...(serviceName.includes('Dog Sitting') 
+
+            // Smart conditional data
+            ...(serviceName.includes('Dog Sitting')
                 ? { end_time: endTime.toISOString() }
                 : { duration_minutes: getDurationFromService(serviceName) }
             ),
-            
+
             owner_name: currentUser.owner_name,
             dog_name_1: dog1?.dog_name,
             dog_name_2: dog2?.dog_name,
@@ -301,40 +353,39 @@ export default function BookingForm({
         };
 
         try {
-            console.log('Sending booking request...', bookingData); // Debug log
+            console.log('Sending booking request...', bookingData);
 
             const res = await fetch("/api/dog-walking/book", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    // Explicitly prevent Server Action interpretation
                     "X-Requested-With": "XMLHttpRequest",
                     "Cache-Control": "no-cache"
                 },
                 body: JSON.stringify(bookingData),
             });
 
-            console.log('Response status:', res.status); // Debug log
+            console.log('Response status:', res.status);
 
             if (!res.ok) {
                 const errData = await res.json();
-                console.error('Server error response:', errData); // Debug log
+                console.error('Server error response:', errData);
                 throw new Error(errData.error || "Booking failed.");
             }
 
             const responseData = await res.json();
-            console.log('Booking successful:', responseData); // Debug log
+            console.log('Booking successful:', responseData);
             onBookingSuccess();
         } catch (err: any) {
-            console.error('Booking error:', err); // Debug log
+            console.error('Booking error:', err);
             setError(err.message || "Booking failed. Please try again.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- Dog Selection Handler (Unchanged) ---
+    // --- Dog Selection Handler (UPDATED with price calculation) ---
     const handleDogSelection = (dogId: number) => {
         const isSelected = selectedDogIds.includes(dogId);
         if (isSelected) {
@@ -343,20 +394,42 @@ export default function BookingForm({
             if (selectedDogIds.length < 2) {
                 setSelectedDogIds([...selectedDogIds, dogId]);
             } else {
-                alert("You can select a maximum of 2 dogs for a walk.");
+                alert(`You can select a maximum of 2 dogs for a ${getServiceActionText(serviceName)}.`);
             }
         }
     };
 
     // --- RENDER FUNCTIONS ---
 
-    const renderSummary = () => (
-        <div style={styles.summary}>
-            <p><strong>Service:</strong> {serviceName}</p>
-            <p><strong>Date:</strong> {format(startTime, "EEEE, MMMM d, yyyy")}</p>
-            <p><strong>Time:</strong> {`${format(startTime, "HH:mm")} - ${format(endTime, "HH:mm")}`}</p>
-        </div>
-    );
+    // UPDATED: Enhanced summary with pricing
+    const renderSummary = () => {
+        const price = calculatePrice();
+
+        return (
+            <div style={styles.summary}>
+                <p><strong>Service:</strong> {serviceName}</p>
+                <p><strong>Date:</strong> {format(startTime, "EEEE, MMMM d, yyyy")}</p>
+                <p><strong>Time:</strong> {`${format(startTime, "HH:mm")} - ${format(endTime, "HH:mm")}`}</p>
+
+                {/* NEW: Price display for solo walks */}
+                {price && selectedDogIds.length > 0 && (
+                    <div style={styles.priceDisplay}>
+                        Total Price: £{price.toFixed(2)}
+                        <span style={{ fontSize: '0.9em', opacity: 0.8 }}>
+                            {' '}({selectedDogIds.length} dog{selectedDogIds.length > 1 ? 's' : ''})
+                        </span>
+                    </div>
+                )}
+
+                {/* Show pricing info when no dogs selected yet */}
+                {isSoloWalk && selectedDuration && selectedDogIds.length === 0 && (
+                    <div style={{ ...styles.priceDisplay, backgroundColor: '#374151', color: '#d1d5db' }}>
+                        Pricing: {formatSoloWalkPrice(selectedDuration, 1)} (1 dog) / {formatSoloWalkPrice(selectedDuration, 2)} (2 dogs)
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const renderLookupView = () => (
         <form onSubmit={handleLookup}>
@@ -382,7 +455,6 @@ export default function BookingForm({
         </form>
     );
 
-    // --- UPDATED RENDER FUNCTION ---
     const renderRegisterView = () => (
         <form onSubmit={handleRegister}>
             {renderSummary()}
@@ -404,11 +476,10 @@ export default function BookingForm({
                 style={styles.input}
                 type="tel"
                 id="phone"
-                value={phone} // Pre-filled
+                value={phone}
                 disabled
             />
 
-            {/* --- NEW EMAIL FIELD --- */}
             <label style={styles.label} htmlFor="email">Email*</label>
             <input
                 style={styles.input}
@@ -418,7 +489,6 @@ export default function BookingForm({
                 onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                 required
             />
-            {/* --- END NEW FIELD --- */}
 
             <label style={styles.label} htmlFor="address">Full Address for Pickup*</label>
             <textarea
@@ -479,7 +549,7 @@ export default function BookingForm({
             {renderSummary()}
             <h4>Welcome back, {currentUser?.owner_name}!</h4>
 
-            <p style={styles.label}>Select dog(s) for this walk (max 2):</p>
+            <p style={styles.label}>Select dog(s) for this {getServiceActionText(serviceName)} (max 2):</p>
             <div style={{ marginBottom: "16px" }}>
                 {currentUser?.dogs.map((dog) => (
                     <label key={dog.id} style={styles.checkboxLabel}>
@@ -502,7 +572,7 @@ export default function BookingForm({
                 + Add Another Dog
             </button>
 
-            {/* Disclaimer (full text) */}
+            {/* Disclaimer */}
             <div style={styles.disclaimer}>
                 <p style={{ marginBottom: "8px" }}>
                     <strong>Cancellations:</strong> I offer a flexible and understanding
@@ -537,7 +607,6 @@ export default function BookingForm({
                 type="button"
                 onClick={(e) => handleBook(e)}
                 disabled={isLoading || selectedDogIds.length === 0}
-                // Prevent any form context interference
                 onSubmit={(e) => e.preventDefault()}
             >
                 {isLoading ? "Booking..." : "Confirm & Book"}
