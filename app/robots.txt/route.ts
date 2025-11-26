@@ -10,28 +10,26 @@ export async function GET(request: NextRequest) {
         return new NextResponse(
             `User-agent: *
 Allow: /
-
-# Sitemap
-Sitemap: https://hunters-hounds.london/sitemap.xml
-
-# Local business optimization
-Allow: /services
-Allow: /book-now
-Allow: /my-account
-Allow: /testimonials
-Allow: /gallery
-
-# Block admin and API paths
 Disallow: /api/
 Disallow: /admin/
 Disallow: /_next/
 Disallow: /dog-walking/cancel
 
-# Crawl delay for better server performance
-Crawl-delay: 1`,
+# Sitemap
+Sitemap: https://hunters-hounds.london/sitemap.xml
+
+# Crawl delay for server optimization
+Crawl-delay: 1
+
+# Priority pages for local SEO
+# /services - Service descriptions
+# /book-now - Booking interface
+# /testimonials - Customer reviews
+# /gallery - Service photos`,
             {
                 headers: {
                     'Content-Type': 'text/plain',
+                    'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
                 },
             }
         )
@@ -41,24 +39,20 @@ Crawl-delay: 1`,
         return new NextResponse(
             `User-agent: *
 Allow: /
-
-# Memorial site - limited crawling
-Sitemap: https://hunterthedobermann.london/sitemap.xml
-
-# Allow main memorial content
-Allow: /hunter
-Allow: /gallery
-
-# Block unnecessary paths for memorial site
 Disallow: /api/
 Disallow: /_next/
 Disallow: /admin/
+Disallow: /dog-walking/
 
-# Reduced crawl frequency for memorial site
+# Memorial site sitemap
+Sitemap: https://hunterthedobermann.london/sitemap.xml
+
+# Respectful crawling for memorial content
 Crawl-delay: 2`,
             {
                 headers: {
                     'Content-Type': 'text/plain',
+                    'Cache-Control': 'public, max-age=86400',
                 },
             }
         )
@@ -68,33 +62,33 @@ Crawl-delay: 2`,
     return new NextResponse(
         `User-agent: *
 Allow: /
-
-# Sitemap
-Sitemap: https://dutchbrat.com/sitemap.xml
-
-# Optimize for crypto trading content
-Allow: /briefings
-Allow: /articles
-Allow: /hunter
-Allow: /hunter-x
-
-# Block sensitive areas
 Disallow: /api/
 Disallow: /admin/
 Disallow: /_next/
 Disallow: /dog-walking/
 
-# Allow aggressive crawling for trading platform
-Crawl-delay: 0.5
+# Sitemap
+Sitemap: https://dutchbrat.com/sitemap.xml
 
-# Special rules for crypto price bots
+# Standard crawl delay for trading platform
+Crawl-delay: 1
+
+# Crypto price aggregators
 User-agent: CoinMarketCapBot
 Allow: /
-User-agent: CoinGeckoBot  
-Allow: /`,
+Crawl-delay: 0.5
+
+User-agent: CoinGeckoBot
+Allow: /
+Crawl-delay: 0.5
+
+User-agent: CryptoCompareBot
+Allow: /
+Crawl-delay: 0.5`,
         {
             headers: {
                 'Content-Type': 'text/plain',
+                'Cache-Control': 'public, max-age=86400',
             },
         }
     )

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const phone = searchParams.get("phone");
     const email = searchParams.get("email");
 
-    // Validation
+    // Validation - accept either phone OR email
     if (!phone && !email) {
         return NextResponse.json(
             { error: "Either phone or email parameter is required" },
@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
         let params: string[];
 
         if (email) {
-            // Search by email
+            // Search by email - INCLUDES image_filename
+            console.log(`[Customer Lookup] Searching by email: ${email}`);
             query = `
                 SELECT 
                     o.id as owner_id,
@@ -46,8 +47,10 @@ export async function GET(request: NextRequest) {
                                 'id', d.id,
                                 'dog_name', d.dog_name,
                                 'dog_breed', d.dog_breed,
-                                'dog_age', d.dog_age
+                                'dog_age', d.dog_age,
+                                'image_filename', d.image_filename
                             )
+                            ORDER BY d.id
                         ) FILTER (WHERE d.id IS NOT NULL),
                         '[]'::json
                     ) as dogs
@@ -58,7 +61,8 @@ export async function GET(request: NextRequest) {
             `;
             params = [email.trim()];
         } else {
-            // Search by phone (normalize phone number)
+            // Search by phone (normalize phone number) - INCLUDES image_filename
+            console.log(`[Customer Lookup] Searching by phone: ${phone}`);
             const normalizedPhone = phone!.replace(/[\s\-\(\)]/g, "");
             query = `
                 SELECT 
@@ -74,8 +78,10 @@ export async function GET(request: NextRequest) {
                                 'id', d.id,
                                 'dog_name', d.dog_name,
                                 'dog_breed', d.dog_breed,
-                                'dog_age', d.dog_age
+                                'dog_age', d.dog_age,
+                                'image_filename', d.image_filename
                             )
+                            ORDER BY d.id
                         ) FILTER (WHERE d.id IS NOT NULL),
                         '[]'::json
                     ) as dogs
@@ -90,6 +96,7 @@ export async function GET(request: NextRequest) {
         const result = await client.query(query, params);
 
         if (result.rows.length === 0) {
+            console.log(`[Customer Lookup] No customer found for ${email ? 'email' : 'phone'}: ${email || phone}`);
             return NextResponse.json({
                 found: false,
                 message: "No customer found with those details"
@@ -97,6 +104,12 @@ export async function GET(request: NextRequest) {
         }
 
         const customer = result.rows[0];
+        console.log(`[Customer Lookup] Found customer: ${customer.owner_name} with ${customer.dogs.length} dogs`);
+        
+        // Log image filenames for debugging
+        customer.dogs.forEach(dog => {
+            console.log(`[Customer Lookup] Dog: ${dog.dog_name}, Image: ${dog.image_filename || 'none'}`);
+        });
 
         return NextResponse.json({
             found: true,
@@ -111,7 +124,7 @@ export async function GET(request: NextRequest) {
         });
 
     } catch (error) {
-        console.error("Customer lookup error:", error);
+        console.error("[Customer Lookup] Database error:", error);
         return NextResponse.json(
             { error: "Database error occurred while looking up customer" },
             { status: 500 }

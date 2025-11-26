@@ -120,14 +120,14 @@ export async function generateMetadata() {
     // Favicon configuration
     icons: {
       icon: [
-        { url: '/favicon.ico', sizes: 'any' },
-        { url: '/favicon-16x16.png', type: 'image/png', sizes: '16x16' },
-        { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' }
+        { url: '/dutchbrat-favicon.ico', sizes: 'any' },
+        { url: '/dutchbrat-favicon-16x16.png', type: 'image/png', sizes: '16x16' },
+        { url: '/dutchbrat-favicon-32x32.png', type: 'image/png', sizes: '32x32' }
       ],
-      apple: '/apple-touch-icon.png',
+      apple: '/dutchbrat-apple-touch-icon.png',
       other: [
-        { url: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
-        { url: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' }
+        { url: '/dutchbrat-android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
+        { url: '/dutchbrat-android-chrome-512x512.png', sizes: '512x512', type: 'image/png' }
       ]
     },
     manifest: '/site.webmanifest',
@@ -206,9 +206,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 "name": "Hunter's Hounds",
                 "description": "Professional dog walking service in North London",
                 "url": "https://hunters-hounds.london",
-                "telephone": "+44-XXX-XXX-XXXX",
+                "telephone": "+44-793-274-9772",
                 "address": {
-                  "@type": "PostalAddress",
+                  "@type": "N5 1JG",
                   "addressLocality": "London",
                   "addressRegion": "England",
                   "addressCountry": "GB"
@@ -226,7 +226,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 ],
                 "serviceType": "Pet Care Services",
                 "priceRange": "££",
-                "openingHours": "Mo-Su 07:00-19:00"
+                "openingHours": "Mo-Fri 09:00-20:00"
               }
             `}
           </Script>

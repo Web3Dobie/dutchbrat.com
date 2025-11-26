@@ -17,6 +17,7 @@ interface Customer {
         dog_name: string;
         dog_breed: string;
         dog_age: number;
+        image_filename?: string | null; // NEW: Add optional image support
     }>;
 }
 
@@ -55,6 +56,25 @@ export default function CustomerDashboard() {
         setView("main");
     };
 
+    // --- NEW: Helper Functions for Personalization ---
+    const generateDashboardTitle = (dogs: Customer['dogs']): string => {
+        if (!dogs || dogs.length === 0) return "Hunter's Hounds Dashboard";
+        
+        const names = dogs.map(d => d.dog_name);
+        if (names.length === 1) return `${names[0]}'s Dashboard`;
+        if (names.length === 2) return `${names[0]} & ${names[1]} Dashboard`;
+        if (names.length === 3) return `${names[0]}, ${names[1]} & ${names[2]} Dashboard`;
+        return `${names[0]}, ${names[1]} & ${names.length - 2} Others Dashboard`;
+    };
+
+    const getDisplayPhoto = (dogs: Customer['dogs']): string | null => {
+        // Show first dog's photo if available
+        const firstDogWithPhoto = dogs?.find(dog => dog.image_filename);
+        return firstDogWithPhoto?.image_filename 
+            ? `/images/dogs/${firstDogWithPhoto.image_filename}`
+            : null;
+    };
+
     // --- Styles ---
     const containerStyles = {
         minHeight: "100vh",
@@ -63,17 +83,82 @@ export default function CustomerDashboard() {
         paddingBottom: "40px",
     } as React.CSSProperties;
 
+    // NEW: Enhanced header styles for photo integration
+    const getHeaderStyles = () => {
+        const photoPath = customer ? getDisplayPhoto(customer.dogs) : null;
+        
+        return {
+            textAlign: photoPath ? "left" : "center",
+            borderBottom: "1px solid #374151",
+            paddingBottom: "16px",
+            marginBottom: "20px",
+            display: photoPath ? "flex" : "block",
+            alignItems: photoPath ? "center" : "unset",
+            gap: photoPath ? "20px" : "unset"
+        } as React.CSSProperties;
+    };
+
     // --- Render Views ---
     return (
         <div style={containerStyles}>
-            {/* Header */}
+            {/* Header - Enhanced with personalization */}
             <div style={{ 
                 maxWidth: "800px", 
                 margin: "0 auto", 
                 padding: "0 16px", 
                 marginBottom: "20px" 
             }}>
-                {view !== "auth" && (
+                {view !== "auth" && customer && (
+                    <div style={getHeaderStyles()}>
+                        {/* Title Section */}
+                        <div style={{ flex: 1 }}>
+                            <h1 style={{ 
+                                color: "#fff", 
+                                fontSize: "1.8rem", 
+                                fontWeight: "bold",
+                                margin: "0"
+                            }}>
+                                {generateDashboardTitle(customer.dogs)}
+                            </h1>
+                            <p style={{ 
+                                color: "#9ca3af", 
+                                fontSize: "0.9rem",
+                                margin: "8px 0 0 0"
+                            }}>
+                                Manage your dog walking appointments
+                            </p>
+                        </div>
+
+                        {/* Photo Section - Only show if photo exists */}
+                        {getDisplayPhoto(customer.dogs) && (
+                            <div style={{ 
+                                flexShrink: 0,
+                                display: "flex",
+                                alignItems: "center"
+                            }}>
+                                <img 
+                                    src={getDisplayPhoto(customer.dogs)!}
+                                    alt={`${customer.dogs.find(d => d.image_filename)?.dog_name || 'Dog'} photo`}
+                                    style={{
+                                        width: "80px",
+                                        height: "80px",
+                                        borderRadius: "50%",
+                                        objectFit: "cover",
+                                        border: "3px solid #3b82f6",
+                                        boxShadow: "0 4px 8px rgba(0, 0, 0, 0.3)"
+                                    }}
+                                    onError={(e) => {
+                                        // Hide image if it fails to load
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Fallback for auth view - keep original simple header */}
+                {view !== "auth" && !customer && (
                     <div style={{
                         textAlign: "center",
                         borderBottom: "1px solid #374151",
@@ -99,7 +184,7 @@ export default function CustomerDashboard() {
                 )}
             </div>
 
-            {/* Main Content */}
+            {/* Main Content - Unchanged */}
             {view === "auth" && (
                 <DashboardAuth onAuthSuccess={handleAuthSuccess} />
             )}
@@ -120,7 +205,7 @@ export default function CustomerDashboard() {
                 />
             )}
 
-            {/* Footer */}
+            {/* Footer - Preserved exactly as original */}
             <div style={{ 
                 maxWidth: "800px", 
                 margin: "40px auto 0", 

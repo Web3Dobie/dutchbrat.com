@@ -138,6 +138,9 @@ export default function AdminDashboard() {
         paymentButton: {
             backgroundColor: "#059669", // Green for payment
         } as React.CSSProperties,
+        clientButton: {
+            backgroundColor: "#7c3aed", // Purple for client management
+        } as React.CSSProperties,
         loading: {
             textAlign: "center",
             padding: "40px",
@@ -225,7 +228,7 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Quick Actions - UPDATED with Payment Management */}
+            {/* Quick Actions - UPDATED with Client Management */}
             <div style={styles.actionsCard}>
                 <h2 style={styles.cardTitle}>Quick Actions</h2>
                 <Link href="/dog-walking/admin/register-client" style={styles.actionButton}>
@@ -237,11 +240,11 @@ export default function AdminDashboard() {
                 <Link href="/dog-walking/admin/payments" style={{ ...styles.actionButton, ...styles.paymentButton }}>
                     💰 Payment Management
                 </Link>
+                <Link href="/dog-walking/admin/manage-clients" style={{ ...styles.actionButton, ...styles.clientButton }}>
+                    📋 Client Management
+                </Link>
                 <div style={{ ...styles.actionButton, backgroundColor: "#6b7280", cursor: "not-allowed" }}>
                     Manage Bookings (Coming Soon)
-                </div>
-                <div style={{ ...styles.actionButton, backgroundColor: "#6b7280", cursor: "not-allowed" }}>
-                    View All Clients (Coming Soon)
                 </div>
             </div>
 
