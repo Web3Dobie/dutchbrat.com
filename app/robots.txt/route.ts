@@ -15,6 +15,16 @@ Disallow: /admin/
 Disallow: /_next/
 Disallow: /dog-walking/cancel
 
+# Block crypto/trading content from hunters-hounds domain
+Disallow: /briefings/
+Disallow: /briefings
+Disallow: /articles/
+Disallow: /articles
+Disallow: /hunter-x/
+Disallow: /hunter-x
+Disallow: /hunter/
+Disallow: /hunter
+
 # Sitemap
 Sitemap: https://hunters-hounds.london/sitemap.xml
 
@@ -24,8 +34,9 @@ Crawl-delay: 1
 # Priority pages for local SEO
 # /services - Service descriptions
 # /book-now - Booking interface
-# /testimonials - Customer reviews
-# /gallery - Service photos`,
+# /my-account - Customer dashboard
+# /testimonials - Customer reviews (planned)
+# /gallery - Service photos (planned)`,
             {
                 headers: {
                     'Content-Type': 'text/plain',
@@ -42,7 +53,22 @@ Allow: /
 Disallow: /api/
 Disallow: /_next/
 Disallow: /admin/
+
+# Block all business content from memorial site
 Disallow: /dog-walking/
+Disallow: /dog-walking
+Disallow: /briefings/
+Disallow: /briefings
+Disallow: /articles/
+Disallow: /articles
+Disallow: /hunter-x/
+Disallow: /hunter-x
+Disallow: /services/
+Disallow: /services
+Disallow: /book-now/
+Disallow: /book-now
+Disallow: /my-account/
+Disallow: /my-account
 
 # Memorial site sitemap
 Sitemap: https://hunterthedobermann.london/sitemap.xml
@@ -65,7 +91,21 @@ Allow: /
 Disallow: /api/
 Disallow: /admin/
 Disallow: /_next/
+
+# Aggressively block dog-walking content from crypto platform
 Disallow: /dog-walking/
+Disallow: /dog-walking
+Disallow: /*dog-walking*
+Disallow: /services/
+Disallow: /services
+Disallow: /book-now/
+Disallow: /book-now
+Disallow: /my-account/
+Disallow: /my-account
+
+# Block memorial content - should be on hunterthedobermann.london
+Disallow: /hunter/
+Disallow: /hunter
 
 # Sitemap
 Sitemap: https://dutchbrat.com/sitemap.xml

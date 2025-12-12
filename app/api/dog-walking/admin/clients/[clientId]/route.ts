@@ -26,6 +26,10 @@ interface ClientDetails {
     email: string;
     address: string;
     created_at: string;
+    // NEW: Partner fields
+    partner_name: string | null;
+    partner_email: string | null;
+    partner_phone: string | null;
     dogs: Dog[];
 }
 
@@ -34,6 +38,10 @@ interface UpdateClientRequest {
     phone?: string;
     email?: string;
     address?: string;
+    // NEW: Partner fields
+    partner_name?: string;
+    partner_email?: string;
+    partner_phone?: string;
     dogs?: {
         id: number;
         dog_name?: string;
@@ -43,7 +51,7 @@ interface UpdateClientRequest {
     }[];
 }
 
-// GET - Fetch single client with all details
+// GET - Fetch single client
 export async function GET(
     request: NextRequest,
     { params }: { params: { clientId: string } }
@@ -60,7 +68,7 @@ export async function GET(
     const client = await pool.connect();
 
     try {
-        // Get client with dogs
+        // Updated query to include partner fields
         const query = `
             SELECT 
                 o.id,
@@ -69,6 +77,9 @@ export async function GET(
                 o.email,
                 o.address,
                 o.created_at,
+                o.partner_name,
+                o.partner_email,
+                o.partner_phone,
                 COALESCE(
                     json_agg(
                         CASE 
@@ -89,7 +100,7 @@ export async function GET(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone
         `;
 
         const result = await client.query(query, [clientId]);
@@ -102,12 +113,7 @@ export async function GET(
         }
 
         const clientData: ClientDetails = {
-            id: result.rows[0].id,
-            owner_name: result.rows[0].owner_name,
-            phone: result.rows[0].phone,
-            email: result.rows[0].email,
-            address: result.rows[0].address,
-            created_at: result.rows[0].created_at,
+            ...result.rows[0],
             dogs: Array.isArray(result.rows[0].dogs) ? result.rows[0].dogs : []
         };
 
@@ -119,7 +125,7 @@ export async function GET(
     } catch (error) {
         console.error("Failed to fetch client:", error);
         return NextResponse.json(
-            { 
+            {
                 error: "Database error occurred while fetching client",
                 details: error instanceof Error ? error.message : "Unknown error"
             },
@@ -130,7 +136,7 @@ export async function GET(
     }
 }
 
-// PUT - Update client and dogs
+// PUT - Update client and dogs (NOW WITH PARTNER SUPPORT)
 export async function PUT(
     request: NextRequest,
     { params }: { params: { clientId: string } }
@@ -159,30 +165,50 @@ export async function PUT(
     try {
         await client.query("BEGIN");
 
-        // Update owner information if provided
-        if (updateData.owner_name || updateData.phone || updateData.email || updateData.address) {
+        // Update owner information if provided (INCLUDING PARTNER FIELDS)
+        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone'];
+        const hasOwnerUpdate = ownerFields.some(field => field in updateData);
+
+        if (hasOwnerUpdate) {
             const ownerUpdates: string[] = [];
             const ownerValues: any[] = [];
             let paramIndex = 1;
 
-            if (updateData.owner_name) {
+            if (updateData.owner_name !== undefined) {
                 ownerUpdates.push(`owner_name = $${paramIndex}`);
-                ownerValues.push(updateData.owner_name.trim());
+                ownerValues.push(updateData.owner_name?.trim() || null);
                 paramIndex++;
             }
-            if (updateData.phone) {
+            if (updateData.phone !== undefined) {
                 ownerUpdates.push(`phone = $${paramIndex}`);
-                ownerValues.push(updateData.phone.trim());
+                ownerValues.push(updateData.phone?.trim() || null);
                 paramIndex++;
             }
-            if (updateData.email) {
+            if (updateData.email !== undefined) {
                 ownerUpdates.push(`email = $${paramIndex}`);
-                ownerValues.push(updateData.email.trim());
+                ownerValues.push(updateData.email?.trim() || null);
                 paramIndex++;
             }
-            if (updateData.address) {
+            if (updateData.address !== undefined) {
                 ownerUpdates.push(`address = $${paramIndex}`);
-                ownerValues.push(updateData.address.trim());
+                ownerValues.push(updateData.address?.trim() || null);
+                paramIndex++;
+            }
+
+            // NEW: Partner fields support
+            if (updateData.partner_name !== undefined) {
+                ownerUpdates.push(`partner_name = $${paramIndex}`);
+                ownerValues.push(updateData.partner_name?.trim() || null);
+                paramIndex++;
+            }
+            if (updateData.partner_email !== undefined) {
+                ownerUpdates.push(`partner_email = $${paramIndex}`);
+                ownerValues.push(updateData.partner_email?.trim() || null);
+                paramIndex++;
+            }
+            if (updateData.partner_phone !== undefined) {
+                ownerUpdates.push(`partner_phone = $${paramIndex}`);
+                ownerValues.push(updateData.partner_phone?.trim() || null);
                 paramIndex++;
             }
 
@@ -206,7 +232,7 @@ export async function PUT(
             }
         }
 
-        // Update dogs if provided
+        // Update dogs if provided (unchanged from original)
         if (updateData.dogs && Array.isArray(updateData.dogs)) {
             for (const dogUpdate of updateData.dogs) {
                 if (!dogUpdate.id) continue;
@@ -217,7 +243,7 @@ export async function PUT(
 
                 if (dogUpdate.dog_name !== undefined) {
                     dogUpdates.push(`dog_name = $${paramIndex}`);
-                    dogValues.push(dogUpdate.dog_name.trim());
+                    dogValues.push(dogUpdate.dog_name?.trim() || null);
                     paramIndex++;
                 }
                 if (dogUpdate.dog_breed !== undefined) {
@@ -252,7 +278,7 @@ export async function PUT(
 
         await client.query("COMMIT");
 
-        // Fetch and return updated client data
+        // Fetch and return updated client data (with partner fields)
         const updatedQuery = `
             SELECT 
                 o.id,
@@ -261,6 +287,9 @@ export async function PUT(
                 o.email,
                 o.address,
                 o.created_at,
+                o.partner_name,
+                o.partner_email,
+                o.partner_phone,
                 COALESCE(
                     json_agg(
                         CASE 
@@ -281,7 +310,7 @@ export async function PUT(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone
         `;
 
         const result = await client.query(updatedQuery, [clientId]);
@@ -296,7 +325,7 @@ export async function PUT(
         await client.query("ROLLBACK");
         console.error("Failed to update client:", error);
         return NextResponse.json(
-            { 
+            {
                 error: "Database error occurred while updating client",
                 details: error instanceof Error ? error.message : "Unknown error"
             },

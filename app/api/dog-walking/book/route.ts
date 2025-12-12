@@ -1,12 +1,13 @@
-// Enhanced booking API route with duration-based pricing for solo walks
+// Enhanced booking API route with duration-based pricing for solo walks and secondary address support
 // This is the updated /app/api/dog-walking/book/route.ts
 
 import { NextResponse, type NextRequest } from "next/server";
 import { google } from "googleapis";
-import { format, differenceInDays, differenceInHours, isSameDay } from "date-fns"; // Added isSameDay and differenceInHours
+import { format, differenceInDays, differenceInHours, isSameDay } from "date-fns";
 import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
-import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // NEW: Import solo walk pricing
+import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
+import { sendBookingEmail } from "@/lib/emailService";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -36,8 +37,16 @@ export async function POST(request: NextRequest) {
             email,
             address,
             dog_name_1,
-            dog_name_2
+            dog_name_2,
+            secondary_address_id // NEW: Secondary address selection
         } = body;
+
+        // Log secondary address selection
+        if (secondary_address_id) {
+            console.log(`[Booking] Using secondary address ID: ${secondary_address_id}`);
+        } else {
+            console.log(`[Booking] Using primary address`);
+        }
 
         // Determine booking type based on actual date comparison (FIXED)
         let booking_type: string;
@@ -111,11 +120,39 @@ export async function POST(request: NextRequest) {
         try {
             await client.query('BEGIN');
 
-            // --- 1. Insert Booking Record ---
+            // --- NEW: Validate secondary address if provided ---
+            if (secondary_address_id) {
+                const addressCheck = await client.query(
+                    `SELECT id, address_label, is_active FROM hunters_hounds.secondary_addresses 
+                     WHERE id = $1 AND owner_id = $2`,
+                    [secondary_address_id, ownerId]
+                );
+
+                if (addressCheck.rows.length === 0) {
+                    await client.query('ROLLBACK');
+                    return NextResponse.json(
+                        { error: "Selected address not found or doesn't belong to this customer" },
+                        { status: 400 }
+                    );
+                }
+
+                if (!addressCheck.rows[0].is_active) {
+                    await client.query('ROLLBACK');
+                    return NextResponse.json(
+                        { error: "Selected address is inactive. Please choose a different address." },
+                        { status: 400 }
+                    );
+                }
+
+                console.log(`[Booking] Validated secondary address: ${addressCheck.rows[0].address_label}`);
+            }
+
+            // --- 1. Insert Booking Record (UPDATED with secondary_address_id) ---
             const insertBookingQuery = `
                 INSERT INTO hunters_hounds.bookings 
-                (owner_id, dog_id_1, dog_id_2, service_type, start_time, end_time, duration_minutes, price_pounds, booking_type, cancellation_token, status) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed') 
+                (owner_id, dog_id_1, dog_id_2, service_type, start_time, end_time, duration_minutes, 
+                 price_pounds, booking_type, cancellation_token, secondary_address_id, status) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'confirmed') 
                 RETURNING id
             `;
 
@@ -141,14 +178,33 @@ export async function POST(request: NextRequest) {
                 booking_type === 'single' ? duration_minutes : null,
                 finalPrice, // ✅ Now includes duration-based pricing for solo walks
                 booking_type,
-                cancellation_token
+                cancellation_token,
+                secondary_address_id || null // NEW: Store secondary address selection
             ];
 
             const bookingResult = await client.query(insertBookingQuery, bookingValues);
             const bookingId = bookingResult.rows[0].id;
 
+            console.log(`[Booking] Created booking ${bookingId} with ${secondary_address_id ? 'secondary' : 'primary'} address`);
+
             // --- 2. Create Google Calendar Event ---
             const dogNames = dog_name_2 ? `${dog_name_1} & ${dog_name_2}` : dog_name_1;
+
+            // NEW: Get address info for calendar event
+            let eventAddress = address; // Default to primary address
+            let addressLabel = "Primary Address";
+
+            if (secondary_address_id) {
+                const addressInfo = await client.query(
+                    `SELECT address, address_label FROM hunters_hounds.secondary_addresses WHERE id = $1`,
+                    [secondary_address_id]
+                );
+
+                if (addressInfo.rows.length > 0) {
+                    eventAddress = addressInfo.rows[0].address;
+                    addressLabel = addressInfo.rows[0].address_label;
+                }
+            }
 
             let eventTitle, eventDescription;
 
@@ -160,7 +216,8 @@ Multi-Day Dog Sitting
 Owner: ${owner_name}
 Dog(s): ${dogNames}
 Duration: ${numDays} days
-Address: ${address}
+Location: ${addressLabel}
+Address: ${eventAddress}
 Phone: ${phone}
 Email: ${email}
 Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
@@ -179,7 +236,8 @@ Dog(s): ${dogNames}
 Service: ${service_type}
 Duration: ${duration_minutes} minutes
 ${finalPrice ? `Price: £${finalPrice.toFixed(2)}` : ''} 
-Address: ${address}
+Location: ${addressLabel}
+Address: ${eventAddress}
 Phone: ${phone}
 Email: ${email}
 Booking Type: Single Day
@@ -215,9 +273,9 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 [googleEventId, bookingId]
             );
 
-            // --- 3. Send Confirmation Email (ENHANCED with Pricing) ---
-            const cancellationLink = `${process.env.NEXT_PUBLIC_BASE_URL}/dog-walking/cancel?token=${cancellation_token}`;
-            const dashboardLink = `${process.env.NEXT_PUBLIC_BASE_URL}/my-account`;
+            // --- 3. Send Confirmation Email (ENHANCED with Address Info) ---
+            const cancellationLink = `https://hunters-hounds.com/dog-walking/cancel?token=${cancellation_token}`;
+            const dashboardLink = `https://hunters-hounds.com/my-account`;
 
             let emailSubject, emailContent;
 
@@ -232,6 +290,8 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p><strong>End:</strong> ${format(new Date(end_time), "EEEE, MMMM d 'at' HH:mm")}</p>
                     <p><strong>Dog(s):</strong> ${dogNames}</p>
                     <p><strong>Duration:</strong> ${numDays} days</p>
+                    <p><strong>Location:</strong> ${addressLabel}</p>
+                    <p><strong>Address:</strong> ${eventAddress}</p>
                     <br>
                     <p>This is a multi-day booking where I'll be providing continuous care for your dog(s). We'll discuss the specific arrangements and pricing (POA) before the start date.</p>
                     <br>
@@ -283,6 +343,8 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p><strong>Time:</strong> ${startTimeOnly} - ${endTimeOnly}</p>
                     <p><strong>Dog(s):</strong> ${dogNames}</p>
                     <p><strong>Duration:</strong> ${numHours} hours</p>
+                    <p><strong>Location:</strong> ${addressLabel}</p>
+                    <p><strong>Address:</strong> ${eventAddress}</p>
                     <br>
                     <p>I'll be providing dedicated care for your dog(s) during this ${numHours}-hour session. We'll discuss the specific arrangements and pricing (POA) before the scheduled time.</p>
                     <br>
@@ -333,6 +395,8 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p><strong>Date & Time:</strong> ${displayDate}</p>
                     <p><strong>Dog(s):</strong> ${dogNames}</p>
                     <p><strong>Duration:</strong> ${duration_minutes} minutes</p>
+                    <p><strong>Location:</strong> ${addressLabel}</p>
+                    <p><strong>Address:</strong> ${eventAddress}</p>
                     ${priceDisplay}
                     <p>Please save this confirmation email for your records. We'll see you at the scheduled time!</p>
                     <br>
@@ -368,20 +432,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 `;
             }
 
-            // --- 4. Send Confirmation Email Using New Email Service ---
-            try {
-                await sendEmail({
-                    to: email,
-                    subject: emailSubject,
-                    html: emailContent,
-                });
-                console.log("Confirmation email sent successfully to:", email);
-            } catch (emailError) {
-                console.error("Failed to send confirmation email:", emailError);
-                // Don't fail the booking if email fails - continue with Telegram
-            }
-
-            // --- 5. Send Telegram Notification (ENHANCED with proper booking types) ---
+            // --- 4. Send Telegram Notification (ENHANCED with proper booking types) ---
             let telegramMessage;
 
             if (booking_type === 'multi_day') {
@@ -392,7 +443,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
 📅 ${numDays} days: ${format(new Date(start_time), "MMM d HH:mm")} → ${format(new Date(end_time), "MMM d HH:mm")}
 👤 ${owner_name} (${phone})
 🐾 ${dogNames}
-📍 ${address}
+📍 ${addressLabel}: ${eventAddress}
 📧 ${email}
                 `;
             } else if (booking_type === 'single_day_sitting') {
@@ -405,7 +456,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
 👤 ${owner_name} (${phone})
 🐾 ${dogNames}
 ⏱️ ${numHours} hours
-📍 ${address}
+📍 ${addressLabel}: ${eventAddress}
 📧 ${email}
                 `;
             } else {
@@ -419,7 +470,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
 🐾 ${dogNames}
 ⏱️ ${duration_minutes} minutes
 ${priceInfo}
-📍 ${address}
+📍 ${addressLabel}: ${eventAddress}
 📧 ${email}
                 `;
             }
@@ -438,6 +489,15 @@ ${priceInfo}
 
             await client.query('COMMIT');
 
+            // --- 5. Send Confirmation Email Using New Email Service (MOVED AFTER COMMIT) ---
+            try {
+                await sendBookingEmail(bookingId, emailSubject, emailContent);
+                console.log(`Confirmation emails sent to all recipients for booking ${bookingId}`);
+            } catch (emailError) {
+                console.error("Failed to send confirmation email:", emailError);
+                // Don't fail the booking if email fails - booking is already committed
+            }
+
             return NextResponse.json({
                 success: true,
                 booking_id: bookingId,
@@ -445,6 +505,8 @@ ${priceInfo}
                 cancellation_token: cancellation_token,
                 booking_type: booking_type,
                 price: finalPrice, // NEW: Return calculated price
+                secondary_address_used: !!secondary_address_id, // NEW: Indicate if secondary address was used
+                address_label: secondary_address_id ? addressLabel : "Primary Address", // NEW: Return address label
                 message: booking_type === 'multi_day'
                     ? "Multi-day dog sitting booking confirmed!"
                     : booking_type === 'single_day_sitting'

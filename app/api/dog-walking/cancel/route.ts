@@ -3,7 +3,7 @@ import { google } from "googleapis";
 import { Pool } from "pg";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
-import { sendEmail } from "@/lib/emailService";
+import { sendEmail, sendBookingEmail } from "@/lib/emailService";
 
 // --- Initialization ---
 
@@ -128,10 +128,9 @@ export async function POST(request: NextRequest) {
             ? `${booking.dog_name_1} & ${booking.dog_name_2}`
             : booking.dog_name_1;
 
-        await sendEmail({
-            to: booking.email,
-            subject: `Booking Cancelled - ${displayDate}`,
-            html: `
+        try {
+            const emailSubject = `Booking Cancelled - ${displayDate}`;
+            const emailContent = `
                 <h1>Booking Cancellation Confirmed</h1>
                 <p>Hi ${booking.owner_name},</p>
                 <p>Your booking for a <strong>${booking.service_type}</strong> has been successfully cancelled.</p>
@@ -160,8 +159,14 @@ export async function POST(request: NextRequest) {
                     Phone: 07932749772<br>
                     Email: bookings@hunters-hounds.london
                 </p>
-            `,
-        });
+            `;
+
+            await sendBookingEmail(booking.id, emailSubject, emailContent);
+            console.log(`Cancellation confirmation emails sent to all recipients for booking ${booking.id}`);
+        } catch (emailError) {
+            console.error(`Failed to send cancellation emails for booking ${booking.id}:`, emailError);
+            // Continue with the rest of the cancellation process even if email fails
+        }
 
         // --- 5. Send Telegram Notification ---
         const telegramMessage = `

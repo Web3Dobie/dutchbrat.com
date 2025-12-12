@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import DashboardAuth from "./DashboardAuth";
 import DashboardMain from "./DashboardMain";
 import BookingManager from "./BookingManager";
+import AccountDetails from "./AccountDetails";
+import SecondaryAddresses from "./SecondaryAddresses";
 
 // --- Types ---
 interface Customer {
@@ -17,11 +19,15 @@ interface Customer {
         dog_name: string;
         dog_breed: string;
         dog_age: number;
-        image_filename?: string | null; // NEW: Add optional image support
+        image_filename?: string | null;
     }>;
+    // NEW: Partner fields (will be null for existing customers initially)
+    partner_name?: string | null;
+    partner_email?: string | null;
+    partner_phone?: string | null;
 }
 
-type DashboardView = "auth" | "main" | "booking";
+type DashboardView = "auth" | "main" | "booking" | "account" | "addresses";
 
 export default function CustomerDashboard() {
     // --- State ---
@@ -52,14 +58,30 @@ export default function CustomerDashboard() {
     };
 
     const handleBookingUpdated = () => {
-        // Trigger refresh in main dashboard (could use a refresh callback if needed)
+        // Trigger refresh in main dashboard
         setView("main");
     };
 
-    // --- NEW: Helper Functions for Personalization ---
+    // NEW: Account management handlers
+    const handleAccountView = () => {
+        setView("account");
+    };
+
+    // NEW: Addresses handler
+    const handleAddressesView = () => {
+        setView("addresses");
+    };
+
+    const handleCustomerUpdated = (updatedCustomer: Customer) => {
+        setCustomer(updatedCustomer);
+        // Optionally stay on account view or return to main
+        // setView("main"); // Uncomment if you want to return to main after save
+    };
+
+    // --- Helper Functions for Personalization ---
     const generateDashboardTitle = (dogs: Customer['dogs']): string => {
         if (!dogs || dogs.length === 0) return "Hunter's Hounds Dashboard";
-        
+
         const names = dogs.map(d => d.dog_name);
         if (names.length === 1) return `${names[0]}'s Dashboard`;
         if (names.length === 2) return `${names[0]} & ${names[1]} Dashboard`;
@@ -68,9 +90,8 @@ export default function CustomerDashboard() {
     };
 
     const getDisplayPhoto = (dogs: Customer['dogs']): string | null => {
-        // Show first dog's photo if available
         const firstDogWithPhoto = dogs?.find(dog => dog.image_filename);
-        return firstDogWithPhoto?.image_filename 
+        return firstDogWithPhoto?.image_filename
             ? `/images/dogs/${firstDogWithPhoto.image_filename}`
             : null;
     };
@@ -83,10 +104,9 @@ export default function CustomerDashboard() {
         paddingBottom: "40px",
     } as React.CSSProperties;
 
-    // NEW: Enhanced header styles for photo integration
     const getHeaderStyles = () => {
         const photoPath = customer ? getDisplayPhoto(customer.dogs) : null;
-        
+
         return {
             textAlign: photoPath ? "left" : "center",
             borderBottom: "1px solid #374151",
@@ -102,41 +122,41 @@ export default function CustomerDashboard() {
     return (
         <div style={containerStyles}>
             {/* Header - Enhanced with personalization */}
-            <div style={{ 
-                maxWidth: "800px", 
-                margin: "0 auto", 
-                padding: "0 16px", 
-                marginBottom: "20px" 
+            <div style={{
+                maxWidth: "800px",
+                margin: "0 auto",
+                padding: "0 16px",
+                marginBottom: "20px"
             }}>
                 {view !== "auth" && customer && (
                     <div style={getHeaderStyles()}>
                         {/* Title Section */}
                         <div style={{ flex: 1 }}>
-                            <h1 style={{ 
-                                color: "#fff", 
-                                fontSize: "1.8rem", 
+                            <h1 style={{
+                                color: "#fff",
+                                fontSize: "1.8rem",
                                 fontWeight: "bold",
                                 margin: "0"
                             }}>
                                 {generateDashboardTitle(customer.dogs)}
                             </h1>
-                            <p style={{ 
-                                color: "#9ca3af", 
+                            <p style={{
+                                color: "#9ca3af",
                                 fontSize: "0.9rem",
                                 margin: "8px 0 0 0"
                             }}>
-                                Manage your dog walking appointments
+                                Manage your dog walking appointments and account
                             </p>
                         </div>
 
                         {/* Photo Section - Only show if photo exists */}
                         {getDisplayPhoto(customer.dogs) && (
-                            <div style={{ 
+                            <div style={{
                                 flexShrink: 0,
                                 display: "flex",
                                 alignItems: "center"
                             }}>
-                                <img 
+                                <img
                                     src={getDisplayPhoto(customer.dogs)!}
                                     alt={`${customer.dogs.find(d => d.image_filename)?.dog_name || 'Dog'} photo`}
                                     style={{
@@ -148,7 +168,6 @@ export default function CustomerDashboard() {
                                         boxShadow: "0 4px 8px rgba(0, 0, 0, 0.3)"
                                     }}
                                     onError={(e) => {
-                                        // Hide image if it fails to load
                                         (e.target as HTMLImageElement).style.display = 'none';
                                     }}
                                 />
@@ -157,7 +176,7 @@ export default function CustomerDashboard() {
                     </div>
                 )}
 
-                {/* Fallback for auth view - keep original simple header */}
+                {/* Fallback for auth view */}
                 {view !== "auth" && !customer && (
                     <div style={{
                         textAlign: "center",
@@ -165,26 +184,26 @@ export default function CustomerDashboard() {
                         paddingBottom: "16px",
                         marginBottom: "20px"
                     }}>
-                        <h1 style={{ 
-                            color: "#fff", 
-                            fontSize: "1.8rem", 
+                        <h1 style={{
+                            color: "#fff",
+                            fontSize: "1.8rem",
                             fontWeight: "bold",
                             margin: "0"
                         }}>
                             Hunter's Hounds Dashboard
                         </h1>
-                        <p style={{ 
-                            color: "#9ca3af", 
+                        <p style={{
+                            color: "#9ca3af",
                             fontSize: "0.9rem",
                             margin: "8px 0 0 0"
                         }}>
-                            Manage your dog walking appointments
+                            Manage your dog walking appointments and account
                         </p>
                     </div>
                 )}
             </div>
 
-            {/* Main Content - Unchanged */}
+            {/* Main Content */}
             {view === "auth" && (
                 <DashboardAuth onAuthSuccess={handleAuthSuccess} />
             )}
@@ -194,6 +213,8 @@ export default function CustomerDashboard() {
                     customer={customer}
                     onLogout={handleLogout}
                     onBookingSelect={handleBookingSelect}
+                    onAccountView={handleAccountView}
+                    onAddressesView={handleAddressesView} // NEW: Pass handler
                 />
             )}
 
@@ -205,51 +226,68 @@ export default function CustomerDashboard() {
                 />
             )}
 
-            {/* Footer - Preserved exactly as original */}
-            <div style={{ 
-                maxWidth: "800px", 
-                margin: "40px auto 0", 
+            {/* NEW: Account Details View */}
+            {view === "account" && customer && (
+                <AccountDetails
+                    customer={customer}
+                    onCustomerUpdated={handleCustomerUpdated}
+                    onBack={handleBackToDashboard}
+                />
+            )}
+
+            {/* NEW: Secondary Addresses View */}
+            {view === "addresses" && customer && (
+                <SecondaryAddresses
+                    customer={customer}
+                    onBack={handleBackToDashboard}
+                />
+            )}
+
+            {/* Footer */}
+            <div style={{
+                maxWidth: "800px",
+                margin: "40px auto 0",
                 padding: "20px 16px",
                 textAlign: "center",
                 borderTop: "1px solid #374151"
             }}>
-                <p style={{ 
-                    color: "#6b7280", 
+                <p style={{
+                    color: "#6b7280",
                     fontSize: "0.85rem",
                     margin: "0 0 8px 0"
                 }}>
                     Need help? Contact us anytime
                 </p>
-                <div style={{ 
-                    display: "flex", 
-                    justifyContent: "center", 
+                <div style={{
+                    display: "flex",
+                    justifyContent: "center",
                     gap: "20px",
                     flexWrap: "wrap" as const
                 }}>
-                    <a 
-                        href="tel:07932749772" 
-                        style={{ 
-                            color: "#3b82f6", 
+                    <a
+                        href="tel:07932749772"
+                        style={{
+                            color: "#3b82f6",
                             textDecoration: "none",
                             fontSize: "0.9rem"
                         }}
                     >
                         📞 07932749772
                     </a>
-                    <a 
-                        href="mailto:ernesto@hunters-hounds.london" 
-                        style={{ 
-                            color: "#3b82f6", 
+                    <a
+                        href="mailto:ernesto@hunters-hounds.london"
+                        style={{
+                            color: "#3b82f6",
                             textDecoration: "none",
                             fontSize: "0.9rem"
                         }}
                     >
                         ✉️ ernesto@hunters-hounds.london
                     </a>
-                    <a 
-                        href="/book-now" 
-                        style={{ 
-                            color: "#10b981", 
+                    <a
+                        href="/book-now"
+                        style={{
+                            color: "#10b981",
                             textDecoration: "none",
                             fontSize: "0.9rem"
                         }}

@@ -19,6 +19,10 @@ interface Customer {
     email: string;
     address: string;
     dogs: Dog[];
+    // NEW: Partner fields
+    partner_name?: string | null;
+    partner_email?: string | null;
+    partner_phone?: string | null;
 }
 
 interface Booking {
@@ -27,31 +31,54 @@ interface Booking {
     start_time: string;
     end_time: string;
     duration_minutes: number;
-    status: 'confirmed' | 'cancelled' | 'completed' | 'completed & paid' | 'active'; // ← Add 'completed & paid'
+    status: 'confirmed' | 'cancelled' | 'completed' | 'completed & paid' | 'active';
     price_pounds: number;
     dog_names: string[];
     created_at: string;
-    walk_summary?: string | null; // New field for walk summaries
+    walk_summary?: string | null;
 }
 
 interface DashboardMainProps {
     customer: Customer;
     onLogout: () => void;
     onBookingSelect: (bookingId: number) => void;
+    onAccountView: () => void;
+    onAddressesView: () => void; // NEW: Add this handler
 }
 
-export default function DashboardMain({ customer, onLogout, onBookingSelect }: DashboardMainProps) {
+export default function DashboardMain({ customer, onLogout, onBookingSelect, onAccountView, onAddressesView }: DashboardMainProps) {
     // --- State ---
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'bookings' | 'account'>('bookings'); // NEW: Tab state
 
-    // --- Styles (matching existing theme) ---
+    // --- Styles (matching existing theme + new tab styles) ---
     const styles = {
         container: {
             maxWidth: "800px",
             margin: "0 auto",
             padding: "16px",
+        } as React.CSSProperties,
+        tabContainer: {
+            display: "flex",
+            borderBottom: "2px solid #374151",
+            marginBottom: "24px",
+        } as React.CSSProperties,
+        tab: {
+            padding: "12px 24px",
+            fontSize: "1rem",
+            fontWeight: "600",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            color: "#9ca3af",
+            borderBottom: "2px solid transparent",
+            transition: "all 0.2s",
+        } as React.CSSProperties,
+        activeTab: {
+            color: "#3b82f6",
+            borderBottomColor: "#3b82f6",
         } as React.CSSProperties,
         card: {
             backgroundColor: "#111827",
@@ -94,6 +121,19 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
             borderRadius: "12px",
             textTransform: "capitalize" as const,
         } as React.CSSProperties,
+        logoutButton: {
+            position: "absolute" as const,
+            top: "20px",
+            right: "20px",
+            padding: "8px 16px",
+            fontSize: "0.875rem",
+            color: "#9ca3af",
+            backgroundColor: "transparent",
+            border: "1px solid #4b5563",
+            borderRadius: "4px",
+            cursor: "pointer",
+            transition: "all 0.2s",
+        } as React.CSSProperties,
     };
 
     // --- Effects ---
@@ -114,7 +154,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
                 throw new Error(data.error || "Failed to fetch bookings");
             }
 
-            console.log("Fetched bookings:", data.bookings); // Debug log
+            console.log("Fetched bookings:", data.bookings);
             setBookings(data.bookings || []);
         } catch (err: any) {
             console.error("Failed to fetch bookings:", err);
@@ -125,332 +165,318 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect }: D
     };
 
     // --- Helper Functions ---
-    const getServiceDisplayName = (serviceType: string) => {
-        const serviceMap: Record<string, string> = {
-            'meet-greet': 'Meet & Greet',
-            'solo-walk': 'Solo Walk (60 min)',
-            'quick-walk': 'Quick Walk (30 min)',
-            'dog-sitting': 'Dog Sitting (Variable)',
-            'Dog Sitting (Variable)': 'Dog Sitting (Variable)', // Handle current format
-            'Solo Walk (60 min)': 'Solo Walk (60 min)', // Handle current format
-        };
-        return serviceMap[serviceType] || serviceType;
+    const getServiceDisplayName = (serviceType: string): string => {
+        switch (serviceType) {
+            case 'dog_walking':
+                return 'Dog Walking';
+            case 'dog_sitting':
+                return 'Dog Sitting';
+            case 'meet_greet':
+                return 'Meet & Greet';
+            default:
+                return serviceType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
     };
 
-    const getBookingDateDisplay = (startTime: string, endTime?: string) => {
+    const formatBookingDateTime = (startTime: string, endTime: string, durrationMinutes: number) => {
         const start = new Date(startTime);
+        const end = new Date(endTime);
 
-        if (isToday(start)) return "Today";
-        if (isTomorrow(start)) return "Tomorrow";
-
-        // For multi-day bookings, show date range
-        if (endTime) {
-            const end = new Date(endTime);
-            const startDate = format(start, "MMM d");
-            const endDate = format(end, "MMM d");
-            if (startDate !== endDate) {
-                return `${startDate} - ${endDate}`;
-            }
+        let dateDisplay = "";
+        if (isToday(start)) {
+            dateDisplay = "Today";
+        } else if (isTomorrow(start)) {
+            dateDisplay = "Tomorrow";
+        } else if (isPast(start)) {
+            dateDisplay = format(start, "MMM d, yyyy");
+        } else {
+            dateDisplay = format(start, "EEE, MMM d");
         }
 
-        return format(start, "EEEE, MMM d");
+        const timeDisplay = `${format(start, "h:mm a")} - ${format(end, "h:mm a")}`;
+
+        return { dateDisplay, timeDisplay };
     };
 
-    const getTimeDisplay = (startTime: string, endTime?: string) => {
-        const start = new Date(startTime);
-
-        if (endTime) {
-            const end = new Date(endTime);
-            return `${format(start, "h:mm a")} - ${format(end, "h:mm a")}`;
+    const getBookingStatusColor = (booking: Booking): string => {
+        switch (booking.status) {
+            case 'confirmed': return '#3b82f6';
+            case 'completed': return '#10b981';
+            case 'completed & paid': return '#059669';
+            case 'cancelled': return '#ef4444';
+            case 'active': return '#f59e0b';
+            default: return '#6b7280';
         }
-
-        return format(start, "h:mm a");
     };
 
-    const getBookingStatusColor = (booking: Booking) => {
-        const startTime = new Date(booking.start_time);
-
-        if (booking.status === 'cancelled') return '#dc2626'; // Red
-        if (booking.status === 'completed') return '#059669'; // Green
-        if (isPast(startTime)) return '#6b7280'; // Gray (past)
-
-        return '#3b82f6'; // Blue (upcoming)
-    };
-
-    const canManageBooking = (booking: Booking) => {
-        // Only allow management of confirmed/active bookings
-        if (!['confirmed', 'active'].includes(booking.status)) return false;
-
-        const startTime = new Date(booking.start_time);
+    const canCancelBooking = (booking: Booking): boolean => {
+        const bookingTime = new Date(booking.start_time);
         const now = new Date();
+        const timeDifference = bookingTime.getTime() - now.getTime();
+        const hoursDifference = timeDifference / (1000 * 3600);
 
-        // Can manage if booking is more than 2 hours away
-        return isBefore(addHours(now, 2), startTime);
+        return booking.status === 'confirmed' && hoursDifference > 24;
     };
 
-    // --- Separate bookings into categories ---
-    // Upcoming: Soonest first (ASC)
-    const upcomingBookings = bookings
-        .filter(booking =>
-            booking.status === 'confirmed' && !isPast(new Date(booking.start_time))
-        )
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-
-    // History: Most recent first (DESC) 
-    const pastBookings = bookings
-        .filter(booking =>
-            booking.status !== 'confirmed' || isPast(new Date(booking.start_time))
-        )
-        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
-
-    // --- Render Booking Card ---
-    const renderBookingCard = (booking: Booking) => {
-        const startTime = new Date(booking.start_time);
-        const canManage = canManageBooking(booking);
-        const dateDisplay = getBookingDateDisplay(booking.start_time, booking.end_time);
-        const timeDisplay = getTimeDisplay(booking.start_time, booking.end_time);
-
-        return (
-            <div key={booking.id} style={styles.bookingCard}>
-                {/* Left border indicator */}
-                <div
-                    style={{
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: "4px",
-                        backgroundColor: getBookingStatusColor(booking),
-                        borderTopLeftRadius: "8px",
-                        borderBottomLeftRadius: "8px",
-                    }}
-                />
-
-                {/* Main content */}
-                <div style={{ marginLeft: "8px" }}>
-                    {/* Header row */}
-                    <div className="flex justify-between items-start mb-2">
-                        <div>
-                            <h3 className="text-white text-lg font-semibold mb-1">
-                                {getServiceDisplayName(booking.service_type)}
-                            </h3>
-                            <p className="text-gray-300 text-sm">
-                                {booking.dog_names?.join(' & ') || 'Unknown dogs'}
-                            </p>
-                        </div>
-                        <div
-                            style={{
-                                ...styles.statusBadge,
-                                backgroundColor: getBookingStatusColor(booking),
-                                color: '#fff',
-                            }}
-                        >
-                            {booking.status}
-                        </div>
-                    </div>
-
-                    {/* Date and time */}
-                    <div className="flex justify-between items-center mb-3">
-                        <div>
-                            <p className="text-white font-medium">{dateDisplay}</p>
-                            <p className="text-gray-400 text-sm">{timeDisplay}</p>
-                        </div>
-                        <p className="text-green-400 font-semibold">
-                            {formatPrice(booking.price_pounds)}
-                        </p>
-                    </div>
-
-                    {/* Walk Summary Section - ADD THIS */}
-                    {(booking.status === 'completed' || booking.status === 'completed & paid') && booking.walk_summary && (
-                        <div style={{
-                            marginTop: "12px",
-                            padding: "12px",
-                            backgroundColor: "#1f2937",
-                            borderRadius: "6px",
-                            border: "1px solid #374151"
-                        }}>
-                            <div style={{
-                                color: "#10b981",
-                                fontSize: "0.875rem",
-                                fontWeight: "600",
-                                marginBottom: "8px",
-                                display: "flex",
-                                alignItems: "center"
-                            }}>
-                                📝 Walk Report
-                            </div>
-                            <div style={{
-                                color: "#d1d5db",
-                                fontSize: "0.875rem",
-                                lineHeight: "1.5",
-                                whiteSpace: "pre-line"
-                            }}>
-                                {booking.walk_summary}
-                            </div>
-                        </div>
-                    )}
-                    
-                    {/* Action buttons - This is the key fix! */}
-                    {canManage && (
-                        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-700">
-                            <button
-                                style={{ ...styles.button, ...styles.primaryButton }}
-                                onClick={() => onBookingSelect(booking.id)}
-                                className="hover:bg-blue-600"
-                            >
-                                Manage Booking
-                            </button>
-                            <button
-                                style={{ ...styles.button, ...styles.dangerButton }}
-                                onClick={() => onBookingSelect(booking.id)}
-                                className="hover:bg-red-600"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Show restriction message if can't manage */}
-                    {['confirmed', 'active'].includes(booking.status) && !canManage && !isPast(startTime) && (
-                        <div className="mt-3 pt-3 border-t border-gray-700">
-                            <p className="text-amber-400 text-sm font-medium mb-1">
-                                ⏰ Changes must be made at least 2 hours before appointment
-                            </p>
-                            <p className="text-gray-300 text-sm">
-                                Please contact <a href="tel:07932749772" className="text-blue-400 hover:text-blue-300 font-semibold">07932749772</a> for cancellation
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Show contact info for past bookings */}
-                    {(isPast(startTime) || ['cancelled', 'completed'].includes(booking.status)) && (
-                        <div className="mt-3 pt-3 border-t border-gray-700">
-                            <p className="text-gray-400 text-sm">
-                                Questions about this booking? Contact <a href="tel:07932749772" className="text-blue-400 hover:text-blue-300 font-semibold">07932749772</a>
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </div>
+    const handleCancelBooking = (booking: Booking) => {
+        const confirmCancel = window.confirm(
+            `Are you sure you want to cancel your ${getServiceDisplayName(booking.service_type)} appointment on ${format(new Date(booking.start_time), "EEEE, MMMM d 'at' h:mm a")}?`
         );
+
+        if (confirmCancel) {
+            window.open(`/dog-walking/cancel?bookingId=${booking.id}`, '_blank');
+        }
     };
 
-    // --- Main Render ---
-    if (isLoading) {
-        return (
-            <div style={styles.container}>
-                <div style={styles.card}>
-                    <div className="text-center py-8">
-                        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                        <p className="text-gray-400">Loading your bookings...</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    // --- NEW: Tab Change Handler ---
+    const handleTabChange = (tab: 'bookings' | 'account' | 'addresses') => {
+        if (tab === 'account') {
+            onAccountView();
+        } else if (tab === 'addresses') {
+            onAddressesView(); // NEW: We need to add this prop
+        } else {
+            setActiveTab(tab);
+        }
+    };
 
-    if (error) {
-        return (
-            <div style={styles.container}>
-                <div style={styles.card}>
-                    <div className="text-center py-8">
-                        <p className="text-red-400 mb-4">{error}</p>
-                        <button
-                            style={{ ...styles.button, ...styles.primaryButton }}
-                            onClick={fetchBookings}
-                        >
-                            Try Again
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
+    // --- Render ---
     return (
         <div style={styles.container}>
-            {/* Header */}
+            {/* Logout Button */}
+            <button
+                onClick={onLogout}
+                style={styles.logoutButton}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#374151";
+                    e.currentTarget.style.color = "#fff";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.color = "#9ca3af";
+                }}
+            >
+                Logout
+            </button>
+
+            {/* Customer Info Card */}
             <div style={styles.card}>
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                    <div>
-                        <h1 className="text-white text-2xl font-bold">
-                            Welcome back, {customer.owner_name}!
-                        </h1>
-                        <p className="text-gray-400">
-                            Manage your dog walking appointments
+                <h2 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.25rem" }}>
+                    Welcome back, {customer.owner_name}!
+                </h2>
+                <div style={{ color: "#d1d5db" }}>
+                    <p style={{ margin: "0 0 8px 0" }}>📧 {customer.email}</p>
+                    <p style={{ margin: "0 0 8px 0" }}>📞 {customer.phone}</p>
+                    {customer.partner_name && (
+                        <p style={{ margin: "0 0 8px 0" }}>
+                            👫 Partner: {customer.partner_name}
+                            {customer.partner_email && ` (${customer.partner_email})`}
                         </p>
-                    </div>
-                    <div className="flex gap-3">
-                        <a
-                            href="/book-now"
-                            style={{ ...styles.button, ...styles.primaryButton }}
-                            className="hover:bg-blue-600 text-center no-underline"
-                        >
-                            Book New Service
-                        </a>
-                        <button
-                            style={{ ...styles.button, backgroundColor: "#374151", color: "#d1d5db" }}
-                            onClick={onLogout}
-                            className="hover:bg-gray-600"
-                        >
-                            Logout
-                        </button>
-                    </div>
+                    )}
+                    <p style={{ margin: "0" }}>📍 {customer.address}</p>
                 </div>
             </div>
 
-            {/* Upcoming Bookings */}
-            {upcomingBookings.length > 0 && (
-                <div style={styles.card}>
-                    <h2 className="text-white text-xl font-semibold mb-4">
-                        Upcoming Appointments ({upcomingBookings.length})
-                    </h2>
-                    <div>
-                        {upcomingBookings.map(renderBookingCard)}
-                    </div>
-                </div>
-            )}
+            {/* NEW: Tab Navigation */}
+            <div style={styles.tabContainer}>
+                <button
+                    style={{
+                        ...styles.tab,
+                        ...(activeTab === 'bookings' ? styles.activeTab : {}),
+                    }}
+                    onClick={() => handleTabChange('bookings')}
+                >
+                    📅 My Bookings
+                </button>
+                <button
+                    style={{
+                        ...styles.tab,
+                        // Account tab is never "active" here since we navigate away
+                    }}
+                    onClick={() => handleTabChange('account')}
+                >
+                    ⚙️ My Details
+                </button>
+                <button
+                    style={{
+                        ...styles.tab,
+                        // Addresses tab is never "active" here since we navigate away
+                    }}
+                    onClick={() => handleTabChange('addresses')}
+                >
+                    📍 Secondary Addresses
+                </button>
+            </div>
 
-            {/* Past Bookings */}
-            <div style={styles.card}>
-                <h2 className="text-white text-xl font-semibold mb-4">
-                    Booking History ({pastBookings.length > 5 ? '5 most recent' : pastBookings.length})
-                </h2>
-                {pastBookings.length > 0 ? (
-                    <div>
-                        {pastBookings.slice(0, 5).map(renderBookingCard)}
-                        {pastBookings.length > 5 && (
-                            <p className="text-gray-400 text-center mt-4">
-                                Booking History
+            {/* Bookings Content (only show when bookings tab is active) */}
+            {activeTab === 'bookings' && (
+                <>
+                    {/* Quick Actions */}
+                    <div style={styles.card}>
+                        <h3 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.1rem" }}>
+                            Quick Actions
+                        </h3>
+                        <a
+                            href="/book-now"
+                            style={{
+                                ...styles.button,
+                                ...styles.primaryButton,
+                                textDecoration: "none",
+                                display: "inline-block",
+                            }}
+                        >
+                            📅 Book New Service
+                        </a>
+                    </div>
+
+                    {/* Bookings List */}
+                    <div style={styles.card}>
+                        <h3 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.1rem" }}>
+                            Your Bookings
+                        </h3>
+
+                        {isLoading && (
+                            <p style={{ color: "#9ca3af", textAlign: "center", padding: "20px" }}>
+                                Loading your bookings...
                             </p>
                         )}
-                    </div>
-                ) : (
-                    <p className="text-gray-400 text-center py-4">
-                        No booking history yet.
-                    </p>
-                )}
-            </div>
 
-            {/* No bookings message */}
-            {bookings.length === 0 && (
-                <div style={styles.card}>
-                    <div className="text-center py-8">
-                        <h2 className="text-white text-xl font-semibold mb-2">
-                            No bookings yet
-                        </h2>
-                        <p className="text-gray-400 mb-4">
-                            Ready to book your first dog walking service?
-                        </p>
-                        <a
-                            href="/book-now"
-                            style={{ ...styles.button, ...styles.primaryButton }}
-                            className="hover:bg-blue-600 text-center no-underline"
-                        >
-                            Book Your First Service
-                        </a>
+                        {error && (
+                            <div style={{
+                                color: "#fecaca",
+                                backgroundColor: "#7f1d1d",
+                                padding: "12px",
+                                borderRadius: "6px",
+                                border: "1px solid #dc2626",
+                                marginBottom: "16px"
+                            }}>
+                                {error}
+                            </div>
+                        )}
+
+                        {!isLoading && !error && bookings.length === 0 && (
+                            <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                                <p style={{ color: "#9ca3af", fontSize: "1.1rem", marginBottom: "16px" }}>
+                                    No bookings found
+                                </p>
+                                <p style={{ color: "#6b7280", marginBottom: "20px" }}>
+                                    Ready to schedule your first dog walking service?
+                                </p>
+                                <a
+                                    href="/book-now"
+                                    style={{
+                                        ...styles.button,
+                                        ...styles.primaryButton,
+                                        textDecoration: "none",
+                                        display: "inline-block",
+                                    }}
+                                >
+                                    Book Your First Walk
+                                </a>
+                            </div>
+                        )}
+
+                        {!isLoading && !error && bookings.length > 0 && bookings.map((booking) => {
+                            const { dateDisplay, timeDisplay } = formatBookingDateTime(
+                                booking.start_time,
+                                booking.end_time,
+                                booking.duration_minutes
+                            );
+
+                            return (
+                                <div key={booking.id} style={styles.bookingCard}>
+                                    {/* Status indicator stripe */}
+                                    <div
+                                        style={{
+                                            position: "absolute",
+                                            left: 0,
+                                            top: 0,
+                                            bottom: 0,
+                                            width: "4px",
+                                            backgroundColor: getBookingStatusColor(booking),
+                                            borderTopLeftRadius: "8px",
+                                            borderBottomLeftRadius: "8px",
+                                        }}
+                                    />
+
+                                    {/* Main content */}
+                                    <div style={{ marginLeft: "8px" }}>
+                                        {/* Header row */}
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="text-white text-lg font-semibold mb-1">
+                                                    {getServiceDisplayName(booking.service_type)}
+                                                </h3>
+                                                <p className="text-gray-300 text-sm">
+                                                    {booking.dog_names?.join(' & ') || 'Unknown dogs'}
+                                                </p>
+                                            </div>
+                                            <div
+                                                style={{
+                                                    ...styles.statusBadge,
+                                                    backgroundColor: getBookingStatusColor(booking),
+                                                    color: '#fff',
+                                                }}
+                                            >
+                                                {booking.status}
+                                            </div>
+                                        </div>
+
+                                        {/* Date and time */}
+                                        <div className="flex justify-between items-center mb-3">
+                                            <div>
+                                                <p className="text-white font-medium">{dateDisplay}</p>
+                                                <p className="text-gray-400 text-sm">{timeDisplay}</p>
+                                            </div>
+                                            <p className="text-blue-400 font-semibold">
+                                                {formatPrice(booking.price_pounds)}
+                                            </p>
+                                        </div>
+
+                                        {/* Walk summary (if completed) */}
+                                        {booking.walk_summary && (
+                                            <div style={{
+                                                backgroundColor: "#065f46",
+                                                border: "1px solid #059669",
+                                                borderRadius: "6px",
+                                                padding: "12px",
+                                                marginBottom: "12px",
+                                            }}>
+                                                <p style={{ color: "#a7f3d0", margin: 0, fontSize: "0.9rem" }}>
+                                                    <strong>Walk Summary:</strong> {booking.walk_summary}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Actions */}
+                                        <div>
+                                            <button
+                                                onClick={() => onBookingSelect(booking.id)}
+                                                style={{
+                                                    ...styles.button,
+                                                    ...styles.primaryButton,
+                                                }}
+                                            >
+                                                View Details
+                                            </button>
+
+                                            {canCancelBooking(booking) && (
+                                                <button
+                                                    onClick={() => handleCancelBooking(booking)}
+                                                    style={{
+                                                        ...styles.button,
+                                                        ...styles.dangerButton,
+                                                    }}
+                                                >
+                                                    Cancel Booking
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
-                </div>
+                </>
             )}
         </div>
     );

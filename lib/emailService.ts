@@ -1,6 +1,17 @@
 import { Resend } from "resend";
+import { Pool } from "pg";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Database connection for email lookups
+const pool = new Pool({
+    host: process.env.POSTGRES_HOST || "postgres",
+    port: parseInt(process.env.POSTGRES_PORT || "5432"),
+    database: process.env.POSTGRES_DB || "agents_platform",
+    user: process.env.POSTGRES_USER || "hunter_admin",
+    password: process.env.POSTGRES_PASSWORD,
+    ssl: false,
+});
 
 interface EmailOptions {
     to: string | string[];
@@ -8,6 +19,82 @@ interface EmailOptions {
     html: string;
     from?: string;  // Optional override for from address
     bcc?: string | string[]; // Optional additional BCC recipients
+}
+
+/**
+ * Parse PostgreSQL array string to JavaScript array
+ */
+function parsePostgreSQLArray(pgArray: any): string[] {
+    if (!pgArray) return [];
+
+    // If it's already an array, return it
+    if (Array.isArray(pgArray)) {
+        return pgArray.filter(email => email && email.trim());
+    }
+
+    // If it's a string, parse PostgreSQL array format
+    if (typeof pgArray === 'string') {
+        // Remove curly braces and split by comma
+        const arrayStr = pgArray.replace(/^\{|\}$/g, '');
+        if (!arrayStr.trim()) return [];
+
+        return arrayStr
+            .split(',')
+            .map(email => email.trim())
+            .filter(email => email && email !== '');
+    }
+
+    return [];
+}
+
+/**
+ * Get all relevant email addresses for a booking (primary + partner + secondary contacts)
+ * Uses the database function to gather all emails that should receive booking notifications
+ */
+export async function getBookingEmails(bookingId: number): Promise<string[]> {
+    const client = await pool.connect();
+
+    try {
+        const result = await client.query(
+            'SELECT hunters_hounds.get_booking_emails($1) as emails',
+            [bookingId]
+        );
+
+        const rawEmails = result.rows[0]?.emails;
+        console.log(`[Email Service] Raw result for booking ${bookingId}:`, rawEmails);
+
+        const emails = parsePostgreSQLArray(rawEmails);
+        console.log(`[Email Service] Parsed ${emails.length} email(s) for booking ${bookingId}:`, emails);
+
+        return emails;
+
+    } catch (error) {
+        console.error(`[Email Service] Failed to get emails for booking ${bookingId}:`, error);
+        // Fallback: return empty array so caller can handle gracefully
+        return [];
+    } finally {
+        client.release();
+    }
+}
+
+/**
+ * Send email to all relevant recipients for a booking
+ * Automatically looks up all emails (primary + partner + secondary contacts)
+ */
+export async function sendBookingEmail(bookingId: number, subject: string, html: string, from?: string): Promise<void> {
+    const emails = await getBookingEmails(bookingId);
+
+    if (emails.length === 0) {
+        console.warn(`[Email Service] No emails found for booking ${bookingId} - skipping email send`);
+        return;
+    }
+
+    return sendEmail({
+        to: emails,
+        subject,
+        html,
+        from,
+    });
 }
 
 /**
@@ -34,9 +121,10 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
             html: options.html,
         });
 
-        console.log(`Email sent successfully to: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`);
+        const recipientList = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+        console.log(`[Email Service] Email sent successfully to: ${recipientList}`);
     } catch (error) {
-        console.error("Failed to send email:", error);
+        console.error("[Email Service] Failed to send email:", error);
         throw error; // Re-throw to maintain existing error handling behavior
     }
 }

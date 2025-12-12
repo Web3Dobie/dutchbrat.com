@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { getSoloWalkPrice, formatSoloWalkPrice } from "@/lib/pricing"; // NEW: Import pricing functions
+import { getSoloWalkPrice, formatSoloWalkPrice } from "@/lib/pricing";
 
 // --- Types ---
 interface Dog {
@@ -21,23 +21,37 @@ interface User {
     dogs: Dog[];
 }
 
+interface SecondaryAddress {
+    id: number;
+    address: string;
+    address_label: string;
+    contact_name: string;
+    contact_email: string | null;
+    contact_phone: string;
+    partner_name: string | null;
+    partner_email: string | null;
+    partner_phone: string | null;
+    is_active: boolean;
+    notes: string | null;
+}
+
 interface BookingFormProps {
     serviceName: string;
     startTime: Date;
     endTime: Date;
-    selectedDuration?: number; // NEW: Optional duration for solo walks
+    selectedDuration?: number;
     onBookingSuccess: () => void;
     onCancel: () => void;
 }
 
 // --- Form States ---
-type View = "lookup" | "register" | "selectDog" | "addDog";
+type View = "lookup" | "register" | "selectDog" | "selectAddress" | "addDog" | "finalBooking";
 
 export default function BookingForm({
     serviceName,
     startTime,
     endTime,
-    selectedDuration, // NEW: Duration prop
+    selectedDuration,
     onBookingSuccess,
     onCancel,
 }: BookingFormProps) {
@@ -47,6 +61,11 @@ export default function BookingForm({
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // --- Address Selection State ---
+    const [secondaryAddresses, setSecondaryAddresses] = useState<SecondaryAddress[]>([]);
+    const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null); // null = primary address
+    const [addressesLoading, setAddressesLoading] = useState(false);
 
     // --- Form Data State ---
     const [phone, setPhone] = useState("");
@@ -65,10 +84,9 @@ export default function BookingForm({
     });
     const [selectedDogIds, setSelectedDogIds] = useState<number[]>([]);
 
-    // NEW: Helper function to check if service is Solo Walk
+    // Helper functions
     const isSoloWalk = serviceName.toLowerCase().includes('solo walk');
 
-    // NEW: Helper function to determine action text based on service type
     const getServiceActionText = (serviceType: string): string => {
         const lowerService = serviceType.toLowerCase();
         if (lowerService.includes('walk')) {
@@ -78,17 +96,323 @@ export default function BookingForm({
         } else if (lowerService.includes('meet') || lowerService.includes('greet')) {
             return 'appointment';
         } else {
-            return 'booking'; // Default fallback
+            return 'booking';
         }
     };
 
-    // NEW: Calculate exact price for current selection
     const calculatePrice = () => {
         if (!isSoloWalk || !selectedDuration) {
-            return null; // No pricing for non-solo walks or missing duration
+            return null;
         }
-        const dogCount = selectedDogIds.length || 1; // Default to 1 for display
+        const dogCount = selectedDogIds.length || 1;
         return getSoloWalkPrice(selectedDuration, dogCount);
+    };
+
+    // --- NEW: Fetch Secondary Addresses ---
+    const fetchSecondaryAddresses = async () => {
+        if (!currentUser) return;
+
+        setAddressesLoading(true);
+        setError(null);
+
+        try {
+            const response = await fetch(`/api/dog-walking/secondary-addresses?owner_id=${currentUser.owner_id}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to fetch addresses");
+            }
+
+            // Only show active addresses
+            const activeAddresses = data.addresses.filter((addr: SecondaryAddress) => addr.is_active);
+            setSecondaryAddresses(activeAddresses);
+            console.log(`[BookingForm] Loaded ${activeAddresses.length} active secondary addresses`);
+
+        } catch (err: any) {
+            console.error("Failed to fetch secondary addresses:", err);
+            setError("Could not load address options. Using primary address only.");
+            setSecondaryAddresses([]);
+        } finally {
+            setAddressesLoading(false);
+        }
+    };
+
+    // --- NEW: Dog Selection Handler (Updated) ---
+    const handleDogSelection = (dogId: number) => {
+        setSelectedDogIds(prev => {
+            if (prev.includes(dogId)) {
+                return prev.filter(id => id !== dogId);
+            } else if (prev.length < 2) {
+                return [...prev, dogId];
+            }
+            return prev;
+        });
+    };
+
+    // --- NEW: Continue from Dog Selection to Address Selection ---
+    const handleContinueFromDogSelection = async () => {
+        if (selectedDogIds.length === 0) {
+            setError("Please select at least one dog.");
+            return;
+        }
+
+        setError(null);
+
+        // Fetch secondary addresses before proceeding
+        await fetchSecondaryAddresses();
+        setView("selectAddress");
+    };
+
+    // --- NEW: Continue from Address Selection to Final Booking ---
+    const handleContinueFromAddressSelection = () => {
+        setView("finalBooking");
+    };
+
+    // --- Address Selection Helpers ---
+    const getSelectedAddressInfo = () => {
+        if (selectedAddressId === null) {
+            return {
+                label: "Primary Address",
+                address: currentUser?.address,
+                contact: currentUser?.owner_name,
+            };
+        }
+
+        const selectedAddress = secondaryAddresses.find(addr => addr.id === selectedAddressId);
+        if (selectedAddress) {
+            return {
+                label: selectedAddress.address_label,
+                address: selectedAddress.address,
+                contact: selectedAddress.contact_name,
+            };
+        }
+
+        return null;
+    };
+
+    // --- Booking Summary Component ---
+    const renderSummary = () => {
+        const price = calculatePrice();
+        const addressInfo = getSelectedAddressInfo();
+
+        return (
+            <div style={styles.summary}>
+                <h3 style={{ color: "#fff", marginBottom: "12px" }}>Booking Summary</h3>
+                <p><strong>Service:</strong> {serviceName}</p>
+                <p><strong>Date:</strong> {format(startTime, "EEEE, MMMM d, yyyy")}</p>
+                <p><strong>Time:</strong> {format(startTime, "h:mm a")} - {format(endTime, "h:mm a")}</p>
+                {selectedDogIds.length > 0 && currentUser && (
+                    <p><strong>Dog(s):</strong> {
+                        selectedDogIds.map(id =>
+                            currentUser.dogs.find(d => d.id === id)?.dog_name
+                        ).join(', ')
+                    }</p>
+                )}
+                {addressInfo && view !== "selectAddress" && (
+                    <>
+                        <p><strong>Location:</strong> {addressInfo.label}</p>
+                        <p style={{ fontSize: "0.8rem", color: "#9ca3af" }}>{addressInfo.address}</p>
+                    </>
+                )}
+                {price && (
+                    <div style={styles.priceDisplay}>
+                        Total: £{price.toFixed(2)}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // --- 1. LOOKUP HANDLER ---
+    const handleLookup = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(
+                `/api/dog-walking/user-lookup?phone=${encodeURIComponent(phone)}`
+            );
+            if (!res.ok) throw new Error("Could not find user.");
+
+            const data = await res.json();
+            if (data.found) {
+                setCurrentUser(data.user);
+                setView("selectDog");
+            } else {
+                setView("register");
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // --- 2. REGISTER HANDLER ---
+    const handleRegister = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        console.log("🚀 Starting registration...", registerData);
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const res = await fetch("/api/dog-walking/user-register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...registerData,
+                    phone: phone,
+                    dogAge: parseInt(registerData.dogAge, 10),
+                }),
+            });
+
+            console.log("📥 Response status:", res.status);
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Registration failed.");
+            }
+
+            const data = await res.json();
+            console.log("✅ Response data:", data);
+
+            setCurrentUser(data.user);
+            console.log("🔄 Setting view to selectDog");
+            setView("selectDog");
+
+        } catch (err: any) {
+            console.error("💥 Error:", err);
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // --- 3. ADD DOG HANDLER ---
+    const handleAddDog = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!currentUser) return;
+
+        if (!newDogData.dogBreed.trim()) {
+            setError("Dog's breed is required.");
+            return;
+        }
+
+        if (!newDogData.dogAge || parseInt(newDogData.dogAge) < 0) {
+            setError("Dog's age is required and must be a valid number.");
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const res = await fetch("/api/dog-walking/dog-add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...newDogData,
+                    ownerId: currentUser.owner_id,
+                    dogAge: parseInt(newDogData.dogAge, 10),
+                }),
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Failed to add dog.");
+            }
+
+            const data = await res.json();
+            setCurrentUser(data.user);
+            setView("selectDog");
+            setNewDogData({ dogName: "", dogBreed: "", dogAge: "" });
+
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // --- 4. FINAL BOOKING HANDLER (UPDATED with Address Selection) ---
+    const handleBook = async (event?: React.MouseEvent<HTMLButtonElement>) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (!currentUser || selectedDogIds.length === 0) {
+            setError("Please select at least one dog.");
+            return;
+        }
+
+        console.log('Booking button clicked - starting process');
+        setIsLoading(true);
+        setError(null);
+
+        const dog1 = currentUser.dogs.find((d) => d.id === selectedDogIds[0]);
+        const dog2 =
+            selectedDogIds.length > 1
+                ? currentUser.dogs.find((d) => d.id === selectedDogIds[1])
+                : undefined;
+
+        const getDurationFromService = (serviceName: string): number => {
+            if (isSoloWalk && selectedDuration) {
+                return selectedDuration;
+            }
+            if (serviceName.includes('60 min') || serviceName.includes('1 hour')) return 60;
+            if (serviceName.includes('30 min')) return 30;
+            if (serviceName.includes('2 hour')) return 120;
+            return 60;
+        };
+
+        const bookingData = {
+            ownerId: currentUser.owner_id,
+            dog_id_1: selectedDogIds[0],
+            dog_id_2: selectedDogIds.length > 1 ? selectedDogIds[1] : undefined,
+            service_type: serviceName,
+            start_time: startTime.toISOString(),
+            // NEW: Include secondary address in booking
+            secondary_address_id: selectedAddressId, // null = primary address
+
+            ...(serviceName.includes('Dog Sitting')
+                ? { end_time: endTime.toISOString() }
+                : {
+                    end_time: endTime.toISOString(),
+                    duration_minutes: getDurationFromService(serviceName),
+                }),
+
+            owner_name: currentUser.owner_name,
+            phone: currentUser.phone,
+            email: currentUser.email,
+            address: currentUser.address,
+            dog_name_1: dog1?.dog_name,
+            dog_name_2: dog2?.dog_name,
+        };
+
+        try {
+            const res = await fetch("/api/dog-walking/book", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bookingData),
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Booking failed.");
+            }
+
+            const data = await res.json();
+            console.log("✅ Booking successful:", data);
+            onBookingSuccess();
+
+        } catch (err: any) {
+            console.error("💥 Booking error:", err);
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // --- Styles ---
@@ -172,7 +496,6 @@ export default function BookingForm({
             marginBottom: "8px",
             cursor: "pointer",
         } as React.CSSProperties,
-        // NEW: Price display style
         priceDisplay: {
             backgroundColor: "#065f46",
             color: "#10b981",
@@ -182,275 +505,46 @@ export default function BookingForm({
             textAlign: "center" as const,
             marginTop: "8px",
         } as React.CSSProperties,
+        // NEW: Address selection styles
+        addressCard: {
+            padding: "16px",
+            border: "2px solid #374151",
+            borderRadius: "8px",
+            marginBottom: "12px",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            backgroundColor: "#1f2937",
+        } as React.CSSProperties,
+        addressCardSelected: {
+            borderColor: "#3b82f6",
+            backgroundColor: "#1e40af20",
+        } as React.CSSProperties,
+        addressCardHover: {
+            borderColor: "#6b7280",
+        } as React.CSSProperties,
     };
 
-    // --- 1. LOOKUP HANDLER (Unchanged) ---
-    const handleLookup = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError(null);
-        try {
-            const res = await fetch(
-                `/api/dog-walking/user-lookup?phone=${encodeURIComponent(phone)}`
-            );
-            if (!res.ok) throw new Error("Could not find user.");
-
-            const data = await res.json();
-            if (data.found) {
-                setCurrentUser(data.user);
-                setView("selectDog");
-            } else {
-                setView("register");
-            }
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // --- 2. REGISTER HANDLER (Unchanged) ---
-    const handleRegister = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        console.log("🚀 Starting registration...", registerData);
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const res = await fetch("/api/dog-walking/user-register", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...registerData,
-                    phone: phone,
-                    dogAge: parseInt(registerData.dogAge, 10),
-                }),
-            });
-
-            console.log("📥 Response status:", res.status);
-
-            if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || "Registration failed.");
-            }
-
-            const data = await res.json();
-            console.log("✅ Response data:", data);
-
-            setCurrentUser(data.user);
-            console.log("🔄 Setting view to selectDog");
-            setView("selectDog");
-
-        } catch (err: any) {
-            console.error("💥 Error:", err);
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // --- 3. ADD DOG HANDLER (Unchanged) ---
-    const handleAddDog = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!currentUser) return;
-
-        if (!newDogData.dogBreed.trim()) {
-            setError("Dog's breed is required.");
-            return;
-        }
-
-        if (!newDogData.dogAge || parseInt(newDogData.dogAge) < 0) {
-            setError("Dog's age is required and must be a valid number.");
-            return;
-        }
-
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const res = await fetch("/api/dog-walking/dog-add", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...newDogData,
-                    ownerId: currentUser.owner_id,
-                    dogAge: parseInt(newDogData.dogAge, 10),
-                }),
-            });
-
-            if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || "Failed to add dog.");
-            }
-
-            const data = await res.json();
-            setCurrentUser(data.user);
-            setView("selectDog");
-            setNewDogData({ dogName: "", dogBreed: "", dogAge: "" });
-
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // --- 4. FINAL BOOKING HANDLER (UPDATED for Duration Support) ---
-    const handleBook = async (event?: React.MouseEvent<HTMLButtonElement>) => {
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
-        if (!currentUser || selectedDogIds.length === 0) {
-            setError("Please select at least one dog.");
-            return;
-        }
-
-        console.log('Booking button clicked - starting process');
-        setIsLoading(true);
-        setError(null);
-
-        const dog1 = currentUser.dogs.find((d) => d.id === selectedDogIds[0]);
-        const dog2 =
-            selectedDogIds.length > 1
-                ? currentUser.dogs.find((d) => d.id === selectedDogIds[1])
-                : undefined;
-
-        // UPDATED: Smart duration detection
-        const getDurationFromService = (serviceName: string): number => {
-            // For Solo Walk with duration prop, use the prop
-            if (isSoloWalk && selectedDuration) {
-                return selectedDuration;
-            }
-            // Fallback: extract from service name for other services
-            if (serviceName.includes('60 min') || serviceName.includes('1 hour')) return 60;
-            if (serviceName.includes('30 min')) return 30;
-            if (serviceName.includes('2 hour')) return 120;
-            return 60; // default
-        };
-
-        const bookingData = {
-            ownerId: currentUser.owner_id,
-            dog_id_1: selectedDogIds[0],
-            dog_id_2: selectedDogIds.length > 1 ? selectedDogIds[1] : undefined,
-            service_type: serviceName,
-            start_time: startTime.toISOString(),
-
-            // Smart conditional data
-            ...(serviceName.includes('Dog Sitting')
-                ? { end_time: endTime.toISOString() }
-                : { duration_minutes: getDurationFromService(serviceName) }
-            ),
-
-            owner_name: currentUser.owner_name,
-            dog_name_1: dog1?.dog_name,
-            dog_name_2: dog2?.dog_name,
-            address: currentUser.address,
-            phone: currentUser.phone,
-            email: currentUser.email,
-        };
-
-        try {
-            console.log('Sending booking request...', bookingData);
-
-            const res = await fetch("/api/dog-walking/book", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Cache-Control": "no-cache"
-                },
-                body: JSON.stringify(bookingData),
-            });
-
-            console.log('Response status:', res.status);
-
-            if (!res.ok) {
-                const errData = await res.json();
-                console.error('Server error response:', errData);
-                throw new Error(errData.error || "Booking failed.");
-            }
-
-            const responseData = await res.json();
-            console.log('Booking successful:', responseData);
-            onBookingSuccess();
-        } catch (err: any) {
-            console.error('Booking error:', err);
-            setError(err.message || "Booking failed. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // --- Dog Selection Handler (UPDATED with price calculation) ---
-    const handleDogSelection = (dogId: number) => {
-        const isSelected = selectedDogIds.includes(dogId);
-        if (isSelected) {
-            setSelectedDogIds(selectedDogIds.filter((id) => id !== dogId));
-        } else {
-            if (selectedDogIds.length < 2) {
-                setSelectedDogIds([...selectedDogIds, dogId]);
-            } else {
-                alert(`You can select a maximum of 2 dogs for a ${getServiceActionText(serviceName)}.`);
-            }
-        }
-    };
-
-    // --- RENDER FUNCTIONS ---
-
-    // UPDATED: Enhanced summary with pricing
-    const renderSummary = () => {
-        const price = calculatePrice();
-
-        return (
-            <div style={styles.summary}>
-                <p><strong>Service:</strong> {serviceName}</p>
-                <p><strong>Date:</strong> {format(startTime, "EEEE, MMMM d, yyyy")}</p>
-                <p><strong>Time:</strong> {`${format(startTime, "HH:mm")} - ${format(endTime, "HH:mm")}`}</p>
-
-                {/* NEW: Price display for solo walks */}
-                {price && selectedDogIds.length > 0 && (
-                    <div style={styles.priceDisplay}>
-                        Total Price: £{price.toFixed(2)}
-                        <span style={{ fontSize: '0.9em', opacity: 0.8 }}>
-                            {' '}({selectedDogIds.length} dog{selectedDogIds.length > 1 ? 's' : ''})
-                        </span>
-                    </div>
-                )}
-
-                {/* Show pricing info when no dogs selected yet */}
-                {isSoloWalk && selectedDuration && selectedDogIds.length === 0 && (
-                    <div style={{ ...styles.priceDisplay, backgroundColor: '#374151', color: '#d1d5db' }}>
-                        Pricing: {formatSoloWalkPrice(selectedDuration, 1)} (1 dog) / {formatSoloWalkPrice(selectedDuration, 2)} (2 dogs)
-                    </div>
-                )}
-            </div>
-        );
-    };
+    // --- VIEW RENDERS ---
 
     const renderLookupView = () => (
         <form onSubmit={handleLookup}>
             {renderSummary()}
-            <label style={styles.label} htmlFor="phone">Enter your phone number to book:</label>
+            <h4>Find Your Account</h4>
+            <label style={styles.label}>Enter your phone number to find your account:</label>
             <input
                 style={styles.input}
                 type="tel"
-                id="phone"
-                name="phone"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="e.g., 07932749772"
+                placeholder="07123456789"
                 required
             />
             {error && <p style={styles.error}>{error}</p>}
             <button style={styles.button} type="submit" disabled={isLoading}>
-                {isLoading ? "Looking..." : "Continue"}
+                {isLoading ? "Searching..." : "Find My Account"}
             </button>
             <button style={styles.cancelButton} type="button" onClick={onCancel}>
-                Back to Times
+                Cancel Booking
             </button>
         </form>
     );
@@ -458,74 +552,62 @@ export default function BookingForm({
     const renderRegisterView = () => (
         <form onSubmit={handleRegister}>
             {renderSummary()}
-            <h4>New Customer - Welcome!</h4>
-            <p style={{ marginBottom: "16px" }}>Please fill out your details to register.</p>
+            <h4>Create Your Account</h4>
+            <p>Let's create an account for <strong>{phone}</strong>:</p>
 
-            <label style={styles.label} htmlFor="ownerName">Your Name*</label>
+            <label style={styles.label}>Your Full Name*</label>
             <input
                 style={styles.input}
                 type="text"
-                id="ownerName"
                 value={registerData.ownerName}
                 onChange={(e) => setRegisterData({ ...registerData, ownerName: e.target.value })}
                 required
             />
 
-            <label style={styles.label} htmlFor="phone">Phone Number*</label>
-            <input
-                style={styles.input}
-                type="tel"
-                id="phone"
-                value={phone}
-                disabled
-            />
-
-            <label style={styles.label} htmlFor="email">Email*</label>
+            <label style={styles.label}>Your Email Address*</label>
             <input
                 style={styles.input}
                 type="email"
-                id="email"
                 value={registerData.email}
                 onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                 required
             />
 
-            <label style={styles.label} htmlFor="address">Full Address for Pickup*</label>
-            <textarea
-                style={{ ...styles.input, minHeight: "80px" }}
-                id="address"
-                value={registerData.address}
-                onChange={(e) => setRegisterData({ ...registerData, address: e.target.value })}
-                required
-            />
-
-            <h4>Your Dog's Details</h4>
-            <label style={styles.label} htmlFor="dogName">Dog's Name*</label>
+            <label style={styles.label}>Your Full Address*</label>
             <input
                 style={styles.input}
                 type="text"
-                id="dogName"
+                value={registerData.address}
+                onChange={(e) => setRegisterData({ ...registerData, address: e.target.value })}
+                placeholder="Full address including postcode"
+                required
+            />
+
+            <h4 style={{ marginTop: "20px", marginBottom: "10px" }}>Your Dog's Details</h4>
+
+            <label style={styles.label}>Dog's Name*</label>
+            <input
+                style={styles.input}
+                type="text"
                 value={registerData.dogName}
                 onChange={(e) => setRegisterData({ ...registerData, dogName: e.target.value })}
                 required
             />
 
-            <label style={styles.label} htmlFor="dogBreed">Dog's Breed*</label>
+            <label style={styles.label}>Dog's Breed*</label>
             <input
                 style={styles.input}
                 type="text"
-                id="dogBreed"
                 value={registerData.dogBreed}
                 onChange={(e) => setRegisterData({ ...registerData, dogBreed: e.target.value })}
                 placeholder="e.g., Labrador, Golden Retriever, Mixed"
                 required
             />
 
-            <label style={styles.label} htmlFor="dogAge">Dog's Age (years)*</label>
+            <label style={styles.label}>Dog's Age (years)*</label>
             <input
                 style={styles.input}
                 type="number"
-                id="dogAge"
                 min="0"
                 max="30"
                 value={registerData.dogAge}
@@ -572,7 +654,202 @@ export default function BookingForm({
                 + Add Another Dog
             </button>
 
-            {/* Disclaimer */}
+            {error && <p style={styles.error}>{error}</p>}
+            <button
+                style={styles.button}
+                type="button"
+                onClick={handleContinueFromDogSelection}
+                disabled={selectedDogIds.length === 0}
+            >
+                Continue to Address Selection →
+            </button>
+            <button style={styles.cancelButton} type="button" onClick={onCancel}>
+                Cancel Booking
+            </button>
+        </div>
+    );
+
+    // --- NEW: Address Selection View ---
+    const renderSelectAddressView = () => (
+        <div>
+            {renderSummary()}
+            <h4>Choose Pickup/Drop-off Location</h4>
+            <p style={styles.label}>Where should we meet for this {getServiceActionText(serviceName)}?</p>
+
+            {addressesLoading && (
+                <p style={{ color: "#9ca3af", textAlign: "center", padding: "20px" }}>
+                    Loading address options...
+                </p>
+            )}
+
+            {!addressesLoading && (
+                <div style={{ marginBottom: "16px" }}>
+                    {/* Primary Address Option */}
+                    <div
+                        style={{
+                            ...styles.addressCard,
+                            ...(selectedAddressId === null ? styles.addressCardSelected : {}),
+                        }}
+                        onClick={() => setSelectedAddressId(null)}
+                        onMouseEnter={(e) => {
+                            if (selectedAddressId !== null) {
+                                Object.assign(e.currentTarget.style, styles.addressCardHover);
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (selectedAddressId !== null) {
+                                e.currentTarget.style.borderColor = "#374151";
+                            }
+                        }}
+                    >
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                            <input
+                                type="radio"
+                                checked={selectedAddressId === null}
+                                onChange={() => setSelectedAddressId(null)}
+                                style={{ marginTop: "4px" }}
+                            />
+                            <div style={{ flex: 1 }}>
+                                <h5 style={{
+                                    color: "#fff",
+                                    margin: "0 0 8px 0",
+                                    fontWeight: "600",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px"
+                                }}>
+                                    🏠 Primary Address
+                                    {selectedAddressId === null && (
+                                        <span style={{
+                                            fontSize: "0.75rem",
+                                            color: "#3b82f6",
+                                            fontWeight: "normal"
+                                        }}>
+                                            (Selected)
+                                        </span>
+                                    )}
+                                </h5>
+                                <p style={{ color: "#d1d5db", margin: "0 0 4px 0", fontSize: "0.9rem" }}>
+                                    {currentUser?.address}
+                                </p>
+                                <p style={{ color: "#9ca3af", margin: "0", fontSize: "0.8rem" }}>
+                                    Contact: {currentUser?.owner_name}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Secondary Addresses */}
+                    {secondaryAddresses.map((address) => (
+                        <div
+                            key={address.id}
+                            style={{
+                                ...styles.addressCard,
+                                ...(selectedAddressId === address.id ? styles.addressCardSelected : {}),
+                            }}
+                            onClick={() => setSelectedAddressId(address.id)}
+                            onMouseEnter={(e) => {
+                                if (selectedAddressId !== address.id) {
+                                    Object.assign(e.currentTarget.style, styles.addressCardHover);
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (selectedAddressId !== address.id) {
+                                    e.currentTarget.style.borderColor = "#374151";
+                                }
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                                <input
+                                    type="radio"
+                                    checked={selectedAddressId === address.id}
+                                    onChange={() => setSelectedAddressId(address.id)}
+                                    style={{ marginTop: "4px" }}
+                                />
+                                <div style={{ flex: 1 }}>
+                                    <h5 style={{
+                                        color: "#fff",
+                                        margin: "0 0 8px 0",
+                                        fontWeight: "600",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px"
+                                    }}>
+                                        📍 {address.address_label}
+                                        {selectedAddressId === address.id && (
+                                            <span style={{
+                                                fontSize: "0.75rem",
+                                                color: "#3b82f6",
+                                                fontWeight: "normal"
+                                            }}>
+                                                (Selected)
+                                            </span>
+                                        )}
+                                    </h5>
+                                    <p style={{ color: "#d1d5db", margin: "0 0 4px 0", fontSize: "0.9rem" }}>
+                                        {address.address}
+                                    </p>
+                                    <p style={{ color: "#9ca3af", margin: "0", fontSize: "0.8rem" }}>
+                                        Contact: {address.contact_name}
+                                        {address.partner_name && ` & ${address.partner_name}`}
+                                    </p>
+                                    {address.notes && (
+                                        <p style={{
+                                            color: "#6b7280",
+                                            margin: "8px 0 0 0",
+                                            fontSize: "0.8rem",
+                                            fontStyle: "italic"
+                                        }}>
+                                            Note: {address.notes}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {secondaryAddresses.length === 0 && !addressesLoading && (
+                        <div style={{
+                            textAlign: "center",
+                            padding: "20px",
+                            color: "#9ca3af",
+                            fontSize: "0.9rem"
+                        }}>
+                            <p>You only have your primary address configured.</p>
+                            <p style={{ fontSize: "0.8rem", marginTop: "8px" }}>
+                                You can add secondary addresses in your dashboard after booking.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {error && <p style={styles.error}>{error}</p>}
+
+            <button
+                style={styles.button}
+                type="button"
+                onClick={handleContinueFromAddressSelection}
+                disabled={addressesLoading}
+            >
+                Continue to Booking Confirmation →
+            </button>
+
+            <button
+                style={styles.cancelButton}
+                type="button"
+                onClick={() => setView("selectDog")}
+            >
+                ← Back to Dog Selection
+            </button>
+        </div>
+    );
+
+    const renderFinalBookingView = () => (
+        <div>
+            {renderSummary()}
+            <h4>Confirm Your Booking</h4>
+
             <div style={styles.disclaimer}>
                 <p style={{ marginBottom: "8px" }}>
                     <strong>Cancellations:</strong> I offer a flexible and understanding
@@ -611,8 +888,13 @@ export default function BookingForm({
             >
                 {isLoading ? "Booking..." : "Confirm & Book"}
             </button>
-            <button style={styles.cancelButton} type="button" onClick={onCancel}>
-                Cancel Booking
+
+            <button
+                style={styles.cancelButton}
+                type="button"
+                onClick={() => setView("selectAddress")}
+            >
+                ← Back to Address Selection
             </button>
         </div>
     );
@@ -672,6 +954,8 @@ export default function BookingForm({
             {view === "lookup" && renderLookupView()}
             {view === "register" && renderRegisterView()}
             {view === "selectDog" && currentUser && renderSelectDogView()}
+            {view === "selectAddress" && currentUser && renderSelectAddressView()}
+            {view === "finalBooking" && currentUser && renderFinalBookingView()}
             {view === "addDog" && renderAddDogView()}
         </div>
     );

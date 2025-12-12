@@ -2,14 +2,30 @@
 
 import React, { useState, useEffect } from "react";
 import { format, addMinutes, isPast } from "date-fns";
+import { getSoloWalkPrice } from "@/lib/pricing";
 
-// Service options
+// Updated service options with both solo walk durations
 const SERVICE_OPTIONS = [
-    { id: "Meet & Greet - for new clients", name: "Meet & Greet (30 min, FREE)", duration: 30 },
-    { id: "Quick Walk (30 min)", name: "Quick Walk (30 min, £10)", duration: 30 },
-    { id: "Solo Walk (60 min)", name: "Solo Walk (60 min, £17.50)", duration: 60 },
-    { id: "Dog Sitting (Variable)", name: "Dog Sitting (Variable, POA)", duration: null },
+    { id: "Meet & Greet - for new clients", name: "Meet & Greet (30 min, FREE)", duration: 30, type: "fixed" },
+    { id: "Quick Walk (30 min)", name: "Quick Walk (30 min, £10)", duration: 30, type: "fixed" },
+    { id: "Solo Walk (60 min)", name: "Solo Walk (1 hour)", duration: 60, type: "solo_walk" },
+    { id: "Solo Walk (120 min)", name: "Solo Walk (2 hours)", duration: 120, type: "solo_walk" },
+    { id: "Dog Sitting (Variable)", name: "Dog Sitting (Variable, POA)", duration: null, type: "variable" },
 ];
+
+interface Client {
+    id: number;
+    owner_name: string;
+    phone: string;
+    email: string;
+    address: string;
+    dogs: {
+        id: number;
+        dog_name: string;
+        dog_breed: string;
+        dog_age: number;
+    }[];
+}
 
 interface Customer {
     owner_id: number;
@@ -39,8 +55,9 @@ interface BookingData {
 }
 
 export default function AdminCreateBooking() {
+    const [clients, setClients] = useState<Client[]>([]);
+    const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
     const [customer, setCustomer] = useState<Customer | null>(null);
-    const [customerSearchPhone, setCustomerSearchPhone] = useState("");
     const [bookingData, setBookingData] = useState<Partial<BookingData>>({
         service_type: "Meet & Greet - for new clients",
         create_calendar_event: true,
@@ -54,33 +71,95 @@ export default function AdminCreateBooking() {
     const [endTime, setEndTime] = useState("");
 
     const [isLoading, setIsLoading] = useState(false);
+    const [loadingClients, setLoadingClients] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<any>(null);
 
-    // Handle customer lookup
-    const handleCustomerLookup = async () => {
-        if (!customerSearchPhone.trim()) return;
+    // Load all clients on page mount
+    useEffect(() => {
+        const loadClients = async () => {
+            try {
+                setLoadingClients(true);
+                const response = await fetch("/api/dog-walking/admin/clients?limit=100"); // Get more clients
+                const data = await response.json();
 
-        setIsLoading(true);
+                if (response.ok && data.clients) {
+                    // Sort clients alphabetically by name
+                    const sortedClients = data.clients.sort((a: Client, b: Client) =>
+                        a.owner_name.localeCompare(b.owner_name)
+                    );
+                    setClients(sortedClients);
+                } else {
+                    setError("Failed to load clients");
+                }
+            } catch (err) {
+                setError("Failed to load clients");
+            } finally {
+                setLoadingClients(false);
+            }
+        };
+
+        loadClients();
+    }, []);
+
+    // Calculate pricing display for solo walks
+    const getSoloWalkPriceDisplay = (duration: number, dogCount: number) => {
+        const price = getSoloWalkPrice(duration, dogCount);
+        return `£${price.toFixed(2)}`;
+    };
+
+    // Get current service pricing display
+    const getCurrentPriceDisplay = () => {
+        const service = SERVICE_OPTIONS.find(s => s.id === bookingData.service_type);
+        if (!service) return "";
+
+        if (service.type === "solo_walk" && selectedDogs.length > 0) {
+            const dogCount = selectedDogs.length;
+            const price = getSoloWalkPriceDisplay(service.duration!, dogCount);
+            return ` - ${price} (${dogCount} dog${dogCount > 1 ? 's' : ''})`;
+        }
+
+        // Return default pricing for other services
+        if (service.name.includes("FREE")) return " - FREE";
+        if (service.name.includes("£10")) return " - £10";
+        if (service.name.includes("POA")) return " - POA";
+
+        return "";
+    };
+
+    // Handle client selection
+    const handleClientSelect = (clientId: string) => {
+        const id = parseInt(clientId);
+        setSelectedClientId(id);
         setError(null);
 
-        try {
-            const response = await fetch(`/api/dog-walking/customer-lookup?phone=${encodeURIComponent(customerSearchPhone)}`);
-            const data = await response.json();
+        if (id === 0) {
+            // "Select a client..." option
+            setCustomer(null);
+            setSelectedDogs([]);
+            return;
+        }
 
-            if (data.found) {
-                setCustomer(data.customer);
-                // Auto-select first dog
-                if (data.customer.dogs.length > 0) {
-                    setSelectedDogs([data.customer.dogs[0].id]);
-                }
+        const selectedClient = clients.find(c => c.id === id);
+        if (selectedClient) {
+            // Convert Client to Customer format
+            const customerData: Customer = {
+                owner_id: selectedClient.id,
+                owner_name: selectedClient.owner_name,
+                phone: selectedClient.phone,
+                email: selectedClient.email,
+                address: selectedClient.address,
+                dogs: selectedClient.dogs || []
+            };
+
+            setCustomer(customerData);
+
+            // Auto-select first dog if available
+            if (customerData.dogs.length > 0) {
+                setSelectedDogs([customerData.dogs[0].id]);
             } else {
-                setError("Customer not found. Please register them first in the admin interface.");
+                setSelectedDogs([]);
             }
-        } catch (err) {
-            setError("Failed to lookup customer");
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -135,8 +214,10 @@ export default function AdminCreateBooking() {
                 send_email: bookingData.send_email,
             };
 
+            // Add duration or end time based on service type
             if (isMultiDay) {
-                submitData.end_time = new Date(`${endDate}T${endTime}`).toISOString();
+                const endDateTime = new Date(`${endDate}T${endTime}`);
+                submitData.end_time = endDateTime.toISOString();
             } else {
                 submitData.duration_minutes = bookingData.duration_minutes;
             }
@@ -147,28 +228,29 @@ export default function AdminCreateBooking() {
                 body: JSON.stringify(submitData),
             });
 
+            const result = await response.json();
+
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Failed to create booking");
+                throw new Error(result.error || "Failed to create booking");
             }
 
-            const result = await response.json();
             setSuccess(result);
-
             // Reset form
-            setBookingData({
-                service_type: "Meet & Greet - for new clients",
-                create_calendar_event: true,
-                send_email: false,
-            });
+            setCustomer(null);
+            setSelectedClientId(null);
             setSelectedDogs([]);
             setBookingDate("");
             setBookingTime("");
             setEndDate("");
             setEndTime("");
+            setBookingData({
+                service_type: "Meet & Greet - for new clients",
+                create_calendar_event: true,
+                send_email: false,
+            });
 
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || "Failed to create booking");
         } finally {
             setIsLoading(false);
         }
@@ -180,216 +262,205 @@ export default function AdminCreateBooking() {
             margin: "0 auto",
             padding: "24px",
             backgroundColor: "#111827",
-            color: "#fff",
-            minHeight: "100vh",
-        } as React.CSSProperties,
-        card: {
-            backgroundColor: "#1f2937",
-            border: "1px solid #333",
             borderRadius: "8px",
-            padding: "24px",
-            marginBottom: "24px",
-        } as React.CSSProperties,
-        header: {
-            textAlign: "center",
-            marginBottom: "32px",
         } as React.CSSProperties,
         title: {
-            fontSize: "2rem",
+            fontSize: "1.5rem",
             fontWeight: "bold",
-            marginBottom: "8px",
-            color: "#3b82f6",
+            color: "#d1d5db",
+            marginBottom: "24px",
+        } as React.CSSProperties,
+        section: {
+            marginBottom: "24px",
+            padding: "20px",
+            backgroundColor: "#1f2937",
+            borderRadius: "8px",
+            border: "1px solid #374151",
         } as React.CSSProperties,
         label: {
             display: "block",
-            marginBottom: "4px",
-            fontSize: "0.9rem",
+            marginBottom: "8px",
+            fontWeight: "bold",
             color: "#d1d5db",
-            fontWeight: "500",
         } as React.CSSProperties,
         input: {
             width: "100%",
-            padding: "8px",
-            marginBottom: "16px",
-            borderRadius: "4px",
-            border: "1px solid #444",
+            padding: "12px",
             backgroundColor: "#374151",
+            border: "1px solid #4b5563",
+            borderRadius: "6px",
             color: "#fff",
-            fontSize: "1rem",
+            marginBottom: "16px",
         } as React.CSSProperties,
         select: {
             width: "100%",
-            padding: "8px",
-            marginBottom: "16px",
-            borderRadius: "4px",
-            border: "1px solid #444",
+            padding: "12px",
             backgroundColor: "#374151",
+            border: "1px solid #4b5563",
+            borderRadius: "6px",
             color: "#fff",
-            fontSize: "1rem",
-        } as React.CSSProperties,
-        textarea: {
-            width: "100%",
-            padding: "8px",
             marginBottom: "16px",
-            borderRadius: "4px",
-            border: "1px solid #444",
-            backgroundColor: "#374151",
-            color: "#fff",
-            fontSize: "1rem",
-            resize: "vertical",
-            minHeight: "80px",
         } as React.CSSProperties,
         button: {
-            padding: "8px 16px",
-            borderRadius: "4px",
+            padding: "12px 24px",
+            backgroundColor: "#3b82f6",
+            color: "#fff",
             border: "none",
+            borderRadius: "6px",
             fontWeight: "bold",
             cursor: "pointer",
-            marginRight: "8px",
-        } as React.CSSProperties,
-        primaryButton: {
-            backgroundColor: "#3b82f6",
-            color: "#fff",
+            marginRight: "12px",
         } as React.CSSProperties,
         secondaryButton: {
+            padding: "12px 24px",
             backgroundColor: "#6b7280",
             color: "#fff",
-        } as React.CSSProperties,
-        dogButton: {
-            padding: "8px 12px",
-            margin: "4px",
-            borderRadius: "4px",
-            border: "1px solid #444",
-            backgroundColor: "#374151",
-            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            fontWeight: "bold",
             cursor: "pointer",
-            fontSize: "0.9rem",
-        } as React.CSSProperties,
-        dogButtonSelected: {
-            backgroundColor: "#3b82f6",
-            borderColor: "#3b82f6",
-        } as React.CSSProperties,
-        checkboxContainer: {
-            display: "flex",
-            alignItems: "center",
-            marginBottom: "12px",
-        } as React.CSSProperties,
-        checkbox: {
-            marginRight: "8px",
         } as React.CSSProperties,
         error: {
             color: "#ef4444",
             backgroundColor: "#1f2937",
             border: "1px solid #ef4444",
-            borderRadius: "4px",
             padding: "12px",
+            borderRadius: "6px",
             marginBottom: "16px",
         } as React.CSSProperties,
         success: {
             color: "#10b981",
             backgroundColor: "#1f2937",
             border: "1px solid #10b981",
-            borderRadius: "4px",
-            padding: "16px",
-            marginBottom: "24px",
+            padding: "12px",
+            borderRadius: "6px",
+            marginBottom: "16px",
+        } as React.CSSProperties,
+        dogCard: {
+            padding: "12px",
+            backgroundColor: "#374151",
+            border: "2px solid #4b5563",
+            borderRadius: "6px",
+            margin: "8px",
+            cursor: "pointer",
+            transition: "border-color 0.2s",
+        } as React.CSSProperties,
+        dogCardSelected: {
+            borderColor: "#3b82f6",
+            backgroundColor: "#1e40af",
+        } as React.CSSProperties,
+        clientInfo: {
+            marginTop: "12px",
+            padding: "12px",
+            backgroundColor: "#059669",
+            borderRadius: "6px",
+            fontSize: "14px",
         } as React.CSSProperties,
     };
 
-    const isHistorical = Boolean(bookingDate && bookingTime && isPast(new Date(`${bookingDate}T${bookingTime}`)));
-
     return (
         <div style={styles.container}>
-            <div style={styles.header}>
-                <h1 style={styles.title}>Admin - Create Booking</h1>
-                <p style={{ color: "#9ca3af" }}>Create bookings for existing clients (historical or future)</p>
-            </div>
+            <h1 style={styles.title}>Create Manual Booking</h1>
 
-            {error && (
-                <div style={styles.error}>{error}</div>
-            )}
-
+            {error && <div style={styles.error}>{error}</div>}
             {success && (
                 <div style={styles.success}>
-                    <h3 style={{ margin: "0 0 8px 0" }}>✅ Booking Created Successfully!</h3>
-                    <p>Booking ID: {success.booking_id}</p>
-                    <p>Status: {success.is_historical ? "Historical (Completed)" : "Future (Confirmed)"}</p>
-                    {success.google_event_id && <p>📅 Calendar event created</p>}
-                    <button
-                        style={{ ...styles.button, ...styles.primaryButton, marginTop: "12px" }}
-                        onClick={() => setSuccess(null)}
-                    >
-                        Create Another Booking
-                    </button>
+                    Booking created successfully! ID: {success.booking_id}
                 </div>
             )}
 
-            {/* Customer Lookup */}
-            <div style={styles.card}>
-                <h2 style={{ color: "#d1d5db", marginBottom: "16px" }}>1. Find Customer</h2>
-                <label style={styles.label}>Customer Phone Number</label>
-                <div style={{ display: "flex", gap: "8px" }}>
-                    <input
-                        type="tel"
-                        value={customerSearchPhone}
-                        onChange={(e) => setCustomerSearchPhone(e.target.value)}
-                        style={{ ...styles.input, marginBottom: "0", flex: "1" }}
-                        placeholder="07123456789"
-                    />
-                    <button
-                        type="button"
-                        onClick={handleCustomerLookup}
-                        style={{ ...styles.button, ...styles.primaryButton }}
-                        disabled={isLoading}
-                    >
-                        {isLoading ? "Looking up..." : "Find Customer"}
-                    </button>
+            <form onSubmit={handleSubmit}>
+                {/* Client Selection */}
+                <div style={styles.section}>
+                    <h2 style={{ color: "#d1d5db", marginBottom: "16px" }}>1. Select Client</h2>
+                    <label style={styles.label}>Choose Existing Client</label>
+
+                    {loadingClients ? (
+                        <div style={{ color: "#9ca3af", padding: "12px" }}>
+                            Loading clients...
+                        </div>
+                    ) : (
+                        <>
+                            <select
+                                value={selectedClientId || 0}
+                                onChange={(e) => handleClientSelect(e.target.value)}
+                                style={styles.select}
+                                required
+                            >
+                                <option value={0}>Select a client...</option>
+                                {clients.map((client) => (
+                                    <option key={client.id} value={client.id}>
+                                        {client.owner_name} ({client.phone}) - {client.dogs?.length || 0} dog{(client.dogs?.length || 0) !== 1 ? 's' : ''}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <div style={{ color: "#9ca3af", fontSize: "14px" }}>
+                                {clients.length} clients available. Sorted alphabetically by name.
+                            </div>
+                        </>
+                    )}
+
+                    {customer && (
+                        <div style={styles.clientInfo}>
+                            <strong>Selected: {customer.owner_name}</strong><br />
+                            📞 {customer.phone} • 📧 {customer.email}<br />
+                            📍 {customer.address}
+                        </div>
+                    )}
                 </div>
 
+                {/* Dog Selection */}
                 {customer && (
-                    <div style={{ marginTop: "16px", padding: "12px", backgroundColor: "#374151", borderRadius: "4px" }}>
-                        <strong>{customer.owner_name}</strong><br />
-                        {customer.phone} • {customer.email}<br />
-                        {customer.address}
+                    <div style={styles.section}>
+                        <h2 style={{ color: "#d1d5db", marginBottom: "16px" }}>2. Select Dogs (Max 2)</h2>
+                        {customer.dogs.length === 0 ? (
+                            <div style={{ color: "#9ca3af", padding: "12px" }}>
+                                This client has no registered dogs. Please add dogs first.
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{ display: "flex", flexWrap: "wrap" }}>
+                                    {customer.dogs.map((dog) => (
+                                        <div
+                                            key={dog.id}
+                                            onClick={() => handleDogToggle(dog.id)}
+                                            style={{
+                                                ...styles.dogCard,
+                                                ...(selectedDogs.includes(dog.id) ? styles.dogCardSelected : {})
+                                            }}
+                                        >
+                                            <strong>{dog.dog_name}</strong><br />
+                                            <small>{dog.dog_breed}, {dog.dog_age} years old</small>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p style={{ color: "#9ca3af", marginTop: "8px" }}>
+                                    Selected: {selectedDogs.length} dog{selectedDogs.length !== 1 ? 's' : ''}
+                                </p>
+                            </>
+                        )}
                     </div>
                 )}
-            </div>
 
-            {/* Rest of form only shows if customer is found */}
-            {customer && (
-                <>
-                    {/* Dog Selection */}
-                    <div style={styles.card}>
-                        <h2 style={{ color: "#d1d5db", marginBottom: "16px" }}>2. Select Dog(s) (Max 2)</h2>
-                        <div>
-                            {customer.dogs.map(dog => (
-                                <button
-                                    key={dog.id}
-                                    type="button"
-                                    onClick={() => handleDogToggle(dog.id)}
-                                    style={{
-                                        ...styles.dogButton,
-                                        ...(selectedDogs.includes(dog.id) ? styles.dogButtonSelected : {})
-                                    }}
-                                >
-                                    {dog.dog_name} ({dog.dog_breed}, {dog.dog_age}y)
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                {/* Service Selection */}
+                {selectedDogs.length > 0 && (
+                    <div style={styles.section}>
+                        <h2 style={{ color: "#d1d5db", marginBottom: "16px" }}>3. Service Details</h2>
 
-                    {/* Booking Details Form */}
-                    <form onSubmit={handleSubmit} style={styles.card}>
-                        <h2 style={{ color: "#d1d5db", marginBottom: "16px" }}>3. Booking Details</h2>
-
-                        <label style={styles.label}>Service Type</label>
+                        <label style={styles.label}>Service Type{getCurrentPriceDisplay()}</label>
                         <select
                             value={bookingData.service_type}
                             onChange={(e) => handleServiceChange(e.target.value)}
                             style={styles.select}
                         >
-                            {SERVICE_OPTIONS.map(service => (
-                                <option key={service.id} value={service.id}>
-                                    {service.name}
+                            {SERVICE_OPTIONS.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                    {option.name}
+                                    {option.type === "solo_walk" && selectedDogs.length > 0
+                                        ? ` - ${getSoloWalkPriceDisplay(option.duration!, selectedDogs.length)}`
+                                        : ""
+                                    }
                                 </option>
                             ))}
                         </select>
@@ -417,7 +488,7 @@ export default function AdminCreateBooking() {
                             </div>
                         </div>
 
-                        {/* Multi-day options for Dog Sitting */}
+                        {/* Multi-day end time for dog sitting */}
                         {bookingData.service_type === "Dog Sitting (Variable)" && (
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                                 <div>
@@ -442,79 +513,57 @@ export default function AdminCreateBooking() {
                             </div>
                         )}
 
-                        {/* Duration for single bookings */}
-                        {bookingData.service_type !== "Dog Sitting (Variable)" && (
-                            <div>
-                                <label style={styles.label}>Duration (minutes)</label>
-                                <input
-                                    type="number"
-                                    value={bookingData.duration_minutes || ""}
-                                    onChange={(e) => setBookingData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) }))}
-                                    style={styles.input}
-                                    min="1"
-                                />
-                            </div>
-                        )}
-
                         <label style={styles.label}>Notes (Optional)</label>
                         <textarea
                             value={bookingData.notes || ""}
                             onChange={(e) => setBookingData(prev => ({ ...prev, notes: e.target.value }))}
-                            style={styles.textarea}
-                            placeholder="Any special notes about this booking..."
+                            style={{ ...styles.input, minHeight: "80px", resize: "vertical" }}
+                            placeholder="Any special instructions..."
                         />
 
-                        {/* Options */}
-                        <h3 style={{ color: "#d1d5db", marginBottom: "12px" }}>Options</h3>
-
-                        <div style={styles.checkboxContainer}>
-                            <input
-                                type="checkbox"
-                                id="calendar"
-                                checked={bookingData.create_calendar_event}
-                                onChange={(e) => setBookingData(prev => ({ ...prev, create_calendar_event: e.target.checked }))}
-                                style={styles.checkbox}
-                            />
-                            <label htmlFor="calendar" style={styles.label}>Create Google Calendar event</label>
-                        </div>
-
-                        <div style={styles.checkboxContainer}>
-                            <input
-                                type="checkbox"
-                                id="email"
-                                checked={bookingData.send_email}
-                                onChange={(e) => setBookingData(prev => ({ ...prev, send_email: e.target.checked }))}
-                                style={styles.checkbox}
-                                disabled={isHistorical}
-                            />
-                            <label htmlFor="email" style={styles.label}>
-                                Send confirmation email {isHistorical ? "(disabled for historical bookings)" : ""}
+                        <div style={{ display: "flex", gap: "24px", marginTop: "16px" }}>
+                            <label style={{ display: "flex", alignItems: "center", color: "#d1d5db" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={bookingData.create_calendar_event || false}
+                                    onChange={(e) => setBookingData(prev => ({ ...prev, create_calendar_event: e.target.checked }))}
+                                    style={{ marginRight: "8px" }}
+                                />
+                                Create Google Calendar Event
+                            </label>
+                            <label style={{ display: "flex", alignItems: "center", color: "#d1d5db" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={bookingData.send_email || false}
+                                    onChange={(e) => setBookingData(prev => ({ ...prev, send_email: e.target.checked }))}
+                                    style={{ marginRight: "8px" }}
+                                />
+                                Send Email Confirmation
                             </label>
                         </div>
+                    </div>
+                )}
 
-                        {isHistorical && (
-                            <div style={{ backgroundColor: "#f59e0b20", padding: "12px", borderRadius: "4px", marginBottom: "16px", border: "1px solid #f59e0b" }}>
-                                <strong>📋 Historical Booking:</strong> This booking is in the past and will be marked as "completed".
-                            </div>
-                        )}
-
+                {/* Submit */}
+                {selectedDogs.length > 0 && bookingDate && bookingTime && (
+                    <div style={{ textAlign: "center" }}>
                         <button
                             type="submit"
-                            disabled={isLoading || selectedDogs.length === 0}
-                            style={{
-                                ...styles.button,
-                                ...styles.primaryButton,
-                                width: "100%",
-                                padding: "12px",
-                                fontSize: "1rem",
-                                opacity: isLoading || selectedDogs.length === 0 ? 0.6 : 1
-                            }}
+                            disabled={isLoading}
+                            style={styles.button}
                         >
-                            {isLoading ? "Creating Booking..." : "Create Booking"}
+                            {isLoading ? "Creating..." : "Create Booking"}
                         </button>
-                    </form>
-                </>
-            )}
+                        <button
+                            type="button"
+                            onClick={() => window.location.href = "/dog-walking/admin"}
+                            style={styles.secondaryButton}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                )}
+            </form>
         </div>
     );
 }

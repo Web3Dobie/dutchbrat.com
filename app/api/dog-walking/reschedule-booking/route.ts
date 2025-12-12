@@ -4,6 +4,7 @@ import { google } from "googleapis";
 import { sendEmail } from "@/lib/emailService";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
+import { sendBookingEmail } from "@/lib/emailService";
 
 // Database Connection
 const pool = new Pool({
@@ -205,50 +206,47 @@ ${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)
         const newFormattedTime = format(newStartTime, "h:mm a");
 
         try {
-            await sendEmail({
-                to: booking.email,
-                subject: `Booking Rescheduled - ${serviceDisplayName}`,
-                html: `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <h2 style="color: #059669;">Booking Rescheduled</h2>
-                        
-                        <p>Dear ${booking.owner_name},</p>
-                        
-                        <p>Your booking has been successfully rescheduled:</p>
-                        
-                        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                            <h3 style="margin-top: 0; color: #374151;">Updated Booking Details</h3>
-                            <p><strong>Service:</strong> ${serviceDisplayName}</p>
-                            <p><strong>New Date:</strong> ${newFormattedDate}</p>
-                            <p><strong>New Time:</strong> ${newFormattedTime}</p>
-                            <p><strong>Dogs:</strong> ${dogNames}</p>
-                            ${booking.price_pounds ? `<p><strong>Price:</strong> £${parseFloat(booking.price_pounds).toFixed(2)}</p>` : ''}
-                        </div>
-                        
-                        <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                            <p style="margin: 0; color: #92400e;"><strong>Previous booking time:</strong> ${oldFormattedDate} at ${oldFormattedTime}</p>
-                        </div>
-                        
-                        <p>Please make note of the new date and time. We look forward to seeing you and ${dogNames}!</p>
-                        
-                        <p>If you need to make any further changes, please contact us as soon as possible.</p>
-                        
-                        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-                        
-                        <p style="color: #6b7280; font-size: 14px;">
-                            <strong>Hunter's Hounds</strong><br>
-                            Professional Dog Walking Service<br>
-                            Phone: 07932749772<br>
-                            Email: bookings@hunters-hounds.london
-                        </p>
+            const emailSubject = `Booking Rescheduled - ${serviceDisplayName}`;
+            const emailContent = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #059669;">Booking Rescheduled</h2>
+                    
+                    <p>Dear ${booking.owner_name},</p>
+                    
+                    <p>Your booking has been successfully rescheduled:</p>
+                    
+                    <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="margin-top: 0; color: #374151;">Updated Booking Details</h3>
+                        <p><strong>Service:</strong> ${serviceDisplayName}</p>
+                        <p><strong>New Date:</strong> ${newFormattedDate}</p>
+                        <p><strong>New Time:</strong> ${newFormattedTime}</p>
+                        <p><strong>Dogs:</strong> ${dogNames}</p>
+                        ${booking.price_pounds ? `<p><strong>Price:</strong> £${parseFloat(booking.price_pounds).toFixed(2)}</p>` : ''}
                     </div>
-                `,
-                // BCC to bookings@hunters-hounds.london automatically added
-                // From address automatically set to "Hunter's Hounds <bookings@hunters-hounds.london>"
-            });
-            console.log("Reschedule confirmation email sent");
+                    
+                    <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                        <p style="margin: 0; color: #92400e;"><strong>Previous booking time:</strong> ${oldFormattedDate} at ${oldFormattedTime}</p>
+                    </div>
+                    
+                    <p>Please make note of the new date and time. We look forward to seeing you and ${dogNames}!</p>
+                    
+                    <p>If you need to make any further changes, please contact us as soon as possible.</p>
+                    
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+                    
+                    <p style="color: #6b7280; font-size: 14px;">
+                        <strong>Hunter's Hounds</strong><br>
+                        Professional Dog Walking Service<br>
+                        Phone: 07932749772<br>
+                        Email: bookings@hunters-hounds.london
+                    </p>
+                </div>
+            `;
+
+            await sendBookingEmail(booking.id, emailSubject, emailContent);
+            console.log(`Reschedule confirmation emails sent to all recipients for booking ${booking.id}`);
         } catch (emailError) {
-            console.error("Failed to send reschedule email:", emailError);
+            console.error(`Failed to send reschedule emails for booking ${booking.id}:`, emailError);
             // Don't fail the operation if email fails
         }
 

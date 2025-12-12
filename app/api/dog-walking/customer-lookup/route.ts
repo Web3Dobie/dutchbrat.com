@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
         let params: string[];
 
         if (email) {
-            // Search by email - INCLUDES image_filename
+            // Search by email - NOW INCLUDES PARTNER FIELDS
             console.log(`[Customer Lookup] Searching by email: ${email}`);
             query = `
                 SELECT 
@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
                     o.email,
                     o.address,
                     o.created_at,
+                    o.partner_name,
+                    o.partner_email,
+                    o.partner_phone,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -57,11 +60,11 @@ export async function GET(request: NextRequest) {
                 FROM hunters_hounds.owners o
                 LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
                 WHERE LOWER(o.email) = LOWER($1)
-                GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at;
+                GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone;
             `;
             params = [email.trim()];
         } else {
-            // Search by phone (normalize phone number) - INCLUDES image_filename
+            // Search by phone - NOW INCLUDES PARTNER FIELDS
             console.log(`[Customer Lookup] Searching by phone: ${phone}`);
             const normalizedPhone = phone!.replace(/[\s\-\(\)]/g, "");
             query = `
@@ -72,6 +75,9 @@ export async function GET(request: NextRequest) {
                     o.email,
                     o.address,
                     o.created_at,
+                    o.partner_name,
+                    o.partner_email,
+                    o.partner_phone,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -88,7 +94,7 @@ export async function GET(request: NextRequest) {
                 FROM hunters_hounds.owners o
                 LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
                 WHERE REPLACE(REPLACE(REPLACE(REPLACE(o.phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
-                GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at;
+                GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone;
             `;
             params = [normalizedPhone];
         }
@@ -105,7 +111,7 @@ export async function GET(request: NextRequest) {
 
         const customer = result.rows[0];
         console.log(`[Customer Lookup] Found customer: ${customer.owner_name} with ${customer.dogs.length} dogs`);
-        
+
         // Log image filenames for debugging
         customer.dogs.forEach(dog => {
             console.log(`[Customer Lookup] Dog: ${dog.dog_name}, Image: ${dog.image_filename || 'none'}`);
@@ -119,6 +125,10 @@ export async function GET(request: NextRequest) {
                 phone: customer.phone,
                 email: customer.email,
                 address: customer.address,
+                // NEW: Include partner fields
+                partner_name: customer.partner_name,
+                partner_email: customer.partner_email,
+                partner_phone: customer.partner_phone,
                 dogs: customer.dogs || []
             }
         });

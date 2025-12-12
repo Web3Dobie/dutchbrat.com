@@ -19,7 +19,7 @@ const TIMEZONE = "Europe/London";
 const TRAVEL_BUFFER_MINUTES = 15;
 
 // Walk services working hours (dog sitting has its own API)
-const WORKING_HOURS_START = 9;   // 9:00 AM
+const WORKING_HOURS_START = 8;   // 8:00 AM
 const WORKING_HOURS_END = 20;    // 8:00 PM
 
 // --- Authentication ---

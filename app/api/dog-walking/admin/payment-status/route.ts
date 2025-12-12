@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         let whereClause = "";
         switch (view) {
             case "awaiting_payment":
-                whereClause = "WHERE b.status = 'completed' AND b.price_pounds > 0";
+                whereClause = "WHERE b.status = 'completed'";
                 break;
             case "paid":
                 whereClause = "WHERE b.status = 'completed & paid'";
