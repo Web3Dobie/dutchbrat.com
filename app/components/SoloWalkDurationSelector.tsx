@@ -99,7 +99,7 @@ export default function SoloWalkDurationSelector({
             {getDurationDisplay(selectedDuration)}
           </span>
           <div className="text-purple-400 font-medium text-sm mt-1">
-            £{formatSoloWalkPrice(selectedDuration, 1)} - £{formatSoloWalkPrice(selectedDuration, 2)}
+            {formatSoloWalkPrice(selectedDuration, 1)} - {formatSoloWalkPrice(selectedDuration, 2)}
           </div>
           <div className="text-gray-500 text-xs">
             Final price depends on number of dogs

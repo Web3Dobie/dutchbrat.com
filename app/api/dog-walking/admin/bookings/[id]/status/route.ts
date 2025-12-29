@@ -4,6 +4,7 @@ import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail } from "@/lib/emailService";
 import { generateNoShowEmail } from "@/lib/emailTemplates";
 import { format } from "date-fns";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database Connection
 const pool = new Pool({
@@ -25,6 +26,10 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     try {
         const bookingId = parseInt(params.id);
         if (isNaN(bookingId)) {

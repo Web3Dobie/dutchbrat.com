@@ -59,7 +59,17 @@ export async function GET(request: NextRequest) {
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.owner_id = $1
             GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, b.status, b.price_pounds, b.walk_summary, b.created_at
-            ORDER BY b.start_time ASC;
+            ORDER BY 
+                CASE 
+                    WHEN b.status IN ('confirmed', 'completed') THEN 0 
+                    ELSE 1 
+                END,
+                CASE 
+                    WHEN b.status IN ('confirmed', 'completed') THEN b.start_time 
+                END ASC,
+                CASE 
+                    WHEN b.status NOT IN ('confirmed', 'completed') THEN b.start_time 
+                END DESC
         `;
 
         const result = await client.query(query, [ownerIdNum]);

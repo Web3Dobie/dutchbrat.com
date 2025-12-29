@@ -1,28 +1,11 @@
-"use client";
-
+// app/dog-walking/page.tsx - Clean booking experience with domain detection
 import Image from 'next/image';
-import Link from 'next/link';
-import { useState, useEffect } from 'react';
 import MobileBookingCalendar from '../components/MobileBookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 import { DashboardServiceCard } from '@/app/components/DashboardServiceCard';
 import { SERVICE_PRICING } from '@/lib/pricing';
-import { isHuntersHoundsClient } from '@/lib/clientDomainDetection'; // CLIENT-SIDE version
-
-// --- Types ---
-interface User {
-    owner_id: number;
-    owner_name: string;
-    phone: string;
-    email: string;
-    address: string;
-    dogs: Array<{
-        id: number;
-        dog_name: string;
-        dog_breed: string;
-        dog_age: number;
-    }>;
-}
+import { isHuntersHoundsDomain } from '@/lib/domainDetection';
+import Link from 'next/link';
 
 // Playful Image Component (reused from current)
 function PlayfulImage({
@@ -51,105 +34,20 @@ function PlayfulImage({
   );
 }
 
-// ENHANCED Hunter's Hounds Booking Experience with Authentication Detection
+// CLEAN Hunter's Hounds Booking Experience
 function HuntersHoundsBooking() {
-  // --- State for Authentication Detection ---
-  const [authenticatedUser, setAuthenticatedUser] = useState<User | null>(null);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-
-  // --- Check for Authenticated User on Mount ---
-  useEffect(() => {
-    checkForAuthenticatedUser();
-  }, []);
-
-  const checkForAuthenticatedUser = async () => {
-    try {
-      // Check URL parameters for user context from dashboard
-      const urlParams = new URLSearchParams(window.location.search);
-      const userId = urlParams.get('userId');
-      const userPhone = urlParams.get('phone');
-      const userEmail = urlParams.get('email');
-
-      console.log("🔍 Checking authentication - URL params:", { userId, userPhone, userEmail });
-
-      // If user context provided, fetch user data
-      if (userPhone || userEmail) {
-        const queryParam = userEmail 
-          ? `email=${encodeURIComponent(userEmail)}`
-          : userPhone 
-          ? `phone=${encodeURIComponent(userPhone)}`
-          : '';
-
-        if (queryParam) {
-          console.log("📞 Fetching authenticated user with:", queryParam);
-          const response = await fetch(`/api/dog-walking/customer-lookup?${queryParam}`);
-          const data = await response.json();
-
-          console.log("📋 Authentication response:", { status: response.status, found: data.found });
-
-          if (response.ok && data.found) {
-            // Convert customer to user format
-            const user: User = {
-              owner_id: data.customer.owner_id,
-              owner_name: data.customer.owner_name,
-              phone: data.customer.phone,
-              email: data.customer.email,
-              address: data.customer.address,
-              dogs: data.customer.dogs || []
-            };
-
-            setAuthenticatedUser(user);
-            console.log("✅ User authenticated:", user.owner_name);
-          } else {
-            console.log("❌ User authentication failed");
-          }
-        }
-      } else {
-        console.log("ℹ️ No authentication context provided - normal booking flow");
-      }
-    } catch (error) {
-      console.error("💥 Authentication check failed:", error);
-    } finally {
-      setIsCheckingAuth(false);
-    }
-  };
-
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
-          <p className="text-gray-400">Preparing your booking experience</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16">
         
-        {/* Header Section - Enhanced with Authentication */}
+        {/* Header Section */}
         <div className="text-center mb-16">
-          {authenticatedUser ? (
-            <>
-              <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
-                Welcome Back, {authenticatedUser.owner_name}!
-              </h1>
-              <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                Ready for another walk? Choose your service and pick the perfect time for your furry friend
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
-                Book Your Walk
-              </h1>
-              <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                Choose your service and pick the perfect time for your furry friend
-              </p>
-            </>
-          )}
+          <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+            Book Your Walk
+          </h1>
+          <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+            Choose your service and pick the perfect time for your furry friend
+          </p>
           
           {/* Quick Links */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
@@ -176,7 +74,7 @@ function HuntersHoundsBooking() {
           </div>
         </div>
 
-        {/* Booking Section - Enhanced with Authentication */}
+        {/* Booking Section */}
         <section className="mb-16">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-center">
 
@@ -190,15 +88,13 @@ function HuntersHoundsBooking() {
               />
             </div>
 
-            {/* Booking Calendar - Center - Enhanced with currentUser */}
+            {/* Booking Calendar - Center */}
             <div className="max-w-2xl mx-auto w-full">
               <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50">
                 <h2 className="text-3xl font-semibold text-center mb-8 text-blue-400">
                   Select Your Service & Time
                 </h2>
-                <MobileBookingCalendar 
-                  currentUser={authenticatedUser}  // NEW: Pass authenticated user
-                />
+                <MobileBookingCalendar />
               </div>
             </div>
 
@@ -232,7 +128,7 @@ function HuntersHoundsBooking() {
           </div>
         </section>
 
-        {/* Quick Service Info - Preserved exactly as original */}
+        {/* Quick Service Info */}
         <section className="mb-16">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl font-semibold text-center mb-8">Quick Service Overview</h2>
@@ -273,7 +169,7 @@ function HuntersHoundsBooking() {
           </div>
         </section>
 
-        {/* Need Help Section - Preserved exactly as original */}
+        {/* Need Help Section */}
         <section className="text-center bg-gradient-to-r from-green-900/30 to-blue-900/30 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50">
           <h2 className="text-3xl font-semibold mb-4">Need Help Booking?</h2>
           <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
@@ -299,7 +195,7 @@ function HuntersHoundsBooking() {
   );
 }
 
-// ORIGINAL DutchBrat Experience (preserved exactly as original)
+// ORIGINAL DutchBrat Experience (unchanged)
 function DutchBratDogWalking() {
   return (
     <main className="bg-gray-950 text-white">
@@ -388,7 +284,7 @@ function DutchBratDogWalking() {
             </div>
 
             <div className="max-w-xl mx-auto w-full bg-gray-900 rounded-lg p-2 lg:col-span-1">
-              <MobileBookingCalendar currentUser={null} />
+              <MobileBookingCalendar />
             </div>
 
             <div className="hidden lg:flex justify-center">
@@ -432,9 +328,9 @@ function DutchBratDogWalking() {
   );
 }
 
-export default function BookNowPage() {
+export default function DogWalkingPage() {
   // Check domain and render appropriate experience
-  if (isHuntersHoundsClient()) {
+  if (isHuntersHoundsDomain()) {
     return <HuntersHoundsBooking />;
   }
 

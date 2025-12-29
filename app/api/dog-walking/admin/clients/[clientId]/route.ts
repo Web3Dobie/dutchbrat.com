@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database connection
 const pool = new Pool({
@@ -56,6 +57,10 @@ export async function GET(
     request: NextRequest,
     { params }: { params: { clientId: string } }
 ) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     const clientId = parseInt(params.clientId);
 
     if (isNaN(clientId)) {
@@ -141,6 +146,10 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: { clientId: string } }
 ) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     const clientId = parseInt(params.clientId);
 
     if (isNaN(clientId)) {
@@ -341,6 +350,10 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: { clientId: string } }
 ) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     return NextResponse.json(
         { error: "DELETE method not implemented yet" },
         { status: 501 }

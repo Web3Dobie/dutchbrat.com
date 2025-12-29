@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // POST - Generate filename for dog photo
 export async function POST(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     let requestData: {
         dog_name?: string;
         owner_name?: string;

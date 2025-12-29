@@ -285,7 +285,7 @@ export default function CustomerDashboard() {
                         ✉️ ernesto@hunters-hounds.london
                     </a>
                     <a
-                        href="/book-now"
+                        href={customer ? `/book-now?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}` : "/book-now"}
                         style={{
                             color: "#10b981",
                             textDecoration: "none",

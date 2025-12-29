@@ -1,20 +1,14 @@
 import React from "react";
+import { SERVICES } from "./MobileBookingCalendar";
 
 type ServiceId = "meetgreet" | "solo" | "quick" | "sitting";
 
-interface Service {
-    id: ServiceId;
-    name: string;
-    duration: number | null;
-}
-
 interface ServiceSelectorProps {
-    services: readonly Service[];  // NEW: Accept services as prop
     selectedServiceId: ServiceId;
     onServiceChange: (serviceId: ServiceId) => void;
 }
 
-export default function ServiceSelector({ services, selectedServiceId, onServiceChange }: ServiceSelectorProps) {
+export default function ServiceSelector({ selectedServiceId, onServiceChange }: ServiceSelectorProps) {
     return (
         <div className="space-y-4">
             {/* Mobile-first heading */}
@@ -29,7 +23,7 @@ export default function ServiceSelector({ services, selectedServiceId, onService
                     onChange={(e) => onServiceChange(e.target.value as ServiceId)}
                     className="w-full p-4 text-lg bg-gray-800 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                    {services.map((service) => (
+                    {SERVICES.map((service) => (
                         <option key={service.id} value={service.id}>
                             {service.name}
                         </option>
@@ -39,7 +33,7 @@ export default function ServiceSelector({ services, selectedServiceId, onService
 
             {/* Tablet/Desktop: Card-based selection */}
             <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {services.map((service) => {
+                {SERVICES.map((service) => {
                     const isSelected = service.id === selectedServiceId;
 
                     return (
@@ -49,15 +43,32 @@ export default function ServiceSelector({ services, selectedServiceId, onService
                             className={`
                                 p-4 rounded-lg border-2 transition-all duration-200 text-left
                                 ${isSelected
-                                    ? "bg-blue-600 border-blue-500 text-white shadow-lg"
-                                    : "bg-gray-800 border-gray-600 text-gray-300 hover:border-gray-500 hover:bg-gray-700"
+                                    ? 'border-blue-500 bg-blue-600 text-white'
+                                    : 'border-gray-600 bg-gray-800 text-gray-300 hover:border-gray-500 hover:bg-gray-700'
                                 }
                             `}
                         >
-                            <div className="font-semibold text-sm">{service.name}</div>
+                            <div className="font-medium text-sm">
+                                {service.name}
+                            </div>
+                            {service.duration && (
+                                <div className="text-xs opacity-75 mt-1">
+                                    {service.duration} minutes
+                                </div>
+                            )}
                         </button>
                     );
                 })}
+            </div>
+
+            {/* Service description for mobile */}
+            <div className="block sm:hidden p-3 bg-gray-800 rounded-lg border border-gray-600">
+                <div className="text-sm text-gray-300">
+                    {selectedServiceId === "meetgreet" && "Free 30-minute introduction for new clients"}
+                    {selectedServiceId === "solo" && "60-minute individual walk with full attention"}
+                    {selectedServiceId === "quick" && "30-minute park visit and playtime"}
+                    {selectedServiceId === "sitting" && "Flexible duration home visits when needed"}
+                </div>
             </div>
         </div>
     );

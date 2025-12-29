@@ -31,7 +31,7 @@ interface Booking {
     start_time: string;
     end_time: string;
     duration_minutes: number;
-    status: 'confirmed' | 'cancelled' | 'completed' | 'completed & paid' | 'paid' | 'active' | 'no_show';
+    status: 'confirmed' | 'cancelled' | 'completed' | 'completed & paid' | 'active' | 'no_show';
     price_pounds: number;
     dog_names: string[];
     created_at: string;
@@ -178,23 +178,6 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
         }
     };
 
-    // NEW: Customer status display mapping with time-based logic
-    const getCustomerStatusDisplay = (status: string, booking: Booking): string => {
-        if (status === 'completed') {
-            // Check if booking is 3+ days overdue
-            const endTime = new Date(booking.end_time);
-            const now = new Date();
-            const daysOverdue = Math.floor((now.getTime() - endTime.getTime()) / (1000 * 60 * 60 * 24));
-
-            if (daysOverdue >= 3) {
-                return 'Completed - Payment Pending';
-            } else {
-                return 'Completed';
-            }
-        }
-        return status;
-    };
-
     const formatBookingDateTime = (startTime: string, endTime: string, durationMinutes: number) => {
         const start = new Date(startTime);
         const end = new Date(endTime);
@@ -216,23 +199,10 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     };
 
     const getBookingStatusColor = (booking: Booking): string => {
-        if (booking.status === 'completed') {
-            // Check if booking is 3+ days overdue for red color
-            const endTime = new Date(booking.end_time);
-            const now = new Date();
-            const daysOverdue = Math.floor((now.getTime() - endTime.getTime()) / (1000 * 60 * 60 * 24));
-
-            if (daysOverdue >= 3) {
-                return '#ef4444'; // Red for payment pending
-            } else {
-                return '#10b981'; // Green for recently completed
-            }
-        }
-
         switch (booking.status) {
             case 'confirmed': return '#3b82f6';
-            case 'completed & paid':
-            case 'paid': return '#059669';
+            case 'completed': return '#10b981';
+            case 'completed & paid': return '#059669';
             case 'cancelled': return '#ef4444';
             case 'active': return '#f59e0b';
             case 'no_show': return '#6b7280';
@@ -246,7 +216,6 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
         const timeDifference = bookingTime.getTime() - now.getTime();
         const hoursDifference = timeDifference / (1000 * 3600);
 
-        // NEW: Can't cancel completed services (completed or awaiting payment)
         return booking.status === 'confirmed' && hoursDifference > 24;
     };
 
@@ -314,7 +283,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                                 color: '#fff',
                             }}
                         >
-                            {getCustomerStatusDisplay(booking.status, booking)}
+                            {booking.status}
                         </div>
                     </div>
 
@@ -450,8 +419,13 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             Quick Actions
                         </h3>
                         <a
-                            href={`/book-now?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}`}
-                            className="inline-block px-4 py-2 text-sm font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 mr-2 mt-2 no-underline"
+                            href={`/dog-walking/dashboard/book-new?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}`}
+                            style={{
+                                ...styles.button,
+                                ...styles.primaryButton,
+                                textDecoration: "none",
+                                display: "inline-block",
+                            }}
                         >
                             📅 Book New Service
                         </a>
@@ -489,18 +463,11 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             </h3>
 
                             {(() => {
-                                // NEW: Filter for current bookings (confirmed, completed, and awaiting payment)
-                                const currentBookings = bookings.filter(booking => {
-                                    if (booking.status === 'confirmed') return true;
-
-                                    if (booking.status === 'completed') {
-                                        // Only show completed bookings in "current" if they're unpaid (any age)
-                                        return true;
-                                    }
-
-                                    return false;
-                                });
-
+                                // Filter for current bookings (confirmed and completed but not paid)
+                                const currentBookings = bookings.filter(booking => 
+                                    booking.status === 'confirmed' || booking.status === 'completed'
+                                );
+                                
                                 if (currentBookings.length === 0) {
                                     return (
                                         <div style={{ textAlign: "center", padding: "20px" }}>
@@ -525,12 +492,12 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
 
                             {(() => {
                                 // Filter for historical bookings (completed & paid, cancelled, no-show)
-                                const historyBookings = bookings.filter(booking =>
-                                    booking.status === 'completed & paid' ||
-                                    booking.status === 'cancelled' ||
+                                const historyBookings = bookings.filter(booking => 
+                                    booking.status === 'completed & paid' || 
+                                    booking.status === 'cancelled' || 
                                     booking.status === 'no_show'
                                 );
-
+                                
                                 if (historyBookings.length === 0) {
                                     return (
                                         <div style={{ textAlign: "center", padding: "20px" }}>
@@ -557,8 +524,13 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                                     Ready to schedule your first dog walking service?
                                 </p>
                                 <a
-                                    href={`/book-now?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}`}
-                                    className="inline-block px-4 py-2 text-sm font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 mr-2 mt-2 no-underline"
+                                    href={`/dog-walking/dashboard/book-new?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}`}
+                                    style={{
+                                        ...styles.button,
+                                        ...styles.primaryButton,
+                                        textDecoration: "none",
+                                        display: "inline-block",
+                                    }}
                                 >
                                     Book Your First Walk
                                 </a>

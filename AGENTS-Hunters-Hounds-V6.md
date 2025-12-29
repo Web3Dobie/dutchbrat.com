@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations  
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform  
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)  
-**Status**: **V6 - Secondary Addresses & Multi-Location Service** 🎉
+**Status**: **V6 - Secondary Addresses & Multi-Location Service + Automated Payment Reminders** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -75,7 +75,106 @@ export function useClientDomainDetection() {
 🔗 /api/dog-walking/secondary-addresses         → GET/POST secondary addresses
 🔗 /api/dog-walking/secondary-addresses/[id]    → PUT/DELETE specific address
 🔗 /api/dog-walking/secondary-addresses/[id]/toggle → PATCH toggle active status
+
+# NEW V6: Payment Reminder System Routes (Automated)
+🔗 /api/dog-walking/process-payment-reminders   → Daily automated payment reminder processing (internal)
+🔗 /api/dog-walking/admin/trigger-payment-reminders → Manual payment reminder trigger (testing)
+
+# Admin Authentication Routes
+🔗 /api/dog-walking/admin/auth          → POST: Admin login (sets session cookie)
+🔗 /api/dog-walking/admin/auth/check    → GET: Check authentication status
+🔗 /api/dog-walking/admin/auth/logout   → POST: Logout (clears session cookie)
 ```
+
+## 🔐 Admin Panel Authentication
+
+### **Overview**
+The admin panel at `hunters-hounds.london/dog-walking/admin/` is protected by cookie-based authentication. This is separate from the Hunter Media authentication system used on `hunterthedobermann.london`.
+
+### **Authentication Flow**
+```
+1. User visits /dog-walking/admin/
+2. AdminAuthWrapper checks for 'dog-walking-admin-auth' cookie
+3. If not authenticated → Login form displayed
+4. User enters credentials (same as Hunter Media)
+5. POST /api/dog-walking/admin/auth validates credentials
+6. On success → Cookie set, admin dashboard displayed
+7. Logout button clears cookie and returns to login form
+```
+
+### **Cookie Configuration**
+```typescript
+// Cookie: dog-walking-admin-auth
+{
+    name: 'dog-walking-admin-auth',
+    value: 'authenticated',
+    httpOnly: true,           // Not accessible via JavaScript
+    secure: true,             // HTTPS only in production
+    sameSite: 'lax',          // CSRF protection
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+    path: '/'
+}
+```
+
+### **Protected Endpoints**
+All admin API endpoints check for the `dog-walking-admin-auth` cookie:
+```typescript
+// lib/auth.ts - Shared authentication utility
+export function isAuthenticated(req: NextRequest): boolean {
+    const authCookie = req.cookies.get('dog-walking-admin-auth');
+    return authCookie?.value === 'authenticated';
+}
+
+export function unauthorizedResponse(): NextResponse {
+    return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+    );
+}
+```
+
+**Protected Admin Endpoints:**
+- `/api/dog-walking/admin/create-booking` - Create bookings
+- `/api/dog-walking/admin/bookings/[id]/status` - Update booking status
+- `/api/dog-walking/admin/bookings/[id]/price` - Update booking price
+- `/api/dog-walking/admin/bookings/editable` - Get editable bookings
+- `/api/dog-walking/admin/mark-completed` - Mark bookings completed
+- `/api/dog-walking/admin/mark-paid` - Mark bookings paid
+- `/api/dog-walking/admin/clients` - List all clients
+- `/api/dog-walking/admin/clients/[clientId]` - Client CRUD operations
+- `/api/dog-walking/admin/payment-status` - Payment statistics
+- `/api/dog-walking/admin/photo-check` - Photo filename generation
+- `/api/dog-walking/admin/photo-check/[filename]` - Check photo exists
+- `/api/dog-walking/admin/update-summary` - Update walk summaries
+- `/api/dog-walking/admin/christmas-email` - Send campaign emails
+
+### **Credentials**
+Uses the same credentials as Hunter Media (defined in environment):
+```bash
+# Environment variables (config/services/frontend.env)
+HUNTER_ADMIN_USER=boyboy
+HUNTER_ADMIN_PASSWORD=010918
+
+# Hardcoded fallback credentials
+{ username: 'hunter', password: 'memorial' }
+```
+
+### **Key Components**
+```
+/lib/auth.ts                           → Shared auth utility (isAuthenticated, unauthorizedResponse)
+/components/AdminAuthWrapper.tsx       → Login form + auth state wrapper
+/app/dog-walking/admin/layout.tsx      → Wraps all admin pages with AdminAuthWrapper
+/api/dog-walking/admin/auth/route.ts   → Login endpoint
+/api/dog-walking/admin/auth/check/     → Auth status check
+/api/dog-walking/admin/auth/logout/    → Logout endpoint
+```
+
+### **Domain Separation**
+The authentication is domain-specific:
+- **hunters-hounds.london**: Uses `dog-walking-admin-auth` cookie
+- **hunterthedobermann.london**: Uses `hunter-auth` cookie (separate system)
+
+Logging into one domain does NOT grant access to the other.
 
 ## 🎨 Enhanced Navigation Architecture
 
@@ -148,446 +247,454 @@ CREATE TABLE hunters_hounds.owners (
 ```sql
 CREATE TABLE hunters_hounds.dogs (
     id SERIAL PRIMARY KEY,
-    owner_id INTEGER REFERENCES hunters_hounds.owners(id) ON DELETE CASCADE,
+    owner_id INT REFERENCES hunters_hounds.owners(id),
     dog_name VARCHAR(255) NOT NULL,
-    dog_breed VARCHAR(255) NOT NULL,
-    dog_age INTEGER NOT NULL,
-    behavioral_notes TEXT,
-    image_filename VARCHAR(255) DEFAULT NULL,
+    breed VARCHAR(255),
+    age INT,
+    notes TEXT,
+    image_filename VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**bookings Table:**
+```sql
+CREATE TABLE hunters_hounds.bookings (
+    id SERIAL PRIMARY KEY,
+    owner_id INT REFERENCES hunters_hounds.owners(id),
+    dog_id_1 INT REFERENCES hunters_hounds.dogs(id),
+    dog_id_2 INT REFERENCES hunters_hounds.dogs(id), -- Optional second dog
+    secondary_address_id INT REFERENCES hunters_hounds.secondary_addresses(id), -- NEW V6
+    service_type VARCHAR(255) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP, -- NEW V6: Supports multi-day dog sitting
+    duration_minutes INT, -- NULL for multi-day bookings
+    price_pounds DECIMAL(8,2), -- NEW V6: Store calculated price
+    booking_type VARCHAR(50) DEFAULT 'single_session', -- NEW V6: 'single_session', 'multi_day_sitting'
+    status VARCHAR(50) DEFAULT 'confirmed', -- confirmed, cancelled, completed, completed & paid, paid
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_dogs_image_filename ON hunters_hounds.dogs(image_filename);
-CREATE INDEX idx_dogs_id_desc ON hunters_hounds.dogs(id DESC);
-CREATE INDEX idx_owners_id_desc ON hunters_hounds.owners(id DESC);
 ```
 
 **NEW V6: secondary_addresses Table:**
 ```sql
 CREATE TABLE hunters_hounds.secondary_addresses (
     id SERIAL PRIMARY KEY,
-    owner_id INTEGER REFERENCES hunters_hounds.owners(id) ON DELETE CASCADE,
-    address_label VARCHAR(255) NOT NULL, -- e.g., "Sarah's House", "Grandma's Place"
-    address TEXT NOT NULL,
-    contact_name VARCHAR(255) NOT NULL, -- Primary contact at this address
-    contact_email VARCHAR(255) NOT NULL,
-    contact_phone VARCHAR(255),
-    partner_name VARCHAR(255), -- Secondary contact (e.g., spouse)
-    partner_email VARCHAR(255),
-    partner_phone VARCHAR(255),
-    is_active BOOLEAN DEFAULT true,
-    notes TEXT, -- Special instructions for this address
+    owner_id INT REFERENCES hunters_hounds.owners(id) ON DELETE CASCADE,
+    address_label VARCHAR(100) NOT NULL, -- e.g., "Grandma's House", "Office"
+    full_address TEXT NOT NULL,
+    contact_name VARCHAR(255), -- Who will be present at this address
+    contact_phone VARCHAR(20),
+    contact_email VARCHAR(255),
+    partner_name VARCHAR(255), -- Secondary partner contact at this location
+    partner_email VARCHAR(255), -- Secondary partner email for notifications
+    notes TEXT, -- Special instructions for this location
+    is_active BOOLEAN DEFAULT true, -- Allow deactivation without deletion
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_label_per_owner UNIQUE (owner_id, address_label)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+```
 
+**NEW V6: payment_reminders Table:**
+```sql
+CREATE TABLE hunters_hounds.payment_reminders (
+    id SERIAL PRIMARY KEY,
+    owner_id INT REFERENCES hunters_hounds.owners(id) NOT NULL,
+    reminder_type VARCHAR(10) CHECK (reminder_type IN ('3_day', '7_day')) NOT NULL,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_amount_gbp DECIMAL(10,2) NOT NULL,
+    booking_ids INT[] NOT NULL,
+    email_sent_to VARCHAR(255) NOT NULL
+);
+```
+
+### Database Functions
+
+**NEW V6: Automated Email Recipient Calculation:**
+```sql
+-- Function to get all email recipients for a booking based on address selection
+CREATE OR REPLACE FUNCTION hunters_hounds.get_booking_emails(booking_owner_id INT, booking_secondary_address_id INT DEFAULT NULL)
+RETURNS TEXT[] AS $$
+DECLARE
+    email_list TEXT[] := ARRAY[]::TEXT[];
+    owner_email TEXT;
+    partner_email TEXT;
+    secondary_contact_email TEXT;
+    secondary_partner_email TEXT;
+BEGIN
+    -- Get owner and partner emails
+    SELECT o.email, o.partner_email
+    INTO owner_email, partner_email
+    FROM hunters_hounds.owners o
+    WHERE o.id = booking_owner_id;
+    
+    -- Add owner email (always included)
+    IF owner_email IS NOT NULL THEN
+        email_list := array_append(email_list, owner_email);
+    END IF;
+    
+    -- Add partner email if exists
+    IF partner_email IS NOT NULL AND partner_email != '' THEN
+        email_list := array_append(email_list, partner_email);
+    END IF;
+    
+    -- If booking uses secondary address, add those contacts
+    IF booking_secondary_address_id IS NOT NULL THEN
+        SELECT sa.contact_email, sa.partner_email
+        INTO secondary_contact_email, secondary_partner_email
+        FROM hunters_hounds.secondary_addresses sa
+        WHERE sa.id = booking_secondary_address_id;
+        
+        -- Add secondary contact email
+        IF secondary_contact_email IS NOT NULL AND secondary_contact_email != '' THEN
+            email_list := array_append(email_list, secondary_contact_email);
+        END IF;
+        
+        -- Add secondary partner email
+        IF secondary_partner_email IS NOT NULL AND secondary_partner_email != '' THEN
+            email_list := array_append(email_list, secondary_partner_email);
+        END IF;
+    END IF;
+    
+    -- Remove duplicates and return
+    RETURN ARRAY(SELECT DISTINCT unnest(email_list));
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Indexes for Performance
+
+```sql
+-- Core performance indexes
+CREATE INDEX idx_bookings_owner_id ON hunters_hounds.bookings(owner_id);
+CREATE INDEX idx_bookings_start_time ON hunters_hounds.bookings(start_time);
+CREATE INDEX idx_bookings_status ON hunters_hounds.bookings(status);
+CREATE INDEX idx_dogs_owner_id ON hunters_hounds.dogs(owner_id);
 CREATE INDEX idx_secondary_addresses_owner_id ON hunters_hounds.secondary_addresses(owner_id);
 CREATE INDEX idx_secondary_addresses_active ON hunters_hounds.secondary_addresses(is_active);
+
+-- NEW V6: Payment reminder indexes
+CREATE INDEX idx_payment_reminders_owner_type ON hunters_hounds.payment_reminders(owner_id, reminder_type);
+CREATE INDEX idx_bookings_completed_status ON hunters_hounds.bookings(status, end_time) WHERE status = 'completed';
 ```
 
-**bookings Table (ENHANCED V6):**
+## 💳 Automated Payment Reminder System (V6)
+
+### **System Overview**
+**Purpose**: Automated email reminders for customers with overdue payments  
+**Trigger**: Daily at 2 PM via cron job for bookings with 'completed' status 3+ days past end_time  
+**Architecture**: Node.js script + PostgreSQL tracking + Resend email integration  
+**Strategy**: Two-tier reminder system (3-day friendly, 7-day urgent) with payment crossing disclaimers  
+
+### **Database Schema Extension**
 ```sql
-CREATE TABLE hunters_hounds.bookings (
+-- Payment reminder tracking table
+CREATE TABLE hunters_hounds.payment_reminders (
     id SERIAL PRIMARY KEY,
-    owner_id INTEGER REFERENCES hunters_hounds.owners(id) ON DELETE CASCADE,
-    dog_id_1 INTEGER REFERENCES hunters_hounds.dogs(id) ON DELETE CASCADE,
-    dog_id_2 INTEGER REFERENCES hunters_hounds.dogs(id) ON DELETE CASCADE NULL,
-    service_type VARCHAR(50) NOT NULL CHECK (service_type IN ('meet-greet', 'solo-walk', 'quick-walk', 'dog-sitting')),
-    
-    -- Enhanced timing fields
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NOT NULL,
-    booking_type VARCHAR(20) DEFAULT 'single' CHECK (booking_type IN ('single', 'multi_day')),
-    
-    -- NEW V6: Secondary address support
-    secondary_address_id INTEGER REFERENCES hunters_hounds.secondary_addresses(id) ON DELETE SET NULL,
-    
-    -- Additional fields
-    price_pounds DECIMAL(6,2),
-    google_event_id VARCHAR(255) UNIQUE,
-    status VARCHAR(20) DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'cancelled', 'completed')),
-    cancellation_token VARCHAR(255) UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Constraints
-    CONSTRAINT check_end_time_after_start CHECK (end_time >= start_time),
-    CONSTRAINT bookings_start_time_confirmed_unique UNIQUE (start_time) WHERE status = 'confirmed'
+    owner_id INT REFERENCES hunters_hounds.owners(id) NOT NULL,
+    reminder_type VARCHAR(10) CHECK (reminder_type IN ('3_day', '7_day')) NOT NULL,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_amount_gbp DECIMAL(10,2) NOT NULL,
+    booking_ids INT[] NOT NULL,
+    email_sent_to VARCHAR(255) NOT NULL
 );
 
-CREATE INDEX idx_bookings_secondary_address_id ON hunters_hounds.bookings(secondary_address_id);
+-- Performance index for reminder history lookup
+CREATE INDEX idx_payment_reminders_owner_type ON hunters_hounds.payment_reminders(owner_id, reminder_type);
 ```
 
-### NEW V6: Email Distribution System
+### **Automation Infrastructure**
+**Cron Job Schedule:**
+```bash
+# Daily execution at 2 PM UK time
+0 14 * * * cd /home/hunter-dev/production-stack && /usr/bin/node scripts/send-payment-reminders.js >> /var/log/reminders/payment-log 2>&1
+```
 
-**Database Functions for Multi-Recipient Emails:**
+**Script Location**: `/home/hunter-dev/production-stack/scripts/send-payment-reminders.js`  
+**Logging**: `/var/log/reminders/payment-log` (follows existing reminder pattern)  
+**Environment**: Uses existing production stack environment configuration  
+
+### **Payment Status Workflow Integration**
+**Database Status Mapping:**
+- `confirmed` → Service scheduled
+- `completed` → Service delivered, payment pending
+- `completed & paid` / `paid` → Payment received
+
+**Customer Dashboard Logic:**
+```typescript
+// Time-based status display for customers
+const getCustomerStatusDisplay = (status: string, booking: Booking): string => {
+    if (status === 'completed') {
+        const daysOverdue = Math.floor((now.getTime() - endTime.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysOverdue >= 3) {
+            return 'Completed - Payment Pending'; // Red display
+        } else {
+            return 'Completed'; // Green display  
+        }
+    }
+    return status;
+};
+```
+
+### **Intelligent Reminder Logic**
+**Smart Aggregation:**
+- Finds bookings with 'completed' status 3+ days past end_time
+- Groups all outstanding payments per customer (not just overdue ones)
+- Single email includes complete outstanding balance
+
+**Duplicate Prevention:**
+- Tracks reminder history in payment_reminders table
+- 3-day reminder: sent once when oldest overdue booking reaches 3-7 days
+- 7-day reminder: sent once when oldest overdue booking reaches 7+ days
+- No duplicate reminders within same tier
+
+**Multi-Service Consolidation:**
+```javascript
+// Example: Caroline with multiple overdue services
+Customer: Caroline
+├── Quick Walk Thursday (£10.00) - 3 days overdue
+├── Solo Walk Friday (£17.50) - 2 days overdue  
+└── Total Amount Due: £27.50 (single consolidated email)
+```
+
+### **Professional Email Templates**
+**3-Day Reminder (Friendly):**
+```
+Subject: Hunter's Hounds Payment Reminder
+
+Hi [Customer],
+
+I hope [Dog] is doing well!
+
+I understand life can get busy, and I just wanted to gently remind you 
+about payment for the following services:
+
+Outstanding Services:
+• Solo Walk on Thursday, 19 December 2024 - £17.50
+• Quick Walk on Friday, 20 December 2024 - £10.00
+
+Total Amount Due: £27.50
+
+Payment Details:
+Ernesto Becker
+Sort Code: 04-00-75
+Account Number: 19945388
+
+Please note: If you have already made payment and this email has crossed 
+in the post, please disregard this reminder and accept my apologies for 
+any inconvenience. Your payment may take a day or two to be reflected 
+in our system.
+
+Thank you for choosing Hunter's Hounds!
+```
+
+**7-Day Reminder (Urgent):**
+- More direct language: "I notice you haven't been able to make payment just yet"
+- Increased urgency while maintaining professionalism
+- Same payment crossing disclaimer
+- Request for direct contact if issues exist
+
+### **Email System Integration**
+**Technical Implementation:**
+- **From**: `Hunter's Hounds <bookings@hunters-hounds.london>`
+- **Recipients**: Customer + partner (if provided)
+- **BCC**: Business owner (`bookings@hunters-hounds.london`)
+- **Service**: Existing Resend integration
+- **Templates**: HTML formatted with Hunter's Hounds branding
+
+**Recipient Intelligence:**
+```javascript
+// Automated recipient calculation
+const recipients = [customerEmail];
+if (partner_email) recipients.push(partner_email);
+
+await sendEmail({
+    to: recipients,
+    bcc: ["bookings@hunters-hounds.london"],
+    subject: "Hunter's Hounds Payment Reminder", 
+    html: emailContent
+});
+```
+
+### **Customer Experience Integration**
+**Dashboard Status Updates:**
+- **Recent completed** (< 3 days): "Completed" in green
+- **Overdue completed** (3+ days): "Completed - Payment Pending" in red
+- All completed bookings remain in "Current Bookings" until marked paid
+- Payment reminders link to customer dashboard for service verification
+
+**Professional Communication:**
+- Understanding tone acknowledging life's complexities
+- Clear payment instructions with bank details
+- Crossing disclaimer prevents customer confusion
+- Links to customer dashboard for self-service
+- Direct contact information for payment questions
+
+### **Business Operations Integration**
+**Daily Workflow Enhancement:**
+- **2 PM automated execution**: No manual intervention required
+- **Business owner visibility**: BCC on all reminder emails
+- **Logging integration**: Follows existing reminder script pattern
+- **Status tracking**: Clear audit trail of all reminder communications
+- **Performance monitoring**: Success/failure counts in daily logs
+
+**Payment Management:**
+- Manual status changes from 'completed' to 'completed & paid' stop further reminders
+- Admin dashboard provides payment tracking interface
+- Customer payment status visible in real-time
+- Automated system reduces manual follow-up workload
+
+### **Technical Architecture**
+**Database Queries:**
 ```sql
--- Function to get all email recipients for a booking
-CREATE OR REPLACE FUNCTION hunters_hounds.get_booking_emails(booking_id_param integer)
-RETURNS text[]
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    result_emails text[];
-BEGIN
-    SELECT ARRAY(
-        SELECT DISTINCT email FROM (
-            -- Primary customer email
-            SELECT o.email FROM hunters_hounds.bookings b
-            JOIN hunters_hounds.owners o ON b.owner_id = o.id
-            WHERE b.id = booking_id_param AND o.email IS NOT NULL
-            
-            UNION
-            
-            -- Primary customer partner email
-            SELECT o.partner_email FROM hunters_hounds.bookings b
-            JOIN hunters_hounds.owners o ON b.owner_id = o.id
-            WHERE b.id = booking_id_param AND o.partner_email IS NOT NULL
-            
-            UNION
-            
-            -- Secondary address contact email
-            SELECT sa.contact_email FROM hunters_hounds.bookings b
-            JOIN hunters_hounds.secondary_addresses sa ON b.secondary_address_id = sa.id
-            WHERE b.id = booking_id_param AND sa.contact_email IS NOT NULL AND sa.is_active = true
-            
-            UNION
-            
-            -- Secondary address partner email
-            SELECT sa.partner_email FROM hunters_hounds.bookings b
-            JOIN hunters_hounds.secondary_addresses sa ON b.secondary_address_id = sa.id
-            WHERE b.id = booking_id_param AND sa.partner_email IS NOT NULL AND sa.is_active = true
-        ) all_emails
-    ) INTO result_emails;
-    RETURN result_emails;
-END;
-$$;
-
--- View for debugging email distribution
-CREATE VIEW hunters_hounds.booking_all_emails AS
-SELECT 
-    b.id as booking_id,
-    b.owner_id,
-    b.secondary_address_id,
-    o.email as primary_email,
-    o.partner_email as primary_partner_email,
-    sa.contact_email as secondary_contact_email,
-    sa.partner_email as secondary_partner_email,
-    hunters_hounds.get_booking_emails(b.id) as all_emails
+-- Find overdue bookings
+SELECT b.*, o.owner_name, o.email, o.partner_email,
+       CASE WHEN d2.dog_name IS NOT NULL 
+            THEN ARRAY[d1.dog_name, d2.dog_name]
+            ELSE ARRAY[d1.dog_name] END as dog_names
 FROM hunters_hounds.bookings b
 JOIN hunters_hounds.owners o ON b.owner_id = o.id
-LEFT JOIN hunters_hounds.secondary_addresses sa ON b.secondary_address_id = sa.id;
+JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
+LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
+WHERE b.status = 'completed'
+AND b.end_time < NOW() - INTERVAL '3 days';
 ```
 
-## 🎯 NEW V6: Secondary Addresses Feature
+**Error Handling:**
+- Individual customer failures don't stop batch processing
+- Email delivery failures logged but system continues
+- Database connectivity issues logged for debugging
+- Comprehensive error context for troubleshooting
 
-### **Complete Address Management System**
+**Performance Features:**
+- Connection string database configuration for cron environment
+- Environment variable loading from production secrets
+- Postgresql hostname resolution for Docker environment
+- Email rate limiting handled by Resend service
+
+### **Security & Data Protection**
+**Data Privacy:**
+- Payment reminder data linked to existing customer records
+- No new personal information stored beyond tracking
+- Email addresses validated from existing customer database
+- Partner email inclusion respects existing opt-in status
+
+**Business Security:**
+- BCC to business owner ensures visibility of all communications
+- Audit trail in payment_reminders table for compliance
+- No payment information stored beyond tracking amounts
+- Customer contact information sourced from verified database
+
+### **Analytics & Monitoring**
+**Daily Metrics:**
+```
+🔄 [timestamp] Starting payment reminder process...
+📋 Found X overdue bookings for Y customers
+✅ Sent 3_day reminder to Customer A (£17.50)
+✅ Sent 3_day reminder to Customer B (£27.50)
+🎉 Payment reminder process completed. Sent N reminders.
+```
+
+**Business Intelligence:**
+- Payment reminder effectiveness tracking through reminder_type analysis
+- Customer payment pattern analysis through booking completion rates
+- Outstanding payment reporting through aggregated booking queries
+- Revenue recovery metrics through payment status transitions
+
+### **Operational Procedures**
+**Daily Operations:**
+- **Automated execution**: No manual intervention required for standard operations
+- **Email monitoring**: Business owner receives BCC copies for oversight
+- **Status management**: Manual payment status updates in admin dashboard
+- **Customer inquiries**: Payment questions handled via existing WhatsApp contact
+
+**Exception Handling:**
+- **Payment crossing**: Disclaimer in emails prevents customer confusion
+- **System failures**: Logged errors for technical troubleshooting
+- **Customer disputes**: Manual override through admin status updates
+- **Email delivery issues**: Resend service handles delivery monitoring
+
+### **Integration Points**
+**Existing System Connections:**
+- **Customer Database**: Uses existing owners/dogs/bookings tables
+- **Email Service**: Integrates with existing Resend configuration  
+- **Admin Dashboard**: Payment status changes affect reminder logic
+- **Customer Dashboard**: Status display reflects payment pending state
+- **Cron Infrastructure**: Follows existing automation pattern
+
+**Future Enhancement Opportunities:**
+- **Payment link integration**: Direct payment processing from reminder emails
+- **SMS reminder option**: Alternative communication channel for urgent cases
+- **Payment plan support**: Extended payment arrangements for larger amounts
+- **Customer preferences**: Opt-out or timing preferences for reminder communications
+
+## 🚀 V6 Enhanced Integration Features
+
+### **Enhanced Booking Flow with Multi-Location Support (V6)**
+```
+Customer Journey with Secondary Addresses:
+1. Login/Register → Customer provides basic details + main address
+2. Service Selection → Choose service type, date, time
+3. Dog Selection → Select 1-2 dogs for the service
+4. NEW: Address Selection → Choose primary address or any active secondary address
+5. Confirmation → Review all details including selected address
+6. Booking Created → Multi-recipient email system automatically notifies all relevant contacts
+```
+
+**Address Selection Interface (V6):**
 ```typescript
-// Enhanced customer dashboard with secondary address management
-
-✅ **Address Dashboard Tab**: Third tab in customer dashboard for address management
-✅ **CRUD Operations**: Create, read, update, delete secondary addresses
-✅ **Contact Management**: Primary contact + partner contact per address
-✅ **Status Control**: Active/inactive toggle for temporary addresses
-✅ **Validation**: Unique address labels per customer, required field validation
-✅ **Notes Support**: Special instructions field for each address
+// Enhanced booking flow includes address step
+<AddressSelection 
+  primaryAddress={customer.address}
+  secondaryAddresses={customer.activeSecondaryAddresses}
+  selectedAddressId={selectedAddressId}
+  onAddressSelect={setSelectedAddressId}
+  showContactInfo={true}
+/>
 ```
 
-### **Enhanced Booking Flow with Address Selection**
-```typescript
-// New booking step: Address Selection (between dog selection and final confirmation)
-
-✅ **Address Selection Step**: Choose primary address or any active secondary address
-✅ **Visual Address Display**: Shows full address, contact info, and notes for each option
-✅ **Smart Defaults**: Primary address pre-selected, secondary addresses as alternatives
-✅ **Contact Visibility**: Displays who will be notified for each address option
-✅ **Navigation Flow**: Dog Selection → Address Selection → Final Booking
-✅ **Mobile Optimization**: Address cards stack vertically on mobile devices
-```
-
-### **Multi-Recipient Email System**
+### **Multi-Recipient Email System (V6)**
 ```typescript
 // Intelligent email distribution based on selected address
-
-✅ **Primary Address Booking**: 
-   - Customer email + Partner email (if set)
-   
-✅ **Secondary Address Booking**:
-   - Customer email + Customer partner email
-   - Secondary address contact email + Secondary address partner email
-   
-✅ **Email Intelligence**: 
-   - Automatic deduplication of email addresses
-   - Only sends to active addresses
-   - Skips null/empty email fields
-   - Business email always BCC'd
-   
-✅ **Calendar Integration**: 
-   - Google Calendar events show correct address
-   - Location field displays address label and full address
-   - All contacts receive calendar invitations
-   
-✅ **Telegram Notifications**: 
-   - Business notifications include address information
-   - Shows which address was selected for pickup/dropoff
+const getBookingRecipients = (booking) => {
+  if (booking.secondary_address_id) {
+    // Secondary address booking → All 4 possible contacts
+    return [
+      customer.email,                    // Customer (always)
+      customer.partner_email,            // Customer partner (if exists)
+      secondaryAddress.contact_email,    // Secondary contact (if exists) 
+      secondaryAddress.partner_email     // Secondary partner (if exists)
+    ].filter(email => email && email.trim() !== '');
+  } else {
+    // Primary address booking → Customer + partner only
+    return [
+      customer.email,                    // Customer (always)
+      customer.partner_email             // Customer partner (if exists)
+    ].filter(email => email && email.trim() !== '');
+  }
+};
 ```
 
-### **Secondary Addresses API Architecture**
+### **Complete Multi-Location Customer Experience (V6)**
+
+**Enhanced Dashboard Features:**
 ```typescript
-// Complete REST API for secondary address management
+✅ **Address Management**: 
+   - Add/edit/deactivate secondary addresses with full contact details
+   - Visual address cards showing contact names and status indicators
+   - Notes field for location-specific instructions (dog leash location, etc.)
 
-interface SecondaryAddress {
-    id: number;
-    owner_id: number;
-    address_label: string;        // "Sarah's House", "Office"
-    address: string;              // Full address
-    contact_name: string;         // Primary contact
-    contact_email: string;        // Primary email
-    contact_phone?: string;       // Primary phone
-    partner_name?: string;        // Secondary contact
-    partner_email?: string;       // Secondary email  
-    partner_phone?: string;       // Secondary phone
-    is_active: boolean;           // Active status
-    notes?: string;               // Special instructions
-    created_at: string;
-    updated_at: string;
-}
+✅ **Contact Network Management**: 
+   - Primary customer contact + optional partner
+   - Secondary address contact + optional partner per location
+   - Automatic email deduplication prevents spam
 
-// API Endpoints:
-// GET    /api/dog-walking/secondary-addresses?owner_id={id} → List addresses
-// POST   /api/dog-walking/secondary-addresses              → Create address
-// PUT    /api/dog-walking/secondary-addresses/[id]         → Update address
-// DELETE /api/dog-walking/secondary-addresses/[id]         → Delete address
-// PATCH  /api/dog-walking/secondary-addresses/[id]/toggle  → Toggle active status
-```
-
-### **Address Management Features**
-```typescript
-// Comprehensive address management with safety features
-
-✅ **Validation Rules**:
-   - Unique address labels per customer
-   - Required fields: label, address, contact_name, contact_email
-   - Email format validation
-   - Address length limits
-   
-✅ **Safety Features**:
-   - Cannot delete addresses used in future bookings
-   - Cannot deactivate addresses with confirmed upcoming bookings
-   - Transaction-based operations with rollback support
-   - Audit trail with created_at/updated_at timestamps
-   
-✅ **User Experience**:
-   - Clean card-based UI matching dashboard theme
-   - Inline editing with modal interface
-   - Real-time validation feedback
-   - Active/inactive visual status indicators
-   - Notes field for special pickup/dropoff instructions
-```
-
-## 🌐 Professional Customer Journey & User Experience (ENHANCED V6)
-
-### **NEW: Enhanced Customer Booking Flow**
-```mermaid
-graph LR
-    A[Visit hunters-hounds.london] --> B[Beautiful Homepage]
-    B --> C[Read Hunter's Story + Services]
-    C --> D[Click 'Book a Walk' CTA]
-    D --> E[/services - Detailed Pricing]
-    E --> F[/book-now - Professional Booking]
-    F --> G[Phone/Email Lookup + Registration]
-    G --> H[Service Selection + Calendar]
-    H --> I[Dog Selection]
-    I --> J[NEW: Address Selection - Primary or Secondary]
-    J --> K[Final Booking Confirmation with Address Info]
-    K --> L[Multi-Recipient Email Confirmation]
-    L --> M[Personalized Dashboard with Address Management]
-```
-
-### **Enhanced Dashboard Experience (V6)**
-```mermaid
-graph LR
-    A[Customer Login] --> B[Personalized Dashboard]
-    B --> C[Bookings Tab - Upcoming & History]
-    B --> D[Details Tab - Profile Management]  
-    B --> E[NEW: Addresses Tab - Secondary Address Management]
-    E --> F[Add New Address]
-    E --> G[Edit Existing Address]
-    E --> H[Toggle Active Status]
-    E --> I[View Contact Information]
-    F --> J[Address Available in Next Booking]
-```
-
-## 💻 Enhanced API Routes & Endpoints (V6)
-
-**Base Path**: `/api/dog-walking/` *(Backend paths unchanged for stability)*
-
-### Core API Endpoints (ENHANCED V6)
-
-**POST /api/dog-walking/book** *(ENHANCED)*
-- **Purpose**: Create booking with secondary address support
-- **NEW Features**:
-  - ✅ Accepts `secondary_address_id` parameter (null = primary address)
-  - ✅ Validates secondary address belongs to customer and is active
-  - ✅ Calendar events show correct address label and location
-  - ✅ Emails sent to all relevant contacts automatically
-  - ✅ Telegram notifications include address information
-- **Integration**: Google Calendar + Multi-Recipient Email + Telegram + Database
-- **Response**: Includes `address_label` field in booking confirmation
-
-**GET /api/dog-walking/dashboard** *(ENHANCED)*
-- **Purpose**: Customer booking management with address info
-- **NEW Features**:
-  - ✅ Booking history shows address labels
-  - ✅ Distinguishes primary vs secondary address bookings
-- **Response**: Bookings include address information for context
-
-### NEW V6: Secondary Addresses API Endpoints
-
-**GET /api/dog-walking/secondary-addresses**
-- **Purpose**: List secondary addresses for customer
-- **Parameters**: `owner_id` (required) - Customer ID
-- **Features**:
-  - ✅ Returns only addresses belonging to specified owner
-  - ✅ Includes all contact information (primary + partner)
-  - ✅ Shows active/inactive status
-  - ✅ Ordered by creation date (newest first)
-- **Response**: Array of `SecondaryAddress` objects
-
-**POST /api/dog-walking/secondary-addresses**  
-- **Purpose**: Create new secondary address
-- **Validation**:
-  - ✅ Unique address label per customer
-  - ✅ Owner exists in database
-  - ✅ Required fields: address_label, address, contact_name, contact_email
-  - ✅ Email format validation
-- **Features**:
-  - ✅ Transaction-based creation with error rollback
-  - ✅ Automatic timestamp creation
-- **Response**: Created address with generated ID
-
-**PUT /api/dog-walking/secondary-addresses/[id]**
-- **Purpose**: Update existing secondary address
-- **Validation**:
-  - ✅ Address belongs to authenticated customer
-  - ✅ Label uniqueness (excluding current address)
-  - ✅ Required field validation
-- **Features**:
-  - ✅ Partial updates supported (only changed fields)
-  - ✅ Automatic updated_at timestamp
-- **Response**: Updated address object
-
-**DELETE /api/dog-walking/secondary-addresses/[id]**
-- **Purpose**: Delete secondary address
-- **Safety Features**:
-  - ✅ Cannot delete if used in any bookings (past or future)
-  - ✅ Prevents orphaned booking references
-  - ✅ Transaction-based deletion
-- **Validation**: Address belongs to authenticated customer
-- **Response**: Success confirmation or error with reason
-
-**PATCH /api/dog-walking/secondary-addresses/[id]/toggle**
-- **Purpose**: Toggle active/inactive status
-- **Safety Features**:
-  - ✅ Cannot deactivate if future confirmed bookings exist
-  - ✅ Can always reactivate inactive addresses
-  - ✅ Protects booking integrity
-- **Features**:
-  - ✅ Automatic status flip (active ↔ inactive)
-  - ✅ Returns new status in response
-- **Use Cases**: Temporary addresses, seasonal locations, moving situations
-
-## 🎨 Enhanced Frontend Architecture (V6)
-
-### **Enhanced Customer Dashboard**
-```typescript
-// app/my-account/page.tsx - Now with address management
-interface DashboardView {
-    bookings: BookingHistory;
-    details: CustomerProfile;
-    addresses: SecondaryAddressManagement; // NEW V6
-}
-
-// Customer dashboard now includes:
-// ✅ Third tab: "📍 Secondary Addresses"  
-// ✅ Complete CRUD interface for address management
-// ✅ Visual status indicators (active/inactive)
-// ✅ Contact information display (primary + partner)
-// ✅ Notes field for special instructions
-// ✅ Integration with booking flow
-```
-
-### **Enhanced Booking Experience**
-```typescript
-// app/book-now/page.tsx - Address selection integration
-interface BookingFlow {
-    serviceSelection: ServiceType;
-    dateTimeSelection: Calendar;
-    customerLookup: Authentication;
-    dogSelection: DogChoice[];
-    addressSelection: AddressChoice; // NEW V6: Primary or Secondary
-    finalConfirmation: BookingSummary;
-}
-
-// New address selection step:
-// ✅ Displays primary address (from customer record)
-// ✅ Lists all active secondary addresses
-// ✅ Shows contact information for each address
-// ✅ Displays special notes/instructions
-// ✅ Mobile-responsive card layout
-// ✅ Clear visual selection states
-```
-
-### **Address Management Component**
-```typescript
-// components/SecondaryAddresses.tsx - Complete CRUD interface
-interface SecondaryAddressesProps {
-    owner_id: number;
-}
-
-// Features:
-// ✅ Card-based layout matching dashboard design
-// ✅ Add/Edit modal with form validation
-// ✅ Delete confirmation with safety checks
-// ✅ Active/inactive toggle with visual feedback
-// ✅ Contact information display (primary + partner)
-// ✅ Notes field for special instructions
-// ✅ Real-time validation and error handling
-// ✅ Loading states during API operations
-// ✅ Success/error notifications
-```
-
-## 📧 Enhanced Email Templates & Communications (V6)
-
-### **Multi-Recipient Email System**
-```typescript
-// lib/emailService.ts - Intelligent email distribution
-interface BookingEmailData {
-    booking_id: number;
-    recipients: string[]; // Automatically determined based on address
-    address_info: {
-        type: 'primary' | 'secondary';
-        label: string;
-        address: string;
-        contacts: string[];
-    };
-}
-
-// Email recipient logic:
-// PRIMARY ADDRESS:   Customer + Partner
-// SECONDARY ADDRESS: Customer + Partner + Secondary Contact + Secondary Partner
-```
-
-### **Enhanced Email Content (V6)**
-```typescript
-// Email templates now include address information:
-
-✅ **Location Display**: 
-   - "Location: Primary Address" 
-   - "Location: Sarah's House"
-   - Full address displayed in email body
+✅ **Booking History with Location Context**:
+   - Each booking shows exact address used for service
+   - Contact information displays who was coordinated for pickup/dropoff
+   - Notes field appears in email for special instructions
 
 ✅ **Contact Context**:
    - Shows who will be present at pickup/dropoff
@@ -712,12 +819,24 @@ interface BookingEmailData {
 ✅ **Database Functions**: Automated email recipient calculation with deduplication  
 ✅ **API Architecture**: 5 RESTful endpoints with comprehensive validation and error handling  
 
+**NEW V6: Automated Payment Reminder System:**
+
+✅ **Automated Processing**: Daily 2 PM cron job finds overdue payments and sends reminders automatically  
+✅ **Smart Aggregation**: Consolidates all outstanding payments per customer into single reminder email  
+✅ **Two-Tier Reminders**: Friendly 3-day and urgent 7-day reminders with professional tone  
+✅ **Duplicate Prevention**: Tracks reminder history to prevent spam and duplicate notifications  
+✅ **Customer Dashboard Integration**: Shows "Completed - Payment Pending" status for overdue bookings  
+✅ **Professional Communication**: Includes payment crossing disclaimer and clear bank details  
+✅ **Business Visibility**: BCC to business owner on all reminder emails for oversight  
+✅ **Email Integration**: Uses existing Resend service with Hunter's Hounds branding  
+
 **Operational Impact:**
 ✅ **Multi-Location Service**: Customers can have dogs picked up/dropped off at different addresses  
 ✅ **Contact Coordination**: Automatic notification of all relevant parties (customer, partner, secondary contacts)  
 ✅ **Family Integration**: Partners and family members automatically included in communication loop  
 ✅ **Business Flexibility**: Expanded service area through customer-defined secondary addresses  
 ✅ **Communication Efficiency**: Reduced coordination calls through automated multi-recipient system  
+✅ **Revenue Protection**: Automated payment follow-up reduces manual workload and improves cash flow  
 
 **Technical Excellence:**
 ✅ **Scalable Database Design**: Foreign key relationships with proper constraints and indexes  
@@ -725,6 +844,7 @@ interface BookingEmailData {
 ✅ **Safety-First Architecture**: Protection against data loss and orphaned records  
 ✅ **Transaction-Based Operations**: Atomic operations with rollback support for data integrity  
 ✅ **Contact Privacy**: Optional partner fields respect privacy preferences  
+✅ **Payment Automation**: Cron-based system requires no manual intervention for standard operations  
 
 **Customer Experience Enhancement:**
 ✅ **Address Book Management**: Customers maintain their own secondary address book  
@@ -732,7 +852,8 @@ interface BookingEmailData {
 ✅ **Location Flexibility**: Book services at primary address or any active secondary address  
 ✅ **Special Instructions**: Notes field for location-specific requirements  
 ✅ **Visual Interface**: Clean address cards with status indicators and contact information  
+✅ **Payment Transparency**: Clear status display and professional reminder communications  
 
-**For AI Agents**: Hunter's Hounds now features a complete secondary addresses system enabling multi-location service. Customers can manage unlimited secondary addresses with primary and partner contacts. The booking flow includes an address selection step between dog selection and final confirmation. Email system automatically distributes notifications to all relevant contacts based on selected address: primary address bookings notify customer + partner, secondary address bookings notify customer + partner + secondary contact + secondary partner. Database includes hunters_hounds.secondary_addresses table with contact management, hunters_hounds.get_booking_emails() function for automated recipient calculation, and enhanced bookings table with secondary_address_id foreign key. API provides 5 endpoints for full CRUD operations with validation and safety features. The system supports multi-generational families, business locations, and complex contact networks while maintaining data integrity and privacy protection.
+**For AI Agents**: Hunter's Hounds now features a complete secondary addresses system enabling multi-location service plus automated payment reminder system. Customers can manage unlimited secondary addresses with primary and partner contacts. The booking flow includes an address selection step between dog selection and final confirmation. Email system automatically distributes notifications to all relevant contacts based on selected address: primary address bookings notify customer + partner, secondary address bookings notify customer + partner + secondary contact + secondary partner. Payment reminder system runs daily at 2 PM to find overdue completed bookings (3+ days past end_time) and sends professional reminder emails with smart aggregation of all outstanding amounts per customer. Database includes hunters_hounds.secondary_addresses table with contact management, hunters_hounds.payment_reminders table for reminder tracking, hunters_hounds.get_booking_emails() function for automated recipient calculation, and enhanced bookings table with secondary_address_id foreign key. API provides 5 endpoints for address management plus automated payment processing. The system supports multi-generational families, business locations, complex contact networks, and automated revenue protection while maintaining data integrity and privacy protection.
 
-**Latest V6 Updates**: Complete secondary addresses and multi-location service system implemented. Features address management dashboard, enhanced booking flow with address selection, multi-recipient email system, contact network support, database functions for automated email distribution, comprehensive API endpoints, safety features with delete protection, and intelligent address-based notification system. The system enables customers to manage multiple service locations with automatic coordination of all relevant contacts.
+**Latest V6 Updates**: Complete secondary addresses and multi-location service system implemented with automated payment reminder system. Features include address management dashboard, enhanced booking flow with address selection, multi-recipient email system, contact network support, database functions for automated email distribution, comprehensive API endpoints, safety features with delete protection, intelligent address-based notification system, daily automated payment reminders with smart aggregation, professional reminder email templates, customer dashboard payment status integration, and complete audit trail for payment communications. The system enables customers to manage multiple service locations with automatic coordination of all relevant contacts while ensuring timely payment follow-up through professional automated reminders.

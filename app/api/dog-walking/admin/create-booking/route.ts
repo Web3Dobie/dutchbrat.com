@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/emailService";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // ← ADDED getSoloWalkPrice
 import { sendBookingEmail } from "@/lib/emailService";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -37,6 +38,10 @@ interface AdminBookingRequest {
 }
 
 export async function POST(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     try {
         const data: AdminBookingRequest = await request.json();
 

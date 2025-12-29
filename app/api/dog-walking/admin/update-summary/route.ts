@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
 import { sendTelegramNotification } from "@/lib/telegram";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database Connection
 const pool = new Pool({
@@ -18,6 +19,10 @@ interface UpdateSummaryRequest {
 }
 
 export async function POST(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     try {
         const data: UpdateSummaryRequest = await request.json();
 

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database connection (same as other admin APIs)
 const pool = new Pool({
@@ -30,6 +31,10 @@ interface Client {
 }
 
 export async function GET(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     const searchParams = request.nextUrl.searchParams;
     
     // Extract query parameters with defaults
@@ -177,6 +182,10 @@ export async function GET(request: NextRequest) {
 
 // POST method for future bulk operations (optional)
 export async function POST(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     return NextResponse.json(
         { error: "POST method not implemented yet" },
         { status: 501 }

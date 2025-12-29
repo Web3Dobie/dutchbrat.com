@@ -1,12 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // GET - Check if photo file exists
 export async function GET(
     request: NextRequest,
     { params }: { params: { filename: string } }
 ) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     try {
         const filename = params.filename;
         

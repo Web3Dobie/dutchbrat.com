@@ -12,21 +12,7 @@ import SittingBookingFlow from "./SittingBookingFlow";
 import BookingSuccess from "./BookingSuccess";
 import SoloWalkDurationSelector from "./SoloWalkDurationSelector"; // NEW: Duration selector
 
-// --- Types (kept from original + NEW User interface) ---
-interface User {
-    owner_id: number;
-    owner_name: string;
-    phone: string;
-    email: string;
-    address: string;
-    dogs: Array<{
-        id: number;
-        dog_name: string;
-        dog_breed: string;
-        dog_age: number;
-    }>;
-}
-
+// --- Types (kept from original) ---
 type ApiRange = {
     start: string; // "HH:mm"
     end: string; // "HH:mm"
@@ -40,28 +26,18 @@ type ServiceId = "meetgreet" | "solo" | "quick" | "sitting";
 type ViewState = "picker" | "form" | "success";
 
 // --- Updated Service Definitions ---
-const ALL_SERVICES = [
+export const SERVICES = [
     { id: "meetgreet", name: "Meet & Greet - for new clients", duration: 30 },
     { id: "solo", name: "Solo Walk", duration: null }, // ← UPDATED: Remove hardcoded duration
     { id: "quick", name: "Quick Walk (30 min)", duration: 30 },
     { id: "sitting", name: "Dog Sitting (Variable)", duration: null },
 ] as const;
 
-// --- NEW: Component Props ---
-interface MobileBookingCalendarProps {
-    currentUser?: User | null;  // NEW: Optional authenticated user
-}
-
 // --- Main Mobile-First Component ---
-export default function MobileBookingCalendar({ currentUser = null }: MobileBookingCalendarProps) {
-    // --- Dynamic Services Based on Authentication ---
-    const SERVICES = currentUser 
-        ? ALL_SERVICES.filter(service => service.id !== "meetgreet") // Hide Meet & Greet for existing customers
-        : ALL_SERVICES; // Show all services for new customers
-
+export default function MobileBookingCalendar() {
     // --- Core State (simplified from original) ---
     const [view, setView] = useState<ViewState>("picker");
-    const [selectedServiceId, setSelectedServiceId] = useState<ServiceId>("solo"); // Default to solo for both
+    const [selectedServiceId, setSelectedServiceId] = useState<ServiceId>("solo");
     const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
 
     // --- NEW: Duration State for Solo Walks ---
@@ -80,7 +56,6 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
     useEffect(() => {
         // Skip API calls for dog sitting - it manages its own API calls
         if (selectedServiceId === "sitting") return;
-
         if (!selectedDay) return;
 
         const formattedDate = format(selectedDay, "yyyy-MM-dd");
@@ -180,26 +155,24 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
         return selectedService?.name || "Service";
     };
 
-    // --- VIEW: Booking Form ---
+    // --- View States ---
     if (view === "form" && selectedBookingStart && selectedBookingEnd && selectedService) {
         return (
             <BookingForm
-                serviceName={getServiceNameWithDuration()}
+                serviceName={getServiceNameWithDuration()} // ← UPDATED: Include duration
                 startTime={selectedBookingStart}
                 endTime={selectedBookingEnd}
-                selectedDuration={selectedDuration}
-                currentUser={currentUser}  // NEW: Pass authenticated user
+                selectedDuration={selectedDuration} // ← NEW: Pass duration to BookingForm
                 onBookingSuccess={handleBookingSuccess}
                 onCancel={handleBackToPicker}
             />
         );
     }
 
-    // --- VIEW: Success ---
     if (view === "success") {
         return (
             <BookingSuccess
-                serviceName={getServiceNameWithDuration()}
+                serviceName={getServiceNameWithDuration()} // ← UPDATED: Include duration
                 bookingStart={selectedBookingStart}
                 endTime={selectedBookingEnd}
                 onBookAnother={handleBackToPicker}
@@ -207,7 +180,7 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
         );
     }
 
-    // --- VIEW: Main Picker ---
+    // --- Main Picker View (Mobile-First Layout) ---
     return (
         <div className="w-full max-w-4xl mx-auto">
             {/* Mobile: Single column stack, Desktop: Multi-column */}
@@ -215,7 +188,6 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
 
                 {/* Step 1: Service Selection */}
                 <ServiceSelector
-                    services={SERVICES}  // NEW: Pass conditional services list
                     selectedServiceId={selectedServiceId}
                     onServiceChange={handleServiceChange}
                 />

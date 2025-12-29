@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
 import { sendTelegramNotification } from "@/lib/telegram";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database Connection
 const pool = new Pool({
@@ -20,6 +21,10 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     try {
         const bookingId = parseInt(params.id);
         if (isNaN(bookingId)) {

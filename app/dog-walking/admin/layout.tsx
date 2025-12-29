@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
+import AdminAuthWrapper from "@/components/AdminAuthWrapper";
 
 export default function AdminLayout({
     children,
@@ -33,6 +36,7 @@ export default function AdminLayout({
         navLinks: {
             display: "flex",
             gap: "24px",
+            flexWrap: "wrap",
         } as React.CSSProperties,
         navLink: {
             color: "#d1d5db",
@@ -47,29 +51,37 @@ export default function AdminLayout({
     };
 
     return (
-        <div style={styles.container}>
-            <nav style={styles.nav}>
-                <div style={styles.navContainer}>
-                    <div style={styles.navTitle}>Hunter's Hounds Admin</div>
-                    <div style={styles.navLinks}>
-                        <Link href="/dog-walking/admin" style={styles.navLink}>
-                            Dashboard
-                        </Link>
-                        <Link href="/dog-walking/admin/register-client" style={styles.navLink}>
-                            Register Client
-                        </Link>
-                        <Link href="/dog-walking/admin/create-booking" style={styles.navLink}>
-                            Create Booking
-                        </Link>
-                        <Link href="/dog-walking/admin/payments" style={styles.navLink}>
-                            Payment Management
-                        </Link>
+        <AdminAuthWrapper>
+            <div style={styles.container}>
+                <nav style={styles.nav}>
+                    <div style={styles.navContainer}>
+                        <div style={styles.navTitle}>Hunter's Hounds Admin</div>
+                        <div style={styles.navLinks}>
+                            <Link href="/dog-walking/admin" style={styles.navLink}>
+                                Dashboard
+                            </Link>
+                            <Link href="/dog-walking/admin/register-client" style={styles.navLink}>
+                                Register Client
+                            </Link>
+                            <Link href="/dog-walking/admin/create-booking" style={styles.navLink}>
+                                Create Booking
+                            </Link>
+                            <Link href="/dog-walking/admin/payments" style={styles.navLink}>
+                                Payments
+                            </Link>
+                            <Link href="/dog-walking/admin/manage-clients" style={styles.navLink}>
+                                Clients
+                            </Link>
+                            <Link href="/dog-walking/admin/manage-bookings" style={styles.navLink}>
+                                Bookings
+                            </Link>
+                        </div>
                     </div>
+                </nav>
+                <div style={styles.content}>
+                    {children}
                 </div>
-            </nav>
-            <div style={styles.content}>
-                {children}
             </div>
-        </div>
+        </AdminAuthWrapper>
     );
 }

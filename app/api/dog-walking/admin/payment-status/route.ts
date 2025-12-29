@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database Connection
 const pool = new Pool({
@@ -12,6 +13,10 @@ const pool = new Pool({
 });
 
 export async function GET(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     const { searchParams } = new URL(request.url);
     const view = searchParams.get("view") || "awaiting_payment"; // awaiting_payment, paid, all
 

@@ -18,6 +18,11 @@ export interface NoShowEmailData {
     dogNames: string;
 }
 
+export interface ChristmasEmailData {
+    ownerName: string;
+    dogNames: string;
+}
+
 export function generateWelcomeEmail(data: WelcomeEmailData): string {
     const { ownerName, dogName, dogBreed, dogAge } = data;
 
@@ -201,6 +206,8 @@ export function generateNoShowEmail(data: NoShowEmailData): string {
 
             </div>
 
+            
+
             <!-- Footer -->
             <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
                 <p style="color: #6b7280; font-size: 12px; margin: 0;">
@@ -214,3 +221,94 @@ export function generateNoShowEmail(data: NoShowEmailData): string {
     </html>
     `;
 }
+
+export function generateChristmasEmail(data: ChristmasEmailData): string {
+    const { ownerName, dogNames } = data;
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Christmas Wishes from Hunter's Hounds</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            
+            <!-- Christmas Header -->
+            <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Hunter's Hounds</h1>
+                <p style="color: #fecaca; margin: 10px 0 0 0; font-size: 16px;">Professional Dog Walking & Pet Care</p>
+                <div style="margin-top: 15px; font-size: 24px;">🎄 🐕 ✨</div>
+            </div>
+
+            <!-- Christmas content -->
+            <div style="padding: 40px 30px;">
+                
+                <!-- Personal Christmas message -->
+                <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">Merry Christmas, ${ownerName}! 🎄</h2>
+                
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
+                    As we approach Christmas, I wanted to take a moment to thank you and <strong>${dogNames}</strong> 
+                    for being part of the Hunter's Hounds family this year.
+                </p>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 25px 0;">
+                    It's been an absolute pleasure caring for ${dogNames}, and I hope you both have had 
+                    wonderful walks and adventures together. Your trust in me to care for your beloved 
+                    furry family member means the world to me.
+                </p>
+
+                <!-- Holiday Schedule -->
+                <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 8px; margin: 25px 0;">
+                    <h3 style="color: #92400e; margin: 0 0 15px 0; font-size: 18px;">🗓️ Holiday Schedule</h3>
+                    <p style="color: #92400e; line-height: 1.5; margin: 0; font-size: 16px;">
+                        <strong>Closed for Christmas:</strong> Monday, December 22nd - Sunday, December 28th<br>
+                        <strong>Back to normal service:</strong> Monday, December 29th
+                    </p>
+                    <p style="color: #92400e; line-height: 1.5; margin: 10px 0 0 0; font-size: 14px; font-style: italic;">
+                        For any urgent matters during the holiday period, please call 07932749772.
+                    </p>
+                </div>
+
+                <!-- Christmas wishes -->
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 25px 0 0 0;">
+                    I hope you and ${dogNames} have a wonderful Christmas filled with joy, warmth, 
+                    and perhaps a few extra treats! 🦴🎁
+                </p>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 20px 0 0 0;">
+                    Looking forward to continuing our adventures in the New Year!
+                </p>
+
+                <!-- Personal signature -->
+                <div style="margin-top: 30px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Warm Christmas wishes,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                    <strong>Hunter's Hounds</strong><br>
+                    Professional Dog Walking & Pet Care<br>
+                    Phone: 07932749772 | Email: bookings@hunters-hounds.london
+                </p>
+                <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                    Serving Highbury Fields & Clissold Park Areas
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+
