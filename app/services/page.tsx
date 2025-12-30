@@ -283,7 +283,7 @@ export default function ServicesPage() {
                     <div className="border-t border-gray-600 pt-3">
                       <div className="flex justify-between text-white font-medium">
                         <span>Full Day</span>
-                        <span>£70</span>
+                        <span>£55</span>
                       </div>
                     </div>
                   </div>
@@ -402,7 +402,7 @@ export default function ServicesPage() {
                 <div className="bg-gray-800/50 rounded-xl p-6 border border-yellow-500/30 flex flex-col justify-center">
                   <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">Full Day</h4>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-white mb-2">£70</div>
+                    <div className="text-3xl font-bold text-white mb-2">£55</div>
                     <div className="text-sm text-gray-400">Complete day care</div>
                   </div>
                 </div>

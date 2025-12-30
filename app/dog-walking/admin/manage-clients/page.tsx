@@ -20,6 +20,9 @@ interface Client {
     email: string;
     address: string;
     created_at: string;
+    // Vet & Insurance fields
+    vet_info?: string | null;
+    pet_insurance?: string | null;
     dogs: Dog[];
 }
 

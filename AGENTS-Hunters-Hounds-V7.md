@@ -1,12 +1,12 @@
-# AGENTS-hunters-hounds-V6.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V7.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
-**Service Name**: Hunter's Hounds Professional Dog Walking Service  
-**Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations  
-**Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform  
-**Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)  
-**Status**: **V6 - Secondary Addresses & Multi-Location Service + Automated Payment Reminders** 🎉
+**Service Name**: Hunter's Hounds Professional Dog Walking Service
+**Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
+**Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
+**Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
+**Status**: **V7 - Vet & Pet Insurance Fields + Enhanced Walk Availability During Multi-Day Sitting** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -38,10 +38,11 @@ export function useClientDomainDetection() {
 ### **Customer-Facing Pages (Professional URLs)**
 ```
 🏠 hunters-hounds.london/                 → Homepage (emotional story + services overview)
-💰 hunters-hounds.london/services         → Complete pricing & service details  
+💰 hunters-hounds.london/services         → Complete pricing & service details
 📅 hunters-hounds.london/book-now         → ENHANCED: Professional booking with address selection
 👤 hunters-hounds.london/my-account       → ENHANCED: Personalized dashboard with secondary address management
-⭐ hunters-hounds.london/testimonials     → Customer testimonials (planned)
+⭐ hunters-hounds.london/reviews          → Public customer reviews page with average rating
+⭐ hunters-hounds.london/review/[token]   → Token-based review submission form
 📸 hunters-hounds.london/gallery          → Dog walking photos/videos (planned)
 📧 hunters-hounds.london/contact          → Contact information (optional)
 ```
@@ -50,6 +51,7 @@ export function useClientDomainDetection() {
 ```
 ⚙️ hunters-hounds.london/dog-walking/admin              → Business admin dashboard
 📋 hunters-hounds.london/dog-walking/admin/manage-clients → Complete client management system
+⭐ hunters-hounds.london/dog-walking/admin/manage-reviews → Review management with admin responses
 📊 hunters-hounds.london/dog-walking/admin/payments     → Payment tracking
 📝 hunters-hounds.london/dog-walking/admin/register-client → Client registration
 📅 hunters-hounds.london/dog-walking/admin/create-booking → Manual booking creation
@@ -79,6 +81,11 @@ export function useClientDomainDetection() {
 # NEW V6: Payment Reminder System Routes (Automated)
 🔗 /api/dog-walking/process-payment-reminders   → Daily automated payment reminder processing (internal)
 🔗 /api/dog-walking/admin/trigger-payment-reminders → Manual payment reminder trigger (testing)
+
+# Customer Review System Routes
+🔗 /api/dog-walking/reviews/submit              → GET: Fetch review by token, POST: Submit review
+🔗 /api/dog-walking/reviews/public              → GET: Published reviews with average rating
+🔗 /api/dog-walking/admin/reviews               → GET: Admin review list, PUT: Add response, DELETE: Remove response
 
 # Admin Authentication Routes
 🔗 /api/dog-walking/admin/auth          → POST: Admin login (sets session cookie)
@@ -208,18 +215,33 @@ if (isHuntersHoundsDomain()) {
 
 **Available Services:**
 - **Meet & Greet** (30 min, FREE) - Introduction sessions for new clients
-- **Solo Walk** (60 min, £17.50 / £25) - One-on-one attention and exercise  
+- **Solo Walk** (60 min, £17.50 / £25) - One-on-one attention and exercise
 - **Quick Walk** (30 min, £10) - Shorter park visits and play sessions
-- **Dog Sitting** (Variable duration, From £25) - Customized in-home visits with extended flexibility
+- **Dog Sitting** (Variable duration) - Customized in-home visits with extended flexibility
+  - 2 Hours: £25
+  - 4 Hours: £35
+  - Full Day: £55
 
 **Enhanced Business Constraints:**
-- **Operating Hours**: 
-  - **Dog Walking Services**: Monday-Friday, 9:00-20:00
+- **Operating Hours**:
+  - **Dog Walking Services**: Monday-Friday, 8:00-20:00
   - **Dog Sitting**: Monday-Friday, 00:00-23:59 (24-hour availability)
 - **Maximum Dogs**: 2 dogs per walk/sitting
 - **Service Areas**: Highbury Fields & Clissold Park areas (EXPANDED with secondary addresses)
 - **Time Buffers**: 15-minute buffer between appointments
 - **Multi-Day Support**: Dog sitting supports single-day and multi-day bookings
+
+**Availability Logic - Service Type Awareness:**
+The walk availability API (`/api/dog-walking/availability`) uses smart conflict detection based on booking type:
+
+| Existing Booking | Can Book Walk? | Reason |
+|------------------|----------------|--------|
+| Multi-day dog sitting (e.g., 4 days) | **YES** | Dog stays at home, walker can go out to walk other dogs |
+| Single-day timed sitting (e.g., 4 hours) | **NO** | Actively watching the dog during those hours |
+| Other walks | **NO** | Buffer time applied between walk appointments |
+| Weekend | **NO** | Walks only available Monday-Friday |
+
+**Implementation:** Calendar events with "Multi-Day Dog Sitting" in the description are excluded from busy time calculations, allowing walk bookings on those days. Single-day sitting events (containing "Single-Day Dog Sitting") still block walk availability during those hours.
 
 ## 🗄️ Enhanced Database Schema & Architecture
 
@@ -234,10 +256,12 @@ CREATE TABLE hunters_hounds.owners (
     owner_name VARCHAR(255) NOT NULL,
     phone VARCHAR(20) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    partner_name VARCHAR(255), -- NEW V6: Partner contact support
-    partner_email VARCHAR(255), -- NEW V6: Partner email for notifications
-    partner_phone VARCHAR(255), -- NEW V6: Partner phone for backup contact
+    partner_name VARCHAR(255), -- V6: Partner contact support
+    partner_email VARCHAR(255), -- V6: Partner email for notifications
+    partner_phone VARCHAR(255), -- V6: Partner phone for backup contact
     address TEXT NOT NULL,
+    vet_info TEXT,             -- NEW V7: Vet name, address, phone (freehand text)
+    pet_insurance TEXT,        -- NEW V7: Insurance provider, policy details (freehand text)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -804,7 +828,40 @@ const getBookingRecipients = (booking) => {
 
 ---
 
+## 🎉 V7 Achievements Summary
+
+**Vet & Pet Insurance Information:**
+
+✅ **Database Fields**: Added `vet_info` and `pet_insurance` TEXT columns to owners table
+✅ **Customer Dashboard**: New "Vet & Insurance Information" section in My Account with helpful description
+✅ **Admin Dashboard**: New section in ClientEditor for viewing/editing vet and insurance details
+✅ **Optional Fields**: Not required during registration - customers can add later when needed
+✅ **Freehand Text**: Flexible text fields allow any format (vet name, address, phone, policy numbers, etc.)
+✅ **API Integration**: Full CRUD support through existing client management endpoints
+✅ **Multi-Day Sitting Ready**: Essential information available for extended care bookings
+
+**Enhanced Walk Availability During Multi-Day Sitting:**
+
+✅ **Smart Conflict Detection**: Walk availability API now distinguishes between booking types
+✅ **Multi-Day Sitting Allowed**: Walks can be booked on days with multi-day sitting (dog stays at home)
+✅ **Single-Day Sitting Blocked**: Timed sitting bookings (e.g., 4 hours) still block walk availability
+✅ **Calendar Event Parsing**: Uses "Multi-Day Dog Sitting" in event description to identify booking type
+✅ **Business Logic**: Reflects real-world operations - can walk other dogs while dog-sitting at home
+
+---
+
 ## 🎉 V6 Achievements Summary
+
+**Customer Review System:**
+
+✅ **Token-Based Review Submission**: Secure UUID tokens allow customers to leave reviews via email link (no login required)
+✅ **Public Reviews Page**: `/reviews` displays all customer reviews with average rating, dog images, and admin responses
+✅ **Admin Review Management**: Filter by response status, add/edit/remove professional responses
+✅ **Automated Review Requests**: Payment confirmation emails include review link when booking marked as paid
+✅ **StarRating Component**: Interactive/readonly star rating with hover effects and accessibility
+✅ **ReviewCard Component**: Professional review display with service context and admin response styling
+✅ **Privacy Protection**: First name only displayed publicly, full details in admin panel only
+✅ **Database Integration**: `hunters_hounds.reviews` table with token security and response tracking
 
 **Complete Secondary Addresses & Multi-Location Service System:**
 
@@ -857,3 +914,243 @@ const getBookingRecipients = (booking) => {
 **For AI Agents**: Hunter's Hounds now features a complete secondary addresses system enabling multi-location service plus automated payment reminder system. Customers can manage unlimited secondary addresses with primary and partner contacts. The booking flow includes an address selection step between dog selection and final confirmation. Email system automatically distributes notifications to all relevant contacts based on selected address: primary address bookings notify customer + partner, secondary address bookings notify customer + partner + secondary contact + secondary partner. Payment reminder system runs daily at 2 PM to find overdue completed bookings (3+ days past end_time) and sends professional reminder emails with smart aggregation of all outstanding amounts per customer. Database includes hunters_hounds.secondary_addresses table with contact management, hunters_hounds.payment_reminders table for reminder tracking, hunters_hounds.get_booking_emails() function for automated recipient calculation, and enhanced bookings table with secondary_address_id foreign key. API provides 5 endpoints for address management plus automated payment processing. The system supports multi-generational families, business locations, complex contact networks, and automated revenue protection while maintaining data integrity and privacy protection.
 
 **Latest V6 Updates**: Complete secondary addresses and multi-location service system implemented with automated payment reminder system. Features include address management dashboard, enhanced booking flow with address selection, multi-recipient email system, contact network support, database functions for automated email distribution, comprehensive API endpoints, safety features with delete protection, intelligent address-based notification system, daily automated payment reminders with smart aggregation, professional reminder email templates, customer dashboard payment status integration, and complete audit trail for payment communications. The system enables customers to manage multiple service locations with automatic coordination of all relevant contacts while ensuring timely payment follow-up through professional automated reminders.
+
+---
+
+## ⭐ Customer Review System
+
+### **System Overview**
+**Purpose**: Allow customers to leave reviews after bookings are marked as paid, with admin response capability
+**Trigger**: Automated review request email sent when booking is marked "completed & paid"
+**Architecture**: Token-based secure review submission + public reviews page + admin management
+**Privacy**: Customers only need to click email link (no account required), first name only shown publicly
+
+### **Database Schema**
+
+**reviews Table:**
+```sql
+CREATE TABLE hunters_hounds.reviews (
+    id SERIAL PRIMARY KEY,
+    booking_id INT REFERENCES hunters_hounds.bookings(id) NOT NULL UNIQUE,
+    owner_id INT REFERENCES hunters_hounds.owners(id) NOT NULL,
+    review_token UUID DEFAULT gen_random_uuid() NOT NULL UNIQUE,
+    rating INT CHECK (rating >= 1 AND rating <= 5),
+    review_text TEXT,
+    admin_response TEXT,           -- Business owner's response
+    admin_response_date TIMESTAMP, -- When response was added
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    submitted_at TIMESTAMP         -- NULL until customer submits
+);
+
+-- Performance indexes
+CREATE INDEX idx_reviews_token ON hunters_hounds.reviews(review_token);
+CREATE INDEX idx_reviews_submitted ON hunters_hounds.reviews(submitted_at) WHERE submitted_at IS NOT NULL;
+CREATE INDEX idx_reviews_booking_id ON hunters_hounds.reviews(booking_id);
+```
+
+### **Customer-Facing Pages**
+
+```
+⭐ hunters-hounds.london/review/[token]  → Token-based review submission form
+📋 hunters-hounds.london/reviews         → Public reviews page with average rating
+```
+
+**Review Submission Page (`/review/[token]`):**
+- Secure access via unique UUID token (no login required)
+- Displays dog images, service type, and service date
+- Interactive 5-star rating with visual feedback
+- Review text field (10-2000 characters)
+- Prevents duplicate submissions
+- Thank you confirmation with review summary
+
+**Public Reviews Page (`/reviews`):**
+- Header with average rating and total review count
+- ReviewCard components showing:
+  - Dog image and service info
+  - Star rating display
+  - Service note from Ernesto (if provided)
+  - Customer review text (first name only for privacy)
+  - Admin response (if exists)
+- Call-to-action to book services
+- Mobile-responsive grid layout
+
+### **Administrative Pages**
+
+```
+⚙️ hunters-hounds.london/dog-walking/admin/manage-reviews → Review management dashboard
+```
+
+**Manage Reviews Page:**
+- Filter bar: All Reviews | Pending Response | Responded
+- Review cards showing:
+  - Customer full name, dog names, service info
+  - Star rating and service note
+  - Customer review text
+  - Admin response form or existing response
+- Response actions: Add Response, Edit, Remove
+- Response character limit: 1000 characters
+
+### **API Routes**
+
+```
+# Customer Review Endpoints
+🔗 /api/dog-walking/reviews/submit      → GET: Fetch review data by token
+                                        → POST: Submit review (rating + text)
+🔗 /api/dog-walking/reviews/public      → GET: Fetch published reviews with average
+
+# Admin Review Endpoints (Protected)
+🔗 /api/dog-walking/admin/reviews       → GET: List all submitted reviews (with filters)
+                                        → PUT: Add/update admin response
+                                        → DELETE: Remove admin response
+```
+
+### **Review Workflow**
+
+```
+Complete Review Flow:
+1. Admin marks booking as "completed & paid" via admin dashboard
+2. System creates review record with unique UUID token in database
+3. Payment received email sent to customer with embedded review link
+4. Customer clicks link → Review form loads with dog image + service details
+5. Customer selects 1-5 star rating and writes review text
+6. Customer submits → Review marked as submitted with timestamp
+7. Review appears immediately on public /reviews page
+8. Admin sees review in manage-reviews page (appears in "Pending Response")
+9. Admin adds optional response → Response displays on public review
+10. Customer and public can see complete review with business response
+```
+
+### **Email Integration**
+
+**Automatic Review Request (Triggered by Mark Paid):**
+```typescript
+// In /api/dog-walking/admin/mark-paid/route.ts
+// Creates review record and sends payment received email with review link
+
+const reviewUrl = `https://hunters-hounds.london/review/${reviewToken}`;
+const { subject, html } = generatePaymentReceivedEmail({
+    ownerName: booking.owner_name.split(' ')[0],
+    dogNames,
+    dogImageUrls,
+    serviceType: booking.service_type,
+    serviceDate,
+    reviewUrl
+});
+```
+
+**Email Content:**
+- Thanks customer for payment
+- Shows dog image(s) and service details
+- Includes prominent "Leave a Review" button/link
+- Uses Hunter's Hounds branding
+
+### **Components**
+
+**StarRating Component (`/components/StarRating.tsx`):**
+```typescript
+interface StarRatingProps {
+    rating: number;
+    onRatingChange?: (rating: number) => void;
+    readonly?: boolean;          // Interactive vs display mode
+    size?: "sm" | "md" | "lg";   // 20px, 32px, 48px
+}
+```
+- Interactive mode with hover effects
+- Visual feedback on rating selection
+- Accessible with ARIA labels
+- Yellow filled stars for selected, gray outline for unselected
+
+**ReviewCard Component (`/components/ReviewCard.tsx`):**
+```typescript
+interface ReviewCardProps {
+    rating: number;
+    reviewText: string;
+    serviceType: string;
+    serviceDate: string;
+    serviceNote: string | null;      // Ernesto's walk note
+    customerFirstName: string;        // Privacy: first name only
+    dogNames: string[];
+    dogImages: string[];
+    adminResponse?: string | null;
+    adminResponseDate?: string | null;
+}
+```
+- Dog image with fallback
+- Star rating display
+- Service note in blue callout box
+- Customer review with first name attribution
+- Admin response in green callout box
+
+### **Security & Privacy**
+
+**Token-Based Access:**
+- UUID tokens (gen_random_uuid()) are cryptographically secure
+- Each booking has exactly one review token
+- Token cannot be guessed or enumerated
+- No customer account required to submit
+
+**Privacy Protection:**
+- Public reviews show first name only (extracted from owner_name)
+- Full customer details only visible in admin panel
+- Email addresses never displayed publicly
+- Review text limited to prevent spam (10-2000 chars)
+
+**Admin Protection:**
+- All admin endpoints require `dog-walking-admin-auth` cookie
+- Response length limited to 1000 characters
+- Edit/delete functionality for response management
+
+### **Data Validation**
+
+**Review Submission:**
+- Rating: required, must be 1-5
+- Review text: required, 10-2000 characters
+- Token: must exist and not already submitted
+- Duplicate submission: prevented by `submitted_at IS NOT NULL` check
+
+**Admin Response:**
+- Response text: required, 1-1000 characters
+- Review must be submitted (not pending customer submission)
+- Timestamps automatically recorded
+
+### **Business Intelligence**
+
+**Available Metrics:**
+- Total review count
+- Average rating (calculated dynamically)
+- Reviews pending admin response
+- Response rate tracking
+- Service type breakdown from reviews
+
+**Admin Dashboard Integration:**
+- Quick access from main admin panel
+- Filter by response status
+- Service context visible for each review
+
+### **Review System Files**
+
+```
+# Customer Pages
+/app/review/[token]/page.tsx            → Review submission form
+/app/reviews/page.tsx                   → Public reviews listing
+
+# Admin Pages
+/app/dog-walking/admin/manage-reviews/page.tsx → Admin review management
+
+# API Routes
+/app/api/dog-walking/reviews/submit/route.ts    → Submit review endpoint
+/app/api/dog-walking/reviews/public/route.ts    → Public reviews endpoint
+/app/api/dog-walking/admin/reviews/route.ts     → Admin review management
+
+# Components
+/app/components/StarRating.tsx          → Interactive/readonly star rating
+/app/components/ReviewCard.tsx          → Review display card
+
+# Database Scripts
+/sql/create_reviews_table.sql           → Initial table creation
+/sql/add_admin_response_to_reviews.sql  → Admin response columns migration
+```
+
+### **Review System Summary**
+
+**For AI Agents**: Hunter's Hounds includes a complete customer review system. When bookings are marked as "completed & paid" via the admin panel, the system automatically creates a review record with a unique UUID token and sends a payment confirmation email containing a review link. Customers can click the link to access a secure review form (no login required) where they see their dog's image, service details, and can submit a 1-5 star rating with written feedback. Submitted reviews immediately appear on the public `/reviews` page showing the average rating, individual reviews with dog images, and admin responses. The admin panel at `/dog-walking/admin/manage-reviews` allows filtering reviews by response status and adding/editing professional responses that display publicly. Database table `hunters_hounds.reviews` stores review data with token-based security, and all admin endpoints are protected by authentication.

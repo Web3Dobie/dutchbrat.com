@@ -18,10 +18,13 @@ interface Customer {
     email: string;
     address: string;
     dogs: Dog[];
-    // New partner fields (will be null initially for existing customers)
+    // Partner fields
     partner_name?: string | null;
     partner_email?: string | null;
     partner_phone?: string | null;
+    // Vet & Insurance fields
+    vet_info?: string | null;
+    pet_insurance?: string | null;
 }
 
 interface AccountDetailsProps {
@@ -40,6 +43,9 @@ interface AccountFormData {
     partner_name: string;
     partner_email: string;
     partner_phone: string;
+    // Vet & Insurance details
+    vet_info: string;
+    pet_insurance: string;
 }
 
 export default function AccountDetails({ customer, onCustomerUpdated, onBack }: AccountDetailsProps) {
@@ -52,6 +58,8 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
         partner_name: customer.partner_name || '',
         partner_email: customer.partner_email || '',
         partner_phone: customer.partner_phone || '',
+        vet_info: customer.vet_info || '',
+        pet_insurance: customer.pet_insurance || '',
     });
 
     const [isLoading, setIsLoading] = useState(false);
@@ -235,6 +243,10 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                 partner_phone: '',
             };
 
+            // Always include vet and insurance fields
+            updateData.vet_info = formData.vet_info;
+            updateData.pet_insurance = formData.pet_insurance;
+
             const response = await fetch(`/api/dog-walking/admin/clients/${customer.owner_id}`, {
                 method: "PUT",
                 headers: {
@@ -259,6 +271,8 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                 partner_name: hasPartner ? formData.partner_name || null : null,
                 partner_email: hasPartner ? formData.partner_email || null : null,
                 partner_phone: hasPartner ? formData.partner_phone || null : null,
+                vet_info: formData.vet_info || null,
+                pet_insurance: formData.pet_insurance || null,
             };
 
             setSuccessMessage("Account details updated successfully!");
@@ -415,6 +429,36 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                             </div>
                         </>
                     )}
+                </div>
+
+                {/* Vet & Insurance Information */}
+                <div style={styles.card}>
+                    <h3 style={styles.sectionHeader}>Vet & Insurance Information (Optional)</h3>
+                    <p style={{ color: "#9ca3af", marginBottom: "16px", fontSize: "0.875rem" }}>
+                        This information is helpful for dog sitting services, especially multi-day bookings.
+                    </p>
+
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Vet Details</label>
+                        <textarea
+                            style={styles.textArea}
+                            name="vet_info"
+                            value={formData.vet_info}
+                            onChange={handleInputChange}
+                            placeholder="Vet name, address, phone number..."
+                        />
+                    </div>
+
+                    <div style={styles.inputGroup}>
+                        <label style={styles.label}>Pet Insurance</label>
+                        <textarea
+                            style={styles.textArea}
+                            name="pet_insurance"
+                            value={formData.pet_insurance}
+                            onChange={handleInputChange}
+                            placeholder="Insurance provider, policy number..."
+                        />
+                    </div>
                 </div>
 
                 {/* Action Buttons */}

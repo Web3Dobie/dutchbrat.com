@@ -224,6 +224,23 @@ Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
 End: ${format(new Date(end_time), "EEEE, MMMM d 'at' HH:mm")}
 Booking Type: Multi-Day
                 `;
+            } else if (booking_type === 'single_day_sitting') {
+                // Single-day sitting uses end_time (duration calculated from times)
+                const numHours = differenceInHours(new Date(end_time), new Date(start_time));
+                eventTitle = `${service_type} - ${dogNames} (${numHours}h)`;
+                eventDescription = `
+Single-Day Dog Sitting
+Owner: ${owner_name}
+Dog(s): ${dogNames}
+Duration: ${numHours} hours
+Location: ${addressLabel}
+Address: ${eventAddress}
+Phone: ${phone}
+Email: ${email}
+Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
+End: ${format(new Date(end_time), "EEEE, MMMM d 'at' HH:mm")}
+Booking Type: Single-Day Sitting
+                `;
             } else {
                 eventTitle = `${service_type} - ${dogNames}`;
 
@@ -235,7 +252,7 @@ Owner: ${owner_name}
 Dog(s): ${dogNames}
 Service: ${service_type}
 Duration: ${duration_minutes} minutes
-${finalPrice ? `Price: £${finalPrice.toFixed(2)}` : ''} 
+${finalPrice ? `Price: £${finalPrice.toFixed(2)}` : ''}
 Location: ${addressLabel}
 Address: ${eventAddress}
 Phone: ${phone}
@@ -254,8 +271,10 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     timeZone: "Europe/London"
                 },
                 end: {
-                    // Use end_time for multi-day, calculate end time using duration for single day
-                    dateTime: booking_type === 'multi_day' ? end_time : new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000).toISOString(),
+                    // Use end_time for sitting bookings, calculate from duration for walks
+                    dateTime: (booking_type === 'multi_day' || booking_type === 'single_day_sitting')
+                        ? end_time
+                        : new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000).toISOString(),
                     timeZone: "Europe/London"
                 },
             };

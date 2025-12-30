@@ -86,6 +86,18 @@ export async function GET(request: NextRequest) {
         // 6. Sanitize and "Pad" all busy events with conditional logic
         const paddedBusyTimes: TimeRange[] = busyEvents
             .filter((event) => event.start?.dateTime && event.end?.dateTime)
+            // Skip multi-day dog sitting events - walks can occur during multi-day sitting
+            // (dog is staying at home, walker can still go out to walk other dogs)
+            // Single-day timed sitting (e.g., 4 hours) still blocks as you're actively watching the dog
+            .filter((event) => {
+                const description = event.description || '';
+                // Multi-day sitting has "Multi-Day Dog Sitting" in description
+                // We want to EXCLUDE these (return false to filter them out)
+                if (description.includes('Multi-Day Dog Sitting')) {
+                    return false;
+                }
+                return true;
+            })
             .map((event) => {
                 const start = new Date(event.start!.dateTime!);
                 const end = new Date(event.end!.dateTime!);

@@ -39,7 +39,7 @@ interface BookingFormProps {
     serviceName: string;
     startTime: Date;
     endTime: Date;
-    selectedDuration?: number;
+    selectedDuration?: number | null;  // null for sitting services (duration calculated from times)
     currentUser?: User | null;  // NEW: Optional authenticated user
     onBookingSuccess: () => void;
     onCancel: () => void;
@@ -403,7 +403,8 @@ export default function BookingForm({
                 service_type: serviceName,
                 start_time: startTime.toISOString(),
                 end_time: endTime.toISOString(),
-                duration_minutes: selectedDuration,
+                // Only send duration_minutes for non-sitting services (sitting duration calculated from times)
+                duration_minutes: serviceName.toLowerCase().includes('sitting') ? undefined : selectedDuration,
                 secondary_address_id: selectedAddressId, // null = primary address
                 owner_name: currentUser.owner_name,
                 phone: currentUser.phone,

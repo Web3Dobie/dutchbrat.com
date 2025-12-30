@@ -18,6 +18,9 @@ interface Client {
     email: string;
     address: string;
     created_at: string;
+    // Vet & Insurance fields
+    vet_info?: string | null;
+    pet_insurance?: string | null;
     dogs: Dog[];
 }
 
@@ -43,6 +46,8 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         phone: client.phone,
         email: client.email,
         address: client.address,
+        vet_info: client.vet_info || '',
+        pet_insurance: client.pet_insurance || '',
         dogs: [...client.dogs]
     });
 
@@ -135,6 +140,8 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                     phone: formData.phone,
                     email: formData.email,
                     address: formData.address,
+                    vet_info: formData.vet_info,
+                    pet_insurance: formData.pet_insurance,
                     dogs: formData.dogs
                 })
             });
@@ -380,6 +387,31 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                     onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                                     style={styles.input}
                                     placeholder="Full address"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Vet & Insurance Section */}
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>Vet & Insurance Information</h3>
+                        <div style={styles.inputGrid}>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Vet Details</label>
+                                <textarea
+                                    value={formData.vet_info}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, vet_info: e.target.value }))}
+                                    style={{ ...styles.input, minHeight: "80px", resize: "vertical" }}
+                                    placeholder="Vet name, address, phone number..."
+                                />
+                            </div>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Pet Insurance</label>
+                                <textarea
+                                    value={formData.pet_insurance}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, pet_insurance: e.target.value }))}
+                                    style={{ ...styles.input, minHeight: "80px", resize: "vertical" }}
+                                    placeholder="Insurance provider, policy number..."
                                 />
                             </div>
                         </div>

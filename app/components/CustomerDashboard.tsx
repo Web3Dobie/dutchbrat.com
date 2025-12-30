@@ -21,10 +21,13 @@ interface Customer {
         dog_age: number;
         image_filename?: string | null;
     }>;
-    // NEW: Partner fields (will be null for existing customers initially)
+    // Partner fields
     partner_name?: string | null;
     partner_email?: string | null;
     partner_phone?: string | null;
+    // Vet & Insurance fields
+    vet_info?: string | null;
+    pet_insurance?: string | null;
 }
 
 type DashboardView = "auth" | "main" | "booking" | "account" | "addresses";

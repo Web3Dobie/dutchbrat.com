@@ -27,6 +27,13 @@ interface Client {
     email: string;
     address: string;
     created_at: string;
+    // Partner fields (optional in list view)
+    partner_name?: string | null;
+    partner_email?: string | null;
+    partner_phone?: string | null;
+    // Vet & Insurance fields (optional in list view)
+    vet_info?: string | null;
+    pet_insurance?: string | null;
     dogs: Dog[];
 }
 

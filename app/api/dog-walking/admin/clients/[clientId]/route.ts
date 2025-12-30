@@ -27,10 +27,13 @@ interface ClientDetails {
     email: string;
     address: string;
     created_at: string;
-    // NEW: Partner fields
+    // Partner fields
     partner_name: string | null;
     partner_email: string | null;
     partner_phone: string | null;
+    // Vet & Insurance fields
+    vet_info: string | null;
+    pet_insurance: string | null;
     dogs: Dog[];
 }
 
@@ -39,10 +42,13 @@ interface UpdateClientRequest {
     phone?: string;
     email?: string;
     address?: string;
-    // NEW: Partner fields
+    // Partner fields
     partner_name?: string;
     partner_email?: string;
     partner_phone?: string;
+    // Vet & Insurance fields
+    vet_info?: string;
+    pet_insurance?: string;
     dogs?: {
         id: number;
         dog_name?: string;
@@ -73,9 +79,9 @@ export async function GET(
     const client = await pool.connect();
 
     try {
-        // Updated query to include partner fields
+        // Updated query to include partner, vet, and insurance fields
         const query = `
-            SELECT 
+            SELECT
                 o.id,
                 o.owner_name,
                 o.phone,
@@ -85,10 +91,12 @@ export async function GET(
                 o.partner_name,
                 o.partner_email,
                 o.partner_phone,
+                o.vet_info,
+                o.pet_insurance,
                 COALESCE(
                     json_agg(
-                        CASE 
-                            WHEN d.id IS NOT NULL 
+                        CASE
+                            WHEN d.id IS NOT NULL
                             THEN json_build_object(
                                 'id', d.id,
                                 'dog_name', d.dog_name,
@@ -105,7 +113,7 @@ export async function GET(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance
         `;
 
         const result = await client.query(query, [clientId]);
@@ -174,8 +182,8 @@ export async function PUT(
     try {
         await client.query("BEGIN");
 
-        // Update owner information if provided (INCLUDING PARTNER FIELDS)
-        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone'];
+        // Update owner information if provided (INCLUDING PARTNER, VET, AND INSURANCE FIELDS)
+        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone', 'vet_info', 'pet_insurance'];
         const hasOwnerUpdate = ownerFields.some(field => field in updateData);
 
         if (hasOwnerUpdate) {
@@ -218,6 +226,18 @@ export async function PUT(
             if (updateData.partner_phone !== undefined) {
                 ownerUpdates.push(`partner_phone = $${paramIndex}`);
                 ownerValues.push(updateData.partner_phone?.trim() || null);
+                paramIndex++;
+            }
+
+            // Vet & Insurance fields
+            if (updateData.vet_info !== undefined) {
+                ownerUpdates.push(`vet_info = $${paramIndex}`);
+                ownerValues.push(updateData.vet_info?.trim() || null);
+                paramIndex++;
+            }
+            if (updateData.pet_insurance !== undefined) {
+                ownerUpdates.push(`pet_insurance = $${paramIndex}`);
+                ownerValues.push(updateData.pet_insurance?.trim() || null);
                 paramIndex++;
             }
 
@@ -287,9 +307,9 @@ export async function PUT(
 
         await client.query("COMMIT");
 
-        // Fetch and return updated client data (with partner fields)
+        // Fetch and return updated client data (with partner, vet, and insurance fields)
         const updatedQuery = `
-            SELECT 
+            SELECT
                 o.id,
                 o.owner_name,
                 o.phone,
@@ -299,10 +319,12 @@ export async function PUT(
                 o.partner_name,
                 o.partner_email,
                 o.partner_phone,
+                o.vet_info,
+                o.pet_insurance,
                 COALESCE(
                     json_agg(
-                        CASE 
-                            WHEN d.id IS NOT NULL 
+                        CASE
+                            WHEN d.id IS NOT NULL
                             THEN json_build_object(
                                 'id', d.id,
                                 'dog_name', d.dog_name,
@@ -319,7 +341,7 @@ export async function PUT(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance
         `;
 
         const result = await client.query(updatedQuery, [clientId]);

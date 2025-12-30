@@ -64,8 +64,8 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
     const [selectedServiceId, setSelectedServiceId] = useState<ServiceId>("solo"); // Default to solo for both
     const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
 
-    // --- NEW: Duration State for Solo Walks ---
-    const [selectedDuration, setSelectedDuration] = useState<number>(60); // Default: 1 hour
+    // --- NEW: Duration State for Solo Walks (null for sitting services) ---
+    const [selectedDuration, setSelectedDuration] = useState<number | null>(60); // Default: 1 hour, null for sitting
 
     // --- Booking State ---
     const [selectedBookingStart, setSelectedBookingStart] = useState<Date | null>(null);
@@ -125,9 +125,11 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
         setSelectedBookingEnd(null);
         setError(null);
 
-        // Reset duration when changing away from solo walk
-        if (serviceId !== "solo") {
-            setSelectedDuration(60); // Reset to default
+        // Reset duration when changing services
+        if (serviceId === "sitting") {
+            setSelectedDuration(null); // Dog sitting has no fixed duration
+        } else if (serviceId !== "solo") {
+            setSelectedDuration(60); // Reset to default for other services
         }
 
         // For dog sitting, we don't need the main selectedDay since it has its own date selection
@@ -224,7 +226,7 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
                 {selectedServiceId === "solo" && (
                     <div className="animate-in slide-in-from-top-2 duration-300">
                         <SoloWalkDurationSelector
-                            selectedDuration={selectedDuration}
+                            selectedDuration={selectedDuration ?? 60}
                             dogCount={1} // Default to 1 dog for price display - will be corrected in BookingForm
                             onDurationChange={handleDurationChange}
                         />
