@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V8 - Photo Sharing Consent + Vet & Pet Insurance Fields + Enhanced Walk Availability** 🎉
+**Status**: **V8 - Photo Sharing Consent + Timezone Fix + Vet & Pet Insurance Fields + Enhanced Walk Availability** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -847,6 +847,19 @@ const getBookingRecipients = (booking) => {
 - **Social Media Marketing**: Share walk photos only for consenting clients
 - **Privacy Compliance**: Clear audit trail of consent status per client
 - **Flexible Management**: Admin can update consent based on customer requests
+
+**International Timezone Fix:**
+
+✅ **Problem Solved**: Bookings from international users (e.g., India) were saving incorrect times
+✅ **Root Cause**: Browser created Date objects in user's local timezone instead of London timezone
+✅ **Fix Applied**: `TimeSlotGrid.tsx` and `SittingBookingFlow.tsx` now use `TZDate` from `@date-fns/tz`
+✅ **Behaviour**: All time selections are interpreted as UK time regardless of user's location
+✅ **Scope**: Applies to both walk bookings and sitting bookings
+
+**Technical Details:**
+- Time slots displayed as "HH:mm" are London times from the availability API
+- `createFullDate()` function now creates dates using `TZDate(year, month, day, hours, minutes, 0, "Europe/London")`
+- Ensures correct UTC conversion when `toISOString()` is called for API submission
 
 ---
 

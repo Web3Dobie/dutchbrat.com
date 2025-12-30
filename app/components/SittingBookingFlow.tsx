@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { parse, isSameDay, differenceInDays, differenceInMinutes, isBefore, isEqual, addDays, isAfter, addMinutes, format, startOfMonth, isSameMonth } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { DayPicker } from "react-day-picker";
 // NOTE: Styles are loaded via globals.css
 
@@ -286,8 +287,9 @@ export default function SittingBookingFlow({
         const day = date.getDate();
         const [hours, minutes] = timeStr.split(":").map(Number);
 
-        let fullDate = new Date(year, month, day, hours, minutes);
-        return fullDate;
+        // Create date in London timezone to ensure correct UTC conversion
+        const londonDate = new TZDate(year, month, day, hours, minutes, 0, "Europe/London");
+        return new Date(londonDate.getTime());
     };
 
     const handleSingleDayBooking = () => {

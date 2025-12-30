@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { parse, addMinutes, format, isBefore, isEqual, isAfter, isSameDay } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 
 // --- Types ---
 type ApiRange = {
@@ -65,14 +66,16 @@ export default function TimeSlotGrid({
         return generatedSlots;
     }, [apiRanges, selectedService, selectedDay]);
 
-    // --- Create full Date objects for booking ---
+    // --- Create full Date objects for booking (always in London timezone) ---
     const createFullDate = (timeStr: string): Date | null => {
         if (!selectedDay) return null;
         const year = selectedDay.getFullYear();
         const month = selectedDay.getMonth();
         const day = selectedDay.getDate();
         const [hours, minutes] = timeStr.split(":").map(Number);
-        return new Date(year, month, day, hours, minutes);
+        // Create date in London timezone to ensure correct UTC conversion
+        const londonDate = new TZDate(year, month, day, hours, minutes, 0, "Europe/London");
+        return new Date(londonDate.getTime());
     };
 
     const handleSlotClick = (slot: string) => {
