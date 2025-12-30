@@ -34,6 +34,8 @@ interface ClientDetails {
     // Vet & Insurance fields
     vet_info: string | null;
     pet_insurance: string | null;
+    // Photo sharing consent
+    photo_sharing_consent: boolean;
     dogs: Dog[];
 }
 
@@ -49,6 +51,8 @@ interface UpdateClientRequest {
     // Vet & Insurance fields
     vet_info?: string;
     pet_insurance?: string;
+    // Photo sharing consent
+    photo_sharing_consent?: boolean;
     dogs?: {
         id: number;
         dog_name?: string;
@@ -79,7 +83,7 @@ export async function GET(
     const client = await pool.connect();
 
     try {
-        // Updated query to include partner, vet, and insurance fields
+        // Updated query to include partner, vet, insurance, and photo consent fields
         const query = `
             SELECT
                 o.id,
@@ -93,6 +97,7 @@ export async function GET(
                 o.partner_phone,
                 o.vet_info,
                 o.pet_insurance,
+                o.photo_sharing_consent,
                 COALESCE(
                     json_agg(
                         CASE
@@ -113,7 +118,7 @@ export async function GET(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent
         `;
 
         const result = await client.query(query, [clientId]);
@@ -182,8 +187,8 @@ export async function PUT(
     try {
         await client.query("BEGIN");
 
-        // Update owner information if provided (INCLUDING PARTNER, VET, AND INSURANCE FIELDS)
-        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone', 'vet_info', 'pet_insurance'];
+        // Update owner information if provided (INCLUDING PARTNER, VET, INSURANCE, AND PHOTO CONSENT FIELDS)
+        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone', 'vet_info', 'pet_insurance', 'photo_sharing_consent'];
         const hasOwnerUpdate = ownerFields.some(field => field in updateData);
 
         if (hasOwnerUpdate) {
@@ -238,6 +243,13 @@ export async function PUT(
             if (updateData.pet_insurance !== undefined) {
                 ownerUpdates.push(`pet_insurance = $${paramIndex}`);
                 ownerValues.push(updateData.pet_insurance?.trim() || null);
+                paramIndex++;
+            }
+
+            // Photo sharing consent
+            if (updateData.photo_sharing_consent !== undefined) {
+                ownerUpdates.push(`photo_sharing_consent = $${paramIndex}`);
+                ownerValues.push(updateData.photo_sharing_consent);
                 paramIndex++;
             }
 
@@ -307,7 +319,7 @@ export async function PUT(
 
         await client.query("COMMIT");
 
-        // Fetch and return updated client data (with partner, vet, and insurance fields)
+        // Fetch and return updated client data (with partner, vet, insurance, and photo consent fields)
         const updatedQuery = `
             SELECT
                 o.id,
@@ -321,6 +333,7 @@ export async function PUT(
                 o.partner_phone,
                 o.vet_info,
                 o.pet_insurance,
+                o.photo_sharing_consent,
                 COALESCE(
                     json_agg(
                         CASE
@@ -341,7 +354,7 @@ export async function PUT(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent
         `;
 
         const result = await client.query(updatedQuery, [clientId]);

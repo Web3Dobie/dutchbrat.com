@@ -28,6 +28,8 @@ interface Customer {
     // Vet & Insurance fields
     vet_info?: string | null;
     pet_insurance?: string | null;
+    // Photo sharing consent
+    photo_sharing_consent?: boolean;
 }
 
 type DashboardView = "auth" | "main" | "booking" | "account" | "addresses";

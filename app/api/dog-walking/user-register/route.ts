@@ -23,6 +23,7 @@ interface RegisterRequest {
     dogName: string;
     dogBreed: string;
     dogAge: number;
+    photoSharingConsent?: boolean; // Optional, defaults to false
 }
 
 // --- Main POST Function ---
@@ -67,11 +68,11 @@ export async function POST(request: NextRequest) {
 
         // --- Step 1: Create the Owner ---
         const ownerQuery = `
-            INSERT INTO hunters_hounds.owners (owner_name, phone, email, address)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO hunters_hounds.owners (owner_name, phone, email, address, photo_sharing_consent)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id;
         `;
-        const ownerValues = [data.ownerName, data.phone, data.email, data.address];
+        const ownerValues = [data.ownerName, data.phone, data.email, data.address, data.photoSharingConsent || false];
         const ownerResult = await client.query(ownerQuery, ownerValues);
         const newOwnerId = ownerResult.rows[0].id;
 
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
 <b>Phone:</b> ${data.phone}
 <b>Email:</b> ${data.email}
 <b>Address:</b> ${data.address}
+<b>Photo Sharing:</b> ${data.photoSharingConsent ? '✅ Allowed' : '❌ Not allowed'}
 
 <b>First Dog:</b> ${data.dogName}
 <b>Breed:</b> ${data.dogBreed}

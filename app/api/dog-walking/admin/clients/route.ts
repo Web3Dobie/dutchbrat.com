@@ -34,6 +34,8 @@ interface Client {
     // Vet & Insurance fields (optional in list view)
     vet_info?: string | null;
     pet_insurance?: string | null;
+    // Photo sharing consent
+    photo_sharing_consent?: boolean;
     dogs: Dog[];
 }
 

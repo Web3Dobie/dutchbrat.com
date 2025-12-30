@@ -25,6 +25,8 @@ interface Customer {
     // Vet & Insurance fields
     vet_info?: string | null;
     pet_insurance?: string | null;
+    // Photo sharing consent
+    photo_sharing_consent?: boolean;
 }
 
 interface AccountDetailsProps {
@@ -459,6 +461,53 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                             placeholder="Insurance provider, policy number..."
                         />
                     </div>
+                </div>
+
+                {/* Photo Sharing Consent (Read-Only) */}
+                <div style={styles.card}>
+                    <h3 style={styles.sectionHeader}>Photo Sharing Permission</h3>
+                    <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "16px",
+                        backgroundColor: "#1f2937",
+                        borderRadius: "6px",
+                        border: "1px solid #4b5563"
+                    }}>
+                        <span style={{
+                            fontSize: "1.5rem"
+                        }}>
+                            {customer.photo_sharing_consent ? "✅" : "❌"}
+                        </span>
+                        <div>
+                            <div style={{
+                                color: customer.photo_sharing_consent ? "#10b981" : "#9ca3af",
+                                fontWeight: "600",
+                                marginBottom: "4px"
+                            }}>
+                                {customer.photo_sharing_consent
+                                    ? "You have allowed photo sharing"
+                                    : "Photo sharing not allowed"}
+                            </div>
+                            <div style={{
+                                color: "#6b7280",
+                                fontSize: "0.875rem"
+                            }}>
+                                {customer.photo_sharing_consent
+                                    ? "Your dog's photos may appear on our website and social media."
+                                    : "Your dog's photos will not be shared publicly."}
+                            </div>
+                        </div>
+                    </div>
+                    <p style={{
+                        color: "#6b7280",
+                        fontSize: "0.8rem",
+                        marginTop: "12px",
+                        fontStyle: "italic"
+                    }}>
+                        To change this setting, please contact Hunter's Hounds directly.
+                    </p>
                 </div>
 
                 {/* Action Buttons */}

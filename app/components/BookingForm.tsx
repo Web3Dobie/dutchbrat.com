@@ -79,6 +79,7 @@ export default function BookingForm({
         dogName: "",
         dogBreed: "",
         dogAge: "",
+        photoConsent: false,  // Photo sharing consent
     });
     const [newDogData, setNewDogData] = useState({
         dogName: "",
@@ -300,6 +301,7 @@ export default function BookingForm({
                 phone: isEmail ? registerData.phone || "" : searchInput,  // Use searchInput if it's a phone
                 email: isEmail ? searchInput : registerData.email,  // Use searchInput if it's an email
                 dogAge: parseInt(registerData.dogAge, 10),
+                photoSharingConsent: registerData.photoConsent,  // Include photo consent
             };
 
             const res = await fetch("/api/dog-walking/user-register", {
@@ -680,6 +682,38 @@ export default function BookingForm({
                     placeholder="e.g., 3"
                     required
                 />
+
+                {/* Photo Sharing Consent */}
+                <div style={{
+                    marginTop: "20px",
+                    padding: "16px",
+                    backgroundColor: "#1f2937",
+                    borderRadius: "8px",
+                    border: "1px solid #374151"
+                }}>
+                    <label style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "12px",
+                        cursor: "pointer",
+                        color: "#d1d5db"
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={registerData.photoConsent}
+                            onChange={(e) => setRegisterData({ ...registerData, photoConsent: e.target.checked })}
+                            style={{
+                                marginTop: "4px",
+                                width: "18px",
+                                height: "18px",
+                                cursor: "pointer"
+                            }}
+                        />
+                        <span style={{ fontSize: "14px", lineHeight: "1.5" }}>
+                            I give permission for Hunter's Hounds to share photos of my dog on their website and social media
+                        </span>
+                    </label>
+                </div>
 
                 {error && <p style={styles.error}>{error}</p>}
                 <button style={styles.button} type="submit" disabled={isLoading}>

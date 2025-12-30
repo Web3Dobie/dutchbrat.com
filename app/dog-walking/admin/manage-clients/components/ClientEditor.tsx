@@ -21,6 +21,8 @@ interface Client {
     // Vet & Insurance fields
     vet_info?: string | null;
     pet_insurance?: string | null;
+    // Photo sharing consent
+    photo_sharing_consent?: boolean;
     dogs: Dog[];
 }
 
@@ -48,6 +50,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         address: client.address,
         vet_info: client.vet_info || '',
         pet_insurance: client.pet_insurance || '',
+        photo_sharing_consent: client.photo_sharing_consent || false,
         dogs: [...client.dogs]
     });
 
@@ -142,6 +145,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                     address: formData.address,
                     vet_info: formData.vet_info,
                     pet_insurance: formData.pet_insurance,
+                    photo_sharing_consent: formData.photo_sharing_consent,
                     dogs: formData.dogs
                 })
             });
@@ -415,6 +419,42 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                 />
                             </div>
                         </div>
+                    </div>
+
+                    {/* Photo Sharing Consent Section */}
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>Photo Sharing Consent</h3>
+                        <label style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                            cursor: "pointer",
+                            padding: "12px",
+                            backgroundColor: "#374151",
+                            border: "1px solid #4b5563",
+                            borderRadius: "6px"
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={formData.photo_sharing_consent}
+                                onChange={(e) => setFormData(prev => ({ ...prev, photo_sharing_consent: e.target.checked }))}
+                                style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    cursor: "pointer"
+                                }}
+                            />
+                            <span style={{ color: "#d1d5db" }}>
+                                Client allows sharing photos of their dog on website and social media
+                            </span>
+                            <span style={{
+                                marginLeft: "auto",
+                                fontSize: "14px",
+                                color: formData.photo_sharing_consent ? "#10b981" : "#9ca3af"
+                            }}>
+                                {formData.photo_sharing_consent ? "✅ Allowed" : "❌ Not allowed"}
+                            </span>
+                        </label>
                     </div>
 
                     {/* Dogs & Photos Section */}

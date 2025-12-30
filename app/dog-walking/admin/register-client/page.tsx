@@ -10,6 +10,7 @@ interface RegisterData {
     dogName: string;
     dogBreed: string;
     dogAge: string;
+    photoConsent: boolean;
 }
 
 interface RegisteredUser {
@@ -35,6 +36,7 @@ export default function AdminRegisterClient() {
         dogName: "",
         dogBreed: "",
         dogAge: "",
+        photoConsent: false,
     });
 
     const [isLoading, setIsLoading] = useState(false);
@@ -79,6 +81,7 @@ export default function AdminRegisterClient() {
                 body: JSON.stringify({
                     ...formData,
                     dogAge: dogAge,
+                    photoSharingConsent: formData.photoConsent,
                 }),
             });
 
@@ -99,6 +102,7 @@ export default function AdminRegisterClient() {
                 dogName: "",
                 dogBreed: "",
                 dogAge: "",
+                photoConsent: false,
             });
 
         } catch (err: any) {
@@ -324,6 +328,31 @@ export default function AdminRegisterClient() {
                     max="30"
                     required
                 />
+
+                <div style={styles.sectionTitle}>Photo Sharing Consent</div>
+                <label style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "12px",
+                    cursor: "pointer",
+                    color: "#d1d5db",
+                    marginBottom: "24px"
+                }}>
+                    <input
+                        type="checkbox"
+                        checked={formData.photoConsent}
+                        onChange={(e) => setFormData(prev => ({ ...prev, photoConsent: e.target.checked }))}
+                        style={{
+                            marginTop: "4px",
+                            width: "18px",
+                            height: "18px",
+                            cursor: "pointer"
+                        }}
+                    />
+                    <span style={{ fontSize: "14px", lineHeight: "1.5" }}>
+                        Client gives permission to share photos of their dog on website and social media
+                    </span>
+                </label>
 
                 <button
                     type="submit"

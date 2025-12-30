@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V7.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V8.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V7 - Vet & Pet Insurance Fields + Enhanced Walk Availability During Multi-Day Sitting** 🎉
+**Status**: **V8 - Photo Sharing Consent + Vet & Pet Insurance Fields + Enhanced Walk Availability** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -260,8 +260,9 @@ CREATE TABLE hunters_hounds.owners (
     partner_email VARCHAR(255), -- V6: Partner email for notifications
     partner_phone VARCHAR(255), -- V6: Partner phone for backup contact
     address TEXT NOT NULL,
-    vet_info TEXT,             -- NEW V7: Vet name, address, phone (freehand text)
-    pet_insurance TEXT,        -- NEW V7: Insurance provider, policy details (freehand text)
+    vet_info TEXT,             -- V7: Vet name, address, phone (freehand text)
+    pet_insurance TEXT,        -- V7: Insurance provider, policy details (freehand text)
+    photo_sharing_consent BOOLEAN DEFAULT false, -- V8: Permission to share dog photos on website/social media
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -825,6 +826,27 @@ const getBookingRecipients = (booking) => {
 4. **Address Setup**: Optional secondary address creation during onboarding  
 5. **Enhanced Dashboard**: Complete address management portal
 6. **Contact Network**: Optional partner and secondary contact setup
+
+---
+
+## 🎉 V8 Achievements Summary
+
+**Photo Sharing Consent System:**
+
+✅ **Database Field**: Added `photo_sharing_consent` BOOLEAN column to owners table (defaults to false)
+✅ **Customer Registration**: Optional checkbox during booking registration - "I give permission for Hunter's Hounds to share photos of my dog on their website and social media"
+✅ **Admin Registration**: Photo consent checkbox in admin client registration page
+✅ **Customer Profile (Read-Only)**: Displays consent status with clear visual indicator - customers cannot edit
+✅ **Admin Client Editor**: Editable toggle for admin to change consent status at any time
+✅ **Privacy Control**: Only admin can modify consent status - customers must contact business to change
+✅ **API Integration**: Full support in user-register API and admin clients CRUD endpoints
+✅ **Telegram Notification**: New client registrations show photo sharing consent status
+
+**Business Use Cases:**
+- **Website Gallery**: Only display photos of dogs with consent granted
+- **Social Media Marketing**: Share walk photos only for consenting clients
+- **Privacy Compliance**: Clear audit trail of consent status per client
+- **Flexible Management**: Admin can update consent based on customer requests
 
 ---
 
