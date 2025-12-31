@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
                 r.admin_response_date,
                 b.service_type,
                 b.start_time,
-                b.notes as service_note,
+                b.walk_summary as service_note,
                 o.owner_name,
                 o.email as owner_email,
                 COALESCE(d1.dog_name, '') as dog_name_1,

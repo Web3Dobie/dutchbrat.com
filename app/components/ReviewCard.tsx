@@ -37,8 +37,6 @@ export default function ReviewCard({
         }
     };
 
-    const dogNamesText = dogNames.join(" & ");
-
     return (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 space-y-4">
             {/* Header: Dog image, name, and service info */}
@@ -49,7 +47,7 @@ export default function ReviewCard({
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-blue-500">
                             <img
                                 src={`/images/dogs/${dogImages[0]}`}
-                                alt={dogNames[0] || "Dog"}
+                                alt="Dog"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
                                     (e.target as HTMLImageElement).src = '/images/default-dog.png';
@@ -65,7 +63,7 @@ export default function ReviewCard({
                         <StarRating rating={rating} readonly size="sm" />
                     </div>
                     <p className="text-gray-400 text-sm">
-                        {dogNamesText} - {serviceType}
+                        {serviceType}
                     </p>
                     <p className="text-gray-500 text-xs">
                         {formatDate(serviceDate)}
