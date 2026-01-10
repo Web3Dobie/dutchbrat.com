@@ -9,8 +9,16 @@ export function isHuntersHoundsDomain(): boolean {
   try {
     const headersList = headers()
     const host = headersList.get('host') || ''
-    return host.includes('hunters-hounds')
+    console.log('🔍 Server seeing host:', host)  // DEBUG LINE
+
+    const isHunters = host.includes('hunters-hounds') ||
+      host.includes('dev-hunters-hounds') ||
+      host.includes('staging-hunters-hounds')
+
+    console.log('🔍 Is hunters hounds?', isHunters)  // DEBUG LINE
+    return isHunters
   } catch (error) {
+    console.log('🔍 Error in domain detection:', error)  // DEBUG LINE
     return false
   }
 }
@@ -23,7 +31,12 @@ export function isHunterMemorialDomain(): boolean {
   try {
     const headersList = headers()
     const host = headersList.get('host') || ''
-    return host.includes('hunterthedobermann') || host.includes('hunter-memorial')
+
+    // Support production and development domains
+    return host.includes('hunterthedobermann') ||
+      host.includes('hunter-memorial') ||
+      host.includes('dev-hunterthedobermann') ||
+      host.includes('staging-hunterthedobermann')
   } catch (error) {
     return false
   }

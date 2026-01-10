@@ -6,8 +6,17 @@
 export function useClientDomainDetection(): 'hunters-hounds' | 'dutchbrat' | 'hunter-memorial' {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
-    if (hostname.includes('hunters-hounds')) return 'hunters-hounds'
-    if (hostname.includes('hunterthedobermann') || hostname.includes('hunter-memorial')) return 'hunter-memorial'
+    console.log('🔍 CLIENT seeing hostname:', hostname)  // DEBUG LINE
+
+    if (hostname.includes('hunters-hounds')) {
+      console.log('🔍 CLIENT detected: hunters-hounds')  // DEBUG LINE
+      return 'hunters-hounds'
+    }
+    if (hostname.includes('hunterthedobermann') || hostname.includes('hunter-memorial')) {
+      console.log('🔍 CLIENT detected: hunter-memorial')  // DEBUG LINE
+      return 'hunter-memorial'
+    }
+    console.log('🔍 CLIENT detected: dutchbrat')  // DEBUG LINE
     return 'dutchbrat'
   }
   return 'dutchbrat'
