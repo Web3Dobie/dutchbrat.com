@@ -230,7 +230,7 @@ export default function BookingForm({
     // --- 1. LOOKUP HANDLER - UPDATED: Now supports both phone and email ---
     const handleLookup = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!searchInput.trim()) {
             setError("Please enter your phone number or email address.");
             return;
@@ -243,7 +243,7 @@ export default function BookingForm({
             // Determine if input is email or phone
             const isEmail = searchInput.includes("@");
             const queryParam = isEmail ? `email=${encodeURIComponent(searchInput)}` : `phone=${encodeURIComponent(searchInput)}`;
-            
+
             const response = await fetch(`/api/dog-walking/customer-lookup?${queryParam}`, {
                 method: "GET",
                 headers: {
@@ -351,11 +351,11 @@ export default function BookingForm({
         setError(null);
 
         try {
-            const res = await fetch("/api/dog-walking/add-dog", {
+            const res = await fetch("/api/dog-walking/dog-add", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    owner_id: currentUser.owner_id,
+                    ownerId: currentUser.owner_id,
                     dogName: newDogData.dogName,
                     dogBreed: newDogData.dogBreed,
                     dogAge: parseInt(newDogData.dogAge),
@@ -368,10 +368,13 @@ export default function BookingForm({
             }
 
             const data = await res.json();
-            
+
             // Update current user with new dog
-            setCurrentUser(data.user);
-            
+            setCurrentUser({
+                ...currentUser,
+                dogs: [...currentUser.dogs, data.dog]
+            });
+
             // Reset form and go back to dog selection
             setNewDogData({ dogName: "", dogBreed: "", dogAge: "" });
             setView("selectDog");
@@ -393,8 +396,8 @@ export default function BookingForm({
 
         try {
             const addressInfo = getSelectedAddressInfo();
-            
-            const selectedDogs = selectedDogIds.map(id => 
+
+            const selectedDogs = selectedDogIds.map(id =>
                 currentUser.dogs.find(dog => dog.id === id)
             ).filter(Boolean);
 
@@ -566,7 +569,7 @@ export default function BookingForm({
         <form onSubmit={handleLookup}>
             {renderSummary()}
             <h4>Find Your Account</h4>
-            
+
             {/* UPDATED: Changed label and placeholder to support both phone and email */}
             <label style={styles.label}>Phone Number or Email Address</label>
             <input
@@ -581,7 +584,7 @@ export default function BookingForm({
             <p style={styles.hint}>
                 Enter the phone number or email address you used when booking to find your account.
             </p>
-            
+
             {error && <p style={styles.error}>{error}</p>}
             <button style={styles.button} type="submit" disabled={isLoading}>
                 {isLoading ? "Searching..." : "Find My Account"}
@@ -595,7 +598,7 @@ export default function BookingForm({
     const renderRegisterView = () => {
         // Determine if we started with email or phone
         const isEmail = searchInput.includes("@");
-        
+
         return (
             <form onSubmit={handleRegister}>
                 {renderSummary()}
@@ -732,8 +735,8 @@ export default function BookingForm({
             <h4>Select Dog(s) for Your Booking</h4>
 
             {currentUser?.dogs.map((dog) => (
-                <label 
-                    key={dog.id} 
+                <label
+                    key={dog.id}
                     style={{
                         display: "flex",
                         alignItems: "center",
@@ -775,9 +778,9 @@ export default function BookingForm({
             ))}
 
             <div style={{ marginTop: "16px" }}>
-                <button 
-                    style={styles.smallButton} 
-                    type="button" 
+                <button
+                    style={styles.smallButton}
+                    type="button"
                     onClick={() => setView("addDog")}
                 >
                     + Add Another Dog
@@ -785,11 +788,11 @@ export default function BookingForm({
             </div>
 
             {error && <p style={styles.error}>{error}</p>}
-            
+
             <div style={{ marginTop: "20px" }}>
-                <button 
-                    style={styles.button} 
-                    type="button" 
+                <button
+                    style={styles.button}
+                    type="button"
                     onClick={handleContinueFromDogSelection}
                     disabled={selectedDogIds.length === 0}
                 >
