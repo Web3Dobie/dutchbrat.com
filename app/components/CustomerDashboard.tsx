@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardAuth from "./DashboardAuth";
 import DashboardMain from "./DashboardMain";
 import BookingManager from "./BookingManager";
@@ -39,6 +39,29 @@ export default function CustomerDashboard() {
     const [view, setView] = useState<DashboardView>("auth");
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
+    const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+    // --- Check for existing session on mount ---
+    useEffect(() => {
+        const checkSession = async () => {
+            try {
+                const response = await fetch('/api/dog-walking/customer-session');
+                const data = await response.json();
+
+                if (data.authenticated && data.customer) {
+                    console.log('[CustomerDashboard] Found existing session for:', data.customer.owner_name);
+                    setCustomer(data.customer);
+                    setView("main");
+                }
+            } catch (err) {
+                console.error('[CustomerDashboard] Session check failed:', err);
+            } finally {
+                setIsCheckingSession(false);
+            }
+        };
+
+        checkSession();
+    }, []);
 
     // --- Handlers ---
     const handleAuthSuccess = (authenticatedCustomer: Customer) => {
@@ -46,7 +69,15 @@ export default function CustomerDashboard() {
         setView("main");
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        // Clear session cookie
+        try {
+            await fetch('/api/dog-walking/customer-session', { method: 'DELETE' });
+            console.log('[CustomerDashboard] Session cookie cleared');
+        } catch (err) {
+            console.error('[CustomerDashboard] Failed to clear session cookie:', err);
+        }
+
         setCustomer(null);
         setSelectedBookingId(null);
         setView("auth");
@@ -209,11 +240,29 @@ export default function CustomerDashboard() {
             </div>
 
             {/* Main Content */}
-            {view === "auth" && (
+            {isCheckingSession && (
+                <div style={{
+                    maxWidth: "500px",
+                    margin: "0 auto",
+                    padding: "40px 24px",
+                    textAlign: "center"
+                }}>
+                    <div style={{
+                        padding: "24px",
+                        border: "1px solid #333",
+                        borderRadius: "8px",
+                        backgroundColor: "#111827"
+                    }}>
+                        <p style={{ color: "#9ca3af" }}>Loading your account...</p>
+                    </div>
+                </div>
+            )}
+
+            {!isCheckingSession && view === "auth" && (
                 <DashboardAuth onAuthSuccess={handleAuthSuccess} />
             )}
 
-            {view === "main" && customer && (
+            {!isCheckingSession && view === "main" && customer && (
                 <DashboardMain
                     customer={customer}
                     onLogout={handleLogout}

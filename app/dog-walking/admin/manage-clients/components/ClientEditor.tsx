@@ -23,6 +23,8 @@ interface Client {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Payment preference
+    payment_preference?: string | null;
     dogs: Dog[];
 }
 
@@ -51,6 +53,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         vet_info: client.vet_info || '',
         pet_insurance: client.pet_insurance || '',
         photo_sharing_consent: client.photo_sharing_consent || false,
+        payment_preference: client.payment_preference || 'per_service',
         dogs: [...client.dogs]
     });
 
@@ -73,7 +76,9 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         for (const dog of formData.dogs) {
             if (dog.image_filename) {
                 try {
-                    const response = await fetch(`/api/dog-walking/admin/photo-check/${encodeURIComponent(dog.image_filename)}`);
+                    const response = await fetch(`/api/dog-walking/admin/photo-check/${encodeURIComponent(dog.image_filename)}`, {
+                        credentials: 'include'
+                    });
                     const data = await response.json();
                     statuses[dog.id] = data;
                 } catch (err) {
@@ -146,6 +151,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                     vet_info: formData.vet_info,
                     pet_insurance: formData.pet_insurance,
                     photo_sharing_consent: formData.photo_sharing_consent,
+                    payment_preference: formData.payment_preference,
                     dogs: formData.dogs
                 })
             });
@@ -455,6 +461,60 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                 {formData.photo_sharing_consent ? "✅ Allowed" : "❌ Not allowed"}
                             </span>
                         </label>
+                    </div>
+
+                    {/* Payment Preferences Section */}
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>Payment Preferences</h3>
+                        <div style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                            padding: "12px",
+                            backgroundColor: "#374151",
+                            border: "1px solid #4b5563",
+                            borderRadius: "6px"
+                        }}>
+                            {[
+                                { value: 'per_service', label: 'Per Service', desc: 'Pay after each service (default)' },
+                                { value: 'weekly', label: 'Weekly', desc: 'Pay on Monday after week ends' },
+                                { value: 'fortnightly', label: 'Fortnightly', desc: 'Pay on Monday after 2-week period ends' },
+                                { value: 'monthly', label: 'Monthly', desc: 'Pay on 1st of new month' }
+                            ].map(option => (
+                                <label
+                                    key={option.value}
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "12px",
+                                        cursor: "pointer",
+                                        padding: "8px",
+                                        borderRadius: "4px",
+                                        backgroundColor: formData.payment_preference === option.value ? "#1f2937" : "transparent",
+                                        border: formData.payment_preference === option.value ? "1px solid #3b82f6" : "1px solid transparent"
+                                    }}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="payment_preference"
+                                        value={option.value}
+                                        checked={formData.payment_preference === option.value}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, payment_preference: e.target.value }))}
+                                        style={{
+                                            width: "18px",
+                                            height: "18px",
+                                            cursor: "pointer"
+                                        }}
+                                    />
+                                    <div>
+                                        <span style={{ color: "#d1d5db", fontWeight: "600" }}>{option.label}</span>
+                                        <span style={{ color: "#9ca3af", fontSize: "14px", marginLeft: "8px" }}>
+                                            - {option.desc}
+                                        </span>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Dogs & Photos Section */}

@@ -63,6 +63,40 @@ export default function BookingForm({
     const [currentUser, setCurrentUser] = useState<User | null>(initialUser);  // NEW: Initialize with provided user
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [sessionChecked, setSessionChecked] = useState(!!initialUser);  // Track if we've checked session
+
+    // --- Check for existing customer session on mount ---
+    useEffect(() => {
+        // Skip if we already have a user or already checked
+        if (initialUser || sessionChecked) return;
+
+        const checkSession = async () => {
+            try {
+                const response = await fetch('/api/dog-walking/customer-session');
+                const data = await response.json();
+
+                if (data.authenticated && data.customer) {
+                    console.log('[BookingForm] Found existing session for:', data.customer.owner_name);
+                    const user: User = {
+                        owner_id: data.customer.owner_id,
+                        owner_name: data.customer.owner_name,
+                        phone: data.customer.phone,
+                        email: data.customer.email,
+                        address: data.customer.address,
+                        dogs: data.customer.dogs || []
+                    };
+                    setCurrentUser(user);
+                    setView("selectDog");
+                }
+            } catch (err) {
+                console.error('[BookingForm] Session check failed:', err);
+            } finally {
+                setSessionChecked(true);
+            }
+        };
+
+        checkSession();
+    }, [initialUser, sessionChecked]);
 
     // --- Address Selection State ---
     const [secondaryAddresses, setSecondaryAddresses] = useState<SecondaryAddress[]>([]);
@@ -269,6 +303,23 @@ export default function BookingForm({
                 };
                 setCurrentUser(user);
                 setView("selectDog");
+
+                // Set session cookie for persistent login
+                try {
+                    await fetch('/api/dog-walking/customer-session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            owner_id: user.owner_id,
+                            owner_name: user.owner_name,
+                            email: user.email,
+                            phone: user.phone
+                        })
+                    });
+                    console.log('[BookingForm] Session cookie set for:', user.owner_name);
+                } catch (sessionErr) {
+                    console.error('[BookingForm] Failed to set session cookie:', sessionErr);
+                }
             } else {
                 // Customer not found - set up register data with search input
                 if (isEmail) {
@@ -323,6 +374,23 @@ export default function BookingForm({
             setCurrentUser(data.user);
             console.log("🔄 Setting view to selectDog");
             setView("selectDog");
+
+            // Set session cookie for persistent login
+            try {
+                await fetch('/api/dog-walking/customer-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        owner_id: data.user.owner_id,
+                        owner_name: data.user.owner_name,
+                        email: data.user.email,
+                        phone: data.user.phone
+                    })
+                });
+                console.log('[BookingForm] Session cookie set for new user:', data.user.owner_name);
+            } catch (sessionErr) {
+                console.error('[BookingForm] Failed to set session cookie:', sessionErr);
+            }
 
         } catch (err: any) {
             console.error("💥 Error:", err);

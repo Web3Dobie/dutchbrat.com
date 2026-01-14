@@ -51,6 +51,12 @@ function HuntersHomePage() {
               🐕 Book a Walk
             </Link>
             <Link
+              href="/register"
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 text-lg shadow-lg transform hover:scale-105"
+            >
+              📝 New Client? Register
+            </Link>
+            <Link
               href="/services"
               className="bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-4 px-8 rounded-xl transition-all duration-300 text-lg shadow-lg transform hover:scale-105"
             >

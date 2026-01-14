@@ -35,7 +35,7 @@ const generateWalkSlots = (ranges: ApiRange[], duration: number): string[] => {
 
         while (isBefore(addMinutes(currentSlot, duration), end) || isEqual(addMinutes(currentSlot, duration), end)) {
             slots.push(format(currentSlot, "HH:mm"));
-            currentSlot = addMinutes(currentSlot, 30); // 30-minute intervals
+            currentSlot = addMinutes(currentSlot, 15); // 15-minute intervals
         }
     }
     return slots;

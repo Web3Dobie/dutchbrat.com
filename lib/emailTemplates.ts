@@ -331,6 +331,241 @@ export function generatePaymentReceivedEmail(data: PaymentReceivedEmailData): { 
     return { subject, html };
 }
 
+// Payment Invoice Email
+export interface PaymentInvoiceEmailData {
+    ownerName: string;
+    dogNames: string;
+    services: {
+        date: string;
+        serviceType: string;
+        price: number;
+    }[];
+    totalAmount: number;
+    paymentPreference: string;
+}
+
+export function generatePaymentInvoiceEmail(data: PaymentInvoiceEmailData): { subject: string; html: string } {
+    const { ownerName, dogNames, services, totalAmount, paymentPreference } = data;
+
+    const periodLabel = paymentPreference === 'weekly' ? 'Weekly' :
+                        paymentPreference === 'fortnightly' ? 'Fortnightly' :
+                        paymentPreference === 'monthly' ? 'Monthly' : '';
+
+    const subject = `Hunter's Hounds ${periodLabel} Invoice - £${totalAmount.toFixed(2)}`;
+
+    const servicesHtml = services.map(s => `
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.date}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.serviceType}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold;">£${s.price.toFixed(2)}</td>
+        </tr>
+    `).join('');
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Invoice - Hunter's Hounds</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Hunter's Hounds</h1>
+                <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 16px;">Professional Dog Walking & Pet Care</p>
+            </div>
+
+            <!-- Main content -->
+            <div style="padding: 40px 30px;">
+
+                <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">Hi ${ownerName}!</h2>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
+                    Here's your ${periodLabel.toLowerCase()} invoice for <strong>${dogNames}</strong>'s services with Hunter's Hounds.
+                </p>
+
+                <!-- Services Table -->
+                <table style="width: 100%; border-collapse: collapse; margin: 25px 0; background-color: #f9fafb; border-radius: 8px; overflow: hidden;">
+                    <thead>
+                        <tr style="background-color: #374151;">
+                            <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold;">Date</th>
+                            <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold;">Service</th>
+                            <th style="padding: 12px; text-align: right; color: #fff; font-weight: bold;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody style="color: #4b5563;">
+                        ${servicesHtml}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #1f2937;">
+                            <td colspan="2" style="padding: 12px; color: #fff; font-weight: bold;">Total Amount Due</td>
+                            <td style="padding: 12px; text-align: right; color: #10b981; font-weight: bold; font-size: 1.2rem;">£${totalAmount.toFixed(2)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <!-- Payment Details -->
+                <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; border-radius: 8px; margin: 25px 0;">
+                    <h3 style="color: #166534; margin: 0 0 15px 0; font-size: 18px;">Payment Details</h3>
+                    <p style="color: #166534; line-height: 1.6; margin: 0; font-size: 16px;">
+                        <strong>Account Name:</strong> Ernesto Becker<br>
+                        <strong>Sort Code:</strong> 04-00-75<br>
+                        <strong>Account Number:</strong> 19945388
+                    </p>
+                </div>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 20px 0 0 0;">
+                    Thank you for choosing Hunter's Hounds! It's been a pleasure caring for ${dogNames}.
+                </p>
+
+                <!-- Personal signature -->
+                <div style="margin-top: 30px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Warm regards,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                    Hunter's Hounds - Professional Dog Walking Service<br>
+                    Phone: 07932749772 | Email: bookings@hunters-hounds.london
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+
+    return { subject, html };
+}
+
+// Payment Reminder Email
+export interface PaymentReminderEmailData {
+    ownerName: string;
+    dogNames: string;
+    services: {
+        date: string;
+        serviceType: string;
+        price: number;
+    }[];
+    totalAmount: number;
+}
+
+export function generatePaymentReminderEmail(data: PaymentReminderEmailData): { subject: string; html: string } {
+    const { ownerName, dogNames, services, totalAmount } = data;
+
+    const subject = `Payment Reminder - Hunter's Hounds - £${totalAmount.toFixed(2)}`;
+
+    const servicesHtml = services.map(s => `
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.date}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.serviceType}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold;">£${s.price.toFixed(2)}</td>
+        </tr>
+    `).join('');
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Reminder - Hunter's Hounds</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Hunter's Hounds</h1>
+                <p style="color: #fde68a; margin: 10px 0 0 0; font-size: 16px;">Professional Dog Walking & Pet Care</p>
+            </div>
+
+            <!-- Main content -->
+            <div style="padding: 40px 30px;">
+
+                <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">Hi ${ownerName},</h2>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
+                    I hope ${dogNames} is doing well! I understand life can get busy, and I just wanted to send a gentle reminder about the outstanding payment for the following services:
+                </p>
+
+                <!-- Services Table -->
+                <table style="width: 100%; border-collapse: collapse; margin: 25px 0; background-color: #f9fafb; border-radius: 8px; overflow: hidden;">
+                    <thead>
+                        <tr style="background-color: #374151;">
+                            <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold;">Date</th>
+                            <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold;">Service</th>
+                            <th style="padding: 12px; text-align: right; color: #fff; font-weight: bold;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody style="color: #4b5563;">
+                        ${servicesHtml}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: #7f1d1d;">
+                            <td colspan="2" style="padding: 12px; color: #fff; font-weight: bold;">Total Amount Due</td>
+                            <td style="padding: 12px; text-align: right; color: #fecaca; font-weight: bold; font-size: 1.2rem;">£${totalAmount.toFixed(2)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <!-- Payment Details -->
+                <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 8px; margin: 25px 0;">
+                    <h3 style="color: #92400e; margin: 0 0 15px 0; font-size: 18px;">Payment Details</h3>
+                    <p style="color: #92400e; line-height: 1.6; margin: 0; font-size: 16px;">
+                        <strong>Account Name:</strong> Ernesto Becker<br>
+                        <strong>Sort Code:</strong> 04-00-75<br>
+                        <strong>Account Number:</strong> 19945388
+                    </p>
+                </div>
+
+                <!-- Payment crossing notice -->
+                <p style="color: #6b7280; line-height: 1.6; font-size: 14px; margin: 20px 0; font-style: italic;">
+                    Please note: If you have already made payment and this email has crossed in the post, please disregard this reminder and accept my apologies for any inconvenience. Your payment may take a day or two to be reflected in our system.
+                </p>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 20px 0 0 0;">
+                    If you have any questions about this invoice or need to discuss payment arrangements, please don't hesitate to get in touch.
+                </p>
+
+                <!-- Personal signature -->
+                <div style="margin-top: 30px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Thank you for choosing Hunter's Hounds!<br><br>
+                        Warm regards,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                    Hunter's Hounds - Professional Dog Walking Service<br>
+                    Phone: 07932749772 | Email: bookings@hunters-hounds.london
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+
+    return { subject, html };
+}
+
 export function generateChristmasEmail(data: ChristmasEmailData): string {
     const { ownerName, dogNames } = data;
 

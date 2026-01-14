@@ -71,7 +71,9 @@ export default function ClientManagement() {
                 ...(searchTerm && { search: searchTerm })
             });
 
-            const response = await fetch(`/api/dog-walking/admin/clients?${params}`);
+            const response = await fetch(`/api/dog-walking/admin/clients?${params}`, {
+                credentials: 'include'
+            });
             
             if (!response.ok) {
                 const errorData: ErrorResponse = await response.json();

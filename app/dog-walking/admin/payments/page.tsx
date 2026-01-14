@@ -5,18 +5,27 @@ import { format, parseISO } from "date-fns";
 
 interface BookingForPayment {
     id: number;
+    owner_id: number;
     service_type: string;
     start_time: string;
     end_time: string | null;
     duration_minutes: number | null;
     price_pounds: number | null;
     status: 'completed' | 'completed & paid' | 'confirmed' | 'cancelled';
-    walk_summary: string | null; // Add walk summary field
+    walk_summary: string | null;
     owner_name: string;
     phone: string;
     email: string;
     dog_names: string[];
     created_at: string;
+}
+
+interface CustomerSummary {
+    owner_id: number;
+    owner_name: string;
+    email: string;
+    bookingCount: number;
+    totalOwed: number;
 }
 
 interface PaymentStats {
@@ -45,6 +54,10 @@ export default function AdminPaymentManagement() {
     const [editingSummaryId, setEditingSummaryId] = useState<number | null>(null);
     const [editSummaryText, setEditSummaryText] = useState('');
 
+    // Email sending states
+    const [sendingInvoice, setSendingInvoice] = useState<number | null>(null);
+    const [sendingReminder, setSendingReminder] = useState<number | null>(null);
+
     useEffect(() => {
         fetchPaymentData();
     }, [viewMode]);
@@ -54,7 +67,9 @@ export default function AdminPaymentManagement() {
         setError(null);
 
         try {
-            const response = await fetch(`/api/dog-walking/admin/payment-status?view=${viewMode}`);
+            const response = await fetch(`/api/dog-walking/admin/payment-status?view=${viewMode}`, {
+                credentials: 'include'
+            });
 
             if (!response.ok) {
                 throw new Error("Failed to fetch payment data");
@@ -192,6 +207,83 @@ export default function AdminPaymentManagement() {
     const cancelEditingSummary = () => {
         setEditingSummaryId(null);
         setEditSummaryText('');
+    };
+
+    // Get customers with outstanding balances
+    const getCustomerSummaries = (): CustomerSummary[] => {
+        const customerMap = new Map<number, CustomerSummary>();
+
+        bookings
+            .filter(b => b.status === 'completed' && b.price_pounds && b.price_pounds > 0)
+            .forEach(booking => {
+                const existing = customerMap.get(booking.owner_id);
+                if (existing) {
+                    existing.bookingCount += 1;
+                    existing.totalOwed += booking.price_pounds || 0;
+                } else {
+                    customerMap.set(booking.owner_id, {
+                        owner_id: booking.owner_id,
+                        owner_name: booking.owner_name,
+                        email: booking.email,
+                        bookingCount: 1,
+                        totalOwed: booking.price_pounds || 0
+                    });
+                }
+            });
+
+        return Array.from(customerMap.values()).sort((a, b) => b.totalOwed - a.totalOwed);
+    };
+
+    const handleSendInvoice = async (ownerId: number) => {
+        setSendingInvoice(ownerId);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const response = await fetch("/api/dog-walking/admin/send-invoice", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ owner_id: ownerId }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || "Failed to send invoice");
+            }
+
+            setSuccess(`Invoice sent! ${result.details.bookingCount} bookings, £${result.details.totalAmount.toFixed(2)}`);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setSendingInvoice(null);
+        }
+    };
+
+    const handleSendReminder = async (ownerId: number) => {
+        setSendingReminder(ownerId);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const response = await fetch("/api/dog-walking/admin/send-reminder", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ owner_id: ownerId }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || "Failed to send reminder");
+            }
+
+            setSuccess(`Reminder sent! ${result.details.bookingCount} bookings, £${result.details.totalAmount.toFixed(2)}`);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setSendingReminder(null);
+        }
     };
 
     const handleSelectAll = () => {
@@ -419,6 +511,44 @@ export default function AdminPaymentManagement() {
             padding: "12px",
             marginBottom: "16px",
         } as React.CSSProperties,
+        customerSummaryCard: {
+            backgroundColor: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: "8px",
+            padding: "16px",
+            marginBottom: "24px",
+        } as React.CSSProperties,
+        customerRow: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px",
+            borderBottom: "1px solid #374151",
+            flexWrap: "wrap",
+            gap: "12px",
+        } as React.CSSProperties,
+        customerInfo: {
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px",
+        } as React.CSSProperties,
+        emailButton: {
+            padding: "6px 12px",
+            borderRadius: "4px",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: "600",
+            fontSize: "0.85rem",
+            transition: "all 0.2s",
+        } as React.CSSProperties,
+        invoiceButton: {
+            backgroundColor: "#3b82f6",
+            color: "#fff",
+        } as React.CSSProperties,
+        reminderButton: {
+            backgroundColor: "#f59e0b",
+            color: "#fff",
+        } as React.CSSProperties,
     };
 
     if (isLoading) {
@@ -488,6 +618,62 @@ export default function AdminPaymentManagement() {
                     </div>
                 ))}
             </div>
+
+            {/* Customer Summary - Send Invoice/Reminder */}
+            {viewMode === 'awaiting_payment' && getCustomerSummaries().length > 0 && (
+                <div style={styles.customerSummaryCard}>
+                    <h3 style={{ margin: "0 0 16px 0", color: "#d1d5db" }}>
+                        Customers with Outstanding Balance
+                    </h3>
+                    {getCustomerSummaries().map((customer, index) => (
+                        <div
+                            key={customer.owner_id}
+                            style={{
+                                ...styles.customerRow,
+                                borderBottom: index === getCustomerSummaries().length - 1 ? 'none' : '1px solid #374151'
+                            }}
+                        >
+                            <div style={styles.customerInfo}>
+                                <div style={{ fontWeight: "bold", color: "#fff" }}>
+                                    {customer.owner_name}
+                                </div>
+                                <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>
+                                    {customer.bookingCount} booking(s) • {customer.email}
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <div style={{ fontWeight: "bold", color: "#ef4444", fontSize: "1.1rem" }}>
+                                    £{customer.totalOwed.toFixed(2)}
+                                </div>
+                                <button
+                                    onClick={() => handleSendInvoice(customer.owner_id)}
+                                    disabled={sendingInvoice === customer.owner_id}
+                                    style={{
+                                        ...styles.emailButton,
+                                        ...styles.invoiceButton,
+                                        opacity: sendingInvoice === customer.owner_id ? 0.6 : 1,
+                                        cursor: sendingInvoice === customer.owner_id ? 'wait' : 'pointer',
+                                    }}
+                                >
+                                    {sendingInvoice === customer.owner_id ? 'Sending...' : 'Send Invoice'}
+                                </button>
+                                <button
+                                    onClick={() => handleSendReminder(customer.owner_id)}
+                                    disabled={sendingReminder === customer.owner_id}
+                                    style={{
+                                        ...styles.emailButton,
+                                        ...styles.reminderButton,
+                                        opacity: sendingReminder === customer.owner_id ? 0.6 : 1,
+                                        cursor: sendingReminder === customer.owner_id ? 'wait' : 'pointer',
+                                    }}
+                                >
+                                    {sendingReminder === customer.owner_id ? 'Sending...' : 'Send Reminder'}
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Actions */}
             <div style={styles.actions}>

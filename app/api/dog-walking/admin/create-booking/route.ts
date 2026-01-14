@@ -226,51 +226,41 @@ Status: ${status.toUpperCase()}
                 }
             }
 
-            // --- 4. Send Email (configurable, default off for historical) ---
+            // --- 4. Prepare Email Data (will send after commit) ---
             const shouldSendEmail = data.send_email ?? false;
+            const dogNamesForEmail = customer.dog_name_2
+                ? `${customer.dog_name_1} & ${customer.dog_name_2}`
+                : customer.dog_name_1;
 
-            if (shouldSendEmail && !isHistorical) {
-                try {
-                    const dogNames = customer.dog_name_2
-                        ? `${customer.dog_name_1} & ${customer.dog_name_2}`
-                        : customer.dog_name_1;
+            const emailSubject = booking_type === 'multi_day'
+                ? `Multi-Day Dog Sitting Confirmation - ${dogNamesForEmail}`
+                : `Booking Confirmation - ${data.service_type}`;
 
-                    const emailSubject = booking_type === 'multi_day'
-                        ? `Multi-Day Dog Sitting Confirmation - ${dogNames}`
-                        : `Booking Confirmation - ${data.service_type}`;
+            const emailContent = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2>Booking Confirmation</h2>
+                    <p>Dear ${customer.owner_name},</p>
+                    <p>Your booking has been confirmed for ${dogNamesForEmail}.</p>
 
-                    const emailContent = `
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <h2>Booking Confirmation</h2>
-                            <p>Dear ${customer.owner_name},</p>
-                            <p>Your booking has been confirmed for ${dogNames}.</p>
-                            
-                            <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                                <p><strong>Service:</strong> ${data.service_type}</p>
-                                <p><strong>Date & Time:</strong> ${format(startTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>
-                                ${booking_type === 'single' ? `<p><strong>Duration:</strong> ${data.duration_minutes} minutes</p>` : `<p><strong>End Time:</strong> ${format(endTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>`}
-                                ${finalPrice !== null ? `<p><strong>Price:</strong> £${finalPrice.toFixed(2)}</p>` : ''}
-                            </div>
-                            
-                            <p>We look forward to seeing you and ${dogNames}!</p>
-                            
-                            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-                            
-                            <p style="color: #6b7280; font-size: 14px;">
-                                <strong>Hunter's Hounds</strong><br>
-                                Professional Dog Walking Service<br>
-                                Phone: 07932749772<br>
-                                Email: bookings@hunters-hounds.london
-                            </p>
-                        </div>
-                    `;
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>Service:</strong> ${data.service_type}</p>
+                        <p><strong>Date & Time:</strong> ${format(startTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>
+                        ${booking_type === 'single' ? `<p><strong>Duration:</strong> ${data.duration_minutes} minutes</p>` : `<p><strong>End Time:</strong> ${format(endTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>`}
+                        ${finalPrice !== null ? `<p><strong>Price:</strong> £${finalPrice.toFixed(2)}</p>` : ''}
+                    </div>
 
-                    await sendBookingEmail(bookingId, emailSubject, emailContent);
-                } catch (emailError) {
-                    console.error(`Failed to send booking confirmation emails for booking ${bookingId}:`, emailError);
-                    // Don't fail the booking if email fails
-                }
-            }
+                    <p>We look forward to seeing you and ${dogNamesForEmail}!</p>
+
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+
+                    <p style="color: #6b7280; font-size: 14px;">
+                        <strong>Hunter's Hounds</strong><br>
+                        Professional Dog Walking Service<br>
+                        Phone: 07932749772<br>
+                        Email: bookings@hunters-hounds.london
+                    </p>
+                </div>
+            `;
 
             // --- 5. Send Telegram Notification ---
             try {
@@ -299,6 +289,16 @@ ${data.notes ? `📝 Notes: ${data.notes}` : ''}
             }
 
             await client.query('COMMIT');
+
+            // --- 6. Send Email AFTER commit (so email service can see the booking) ---
+            if (shouldSendEmail && !isHistorical) {
+                try {
+                    await sendBookingEmail(bookingId, emailSubject, emailContent);
+                } catch (emailError) {
+                    console.error(`Failed to send booking confirmation emails for booking ${bookingId}:`, emailError);
+                    // Don't fail the booking if email fails
+                }
+            }
 
             return NextResponse.json({
                 success: true,

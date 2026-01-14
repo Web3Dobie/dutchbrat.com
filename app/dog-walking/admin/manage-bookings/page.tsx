@@ -46,7 +46,9 @@ export default function ManageBookings() {
             setLoading(true);
             setError(null);
 
-            const response = await fetch('/api/dog-walking/admin/bookings/editable');
+            const response = await fetch('/api/dog-walking/admin/bookings/editable', {
+                credentials: 'include'
+            });
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -74,6 +76,7 @@ export default function ManageBookings() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                credentials: 'include',
                 body: JSON.stringify({ price: newPrice }),
             });
 
@@ -110,6 +113,7 @@ export default function ManageBookings() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                credentials: 'include',
                 body: JSON.stringify({ status: newStatus }),
             });
 

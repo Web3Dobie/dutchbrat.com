@@ -121,6 +121,23 @@ export default function DashboardAuth({ onAuthSuccess }: DashboardAuthProps) {
             if (data.found) {
                 // Success - customer found
                 onAuthSuccess(data.customer);
+
+                // Set session cookie for persistent login across pages
+                try {
+                    await fetch('/api/dog-walking/customer-session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            owner_id: data.customer.owner_id,
+                            owner_name: data.customer.owner_name,
+                            email: data.customer.email,
+                            phone: data.customer.phone
+                        })
+                    });
+                    console.log('[DashboardAuth] Session cookie set for:', data.customer.owner_name);
+                } catch (sessionErr) {
+                    console.error('[DashboardAuth] Failed to set session cookie:', sessionErr);
+                }
             } else {
                 // Customer not found
                 setError("No account found with that phone number or email. Please check your details or contact us if you believe this is an error.");

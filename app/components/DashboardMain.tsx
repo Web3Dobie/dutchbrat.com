@@ -412,6 +412,42 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                 </div>
             </div>
 
+            {/* Outstanding Balance Card */}
+            {(() => {
+                const outstandingTotal = bookings
+                    .filter(b => b.status === 'completed')
+                    .reduce((sum, b) => sum + (b.price_pounds || 0), 0);
+
+                if (outstandingTotal > 0) {
+                    return (
+                        <div style={{
+                            ...styles.card,
+                            backgroundColor: "#7f1d1d",
+                            border: "1px solid #dc2626"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <h3 style={{ color: "#fecaca", margin: "0 0 4px 0", fontSize: "1rem" }}>
+                                        Outstanding Balance
+                                    </h3>
+                                    <p style={{ color: "#fca5a5", margin: "0", fontSize: "0.875rem" }}>
+                                        Payment due at agreed date
+                                    </p>
+                                </div>
+                                <div style={{
+                                    color: "#fff",
+                                    fontSize: "1.5rem",
+                                    fontWeight: "bold"
+                                }}>
+                                    {formatPrice(outstandingTotal)}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+                return null;
+            })()}
+
             {/* Tab Navigation */}
             <div style={styles.tabContainer}>
                 <button

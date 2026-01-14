@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V8.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V10.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V8 - Photo Sharing Consent + Timezone Fix + Vet & Pet Insurance Fields + Enhanced Walk Availability** 🎉
+**Status**: **V10 - 15-Minute Time Slots + Persistent Customer Sessions** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -91,6 +91,9 @@ export function useClientDomainDetection() {
 🔗 /api/dog-walking/admin/auth          → POST: Admin login (sets session cookie)
 🔗 /api/dog-walking/admin/auth/check    → GET: Check authentication status
 🔗 /api/dog-walking/admin/auth/logout   → POST: Logout (clears session cookie)
+
+# NEW V10: Customer Session Routes
+🔗 /api/dog-walking/customer-session    → GET: Check session, POST: Set session, DELETE: Clear session
 ```
 
 ## 🔐 Admin Panel Authentication
@@ -263,6 +266,8 @@ CREATE TABLE hunters_hounds.owners (
     vet_info TEXT,             -- V7: Vet name, address, phone (freehand text)
     pet_insurance TEXT,        -- V7: Insurance provider, policy details (freehand text)
     photo_sharing_consent BOOLEAN DEFAULT false, -- V8: Permission to share dog photos on website/social media
+    payment_preference VARCHAR(20) DEFAULT 'per_service' -- V9: per_service, weekly, fortnightly, monthly
+        CHECK (payment_preference IN ('per_service', 'weekly', 'fortnightly', 'monthly')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -826,6 +831,198 @@ const getBookingRecipients = (booking) => {
 4. **Address Setup**: Optional secondary address creation during onboarding  
 5. **Enhanced Dashboard**: Complete address management portal
 6. **Contact Network**: Optional partner and secondary contact setup
+
+---
+
+## 🎉 V10 Achievements Summary
+
+**15-Minute Walk Time Slots:**
+
+✅ **Finer Booking Granularity**: Walk services now display 15-minute time slot intervals instead of 30-minute intervals
+✅ **More Flexibility**: Customers can choose times like 09:15, 09:45, 10:15, etc.
+✅ **Walk Services Only**: Dog sitting services remain at 30-minute intervals (intentional design choice)
+✅ **Single File Change**: Modified `TimeSlotGrid.tsx` line 38 to use 15-minute increments
+
+**Affected Services:**
+- Meet & Greet (30 min duration) - now bookable at 15-min intervals
+- Solo Walk (60/120 min duration) - now bookable at 15-min intervals
+- Quick Walk (30 min duration) - now bookable at 15-min intervals
+
+**Technical Implementation:**
+```typescript
+// TimeSlotGrid.tsx - generateWalkSlots() function
+currentSlot = addMinutes(currentSlot, 15); // Changed from 30
+```
+
+**Cookie-Based Customer Session Persistence:**
+
+✅ **Persistent Login**: Customers stay logged in for 7 days via httpOnly cookie
+✅ **Multi-Booking Support**: Book multiple services without re-entering phone/email each time
+✅ **Seamless Experience**: Page refresh no longer requires re-authentication
+✅ **Cross-Page Consistency**: Session persists across /book-now and /my-account pages
+✅ **Secure Implementation**: httpOnly cookie prevents XSS attacks, secure flag in production
+
+**New API Endpoint:**
+```
+🔗 /api/dog-walking/customer-session
+   → POST: Set session cookie after successful login
+   → GET: Retrieve customer data from session cookie
+   → DELETE: Clear session cookie (logout)
+```
+
+**Cookie Configuration:**
+```typescript
+{
+    name: 'dog-walking-customer-session',
+    value: base64(JSON.stringify({ owner_id, owner_name, email, phone })),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+    path: '/'
+}
+```
+
+**Modified Components:**
+- `BookingForm.tsx` - Checks for existing session on mount, sets cookie after login/registration
+- `book-now/page.tsx` - Checks session cookie when no URL params provided
+- `DashboardAuth.tsx` - Sets session cookie after successful dashboard login
+- `CustomerDashboard.tsx` - Checks session on mount, clears cookie on logout
+
+**Session Flow:**
+```
+1. Customer visits /book-now or /my-account
+2. System checks for 'dog-walking-customer-session' cookie
+3. If valid cookie → Fetch fresh customer data from DB → Auto-login
+4. If no cookie → Show login form
+5. After successful login → Set 7-day session cookie
+6. Subsequent visits → Automatically authenticated
+7. Logout → Cookie cleared → Returns to login form
+```
+
+**Customer Experience Improvement:**
+- **Before V10**: Enter phone/email for every booking, lost on page refresh
+- **After V10**: Login once, book unlimited services for 7 days without re-authenticating
+
+**Files Created:**
+```
+/app/api/dog-walking/customer-session/route.ts  → Session management API
+```
+
+**Files Modified:**
+```
+/app/components/BookingForm.tsx       → Session check + cookie setting
+/app/components/DashboardAuth.tsx     → Cookie setting after login
+/app/components/CustomerDashboard.tsx → Session check + logout clearing
+/app/book-now/page.tsx                → Session check on page load
+/app/components/TimeSlotGrid.tsx      → 15-minute intervals
+```
+
+**For AI Agents**: V10 introduces two key improvements: (1) Walk booking time slots now use 15-minute intervals instead of 30-minute intervals, giving customers more flexibility in choosing appointment times. This only affects walk services (Meet & Greet, Solo Walk, Quick Walk) - dog sitting remains at 30-minute intervals. (2) Customer sessions now persist for 7 days via a secure httpOnly cookie. When customers log in via phone/email, a session cookie is set that automatically authenticates them on subsequent visits. This eliminates the need to re-enter credentials for each booking and survives page refreshes. The session API at `/api/dog-walking/customer-session` handles POST (set), GET (retrieve), and DELETE (clear) operations. Components check for existing sessions on mount and set cookies after successful authentication.
+
+**Admin Create Booking Bug Fixes (V10.1):**
+
+✅ **Meet & Greet Duration Fix**: Admin create-booking form now correctly initializes `duration_minutes: 30` for the default Meet & Greet service
+✅ **FREE Service Pricing Fix**: Fixed `getServicePrice()` to return `0` instead of `null` for FREE services (was using `||` instead of `??`)
+✅ **Email Transaction Fix**: Moved email sending to AFTER database commit so email service can see the booking record
+
+**Root Causes Fixed:**
+- **Duration Bug**: Initial form state set `service_type: "Meet & Greet"` but didn't set `duration_minutes`, causing API validation to fail with "Must provide either duration_minutes or end_time"
+- **Pricing Bug**: JavaScript falsy check `price || null` returned `null` when `price === 0` (FREE services)
+- **Email Bug**: `sendBookingEmail()` uses separate DB connection that couldn't see uncommitted transaction data
+
+**Files Modified:**
+```
+/app/dog-walking/admin/create-booking/page.tsx  → Added duration_minutes: 30 to initial state (line 63)
+/lib/pricing.ts                                  → Changed || to ?? in getServicePrice() (line 66)
+/app/api/dog-walking/admin/create-booking/route.ts → Moved email send after COMMIT (line 293-301)
+```
+
+**Technical Details:**
+```typescript
+// page.tsx - Initial state fix
+const [bookingData, setBookingData] = useState<Partial<BookingData>>({
+    service_type: "Meet & Greet - for new clients",
+    duration_minutes: 30,  // ADDED - matches default service
+    create_calendar_event: true,
+    send_email: false,
+});
+
+// pricing.ts - Nullish coalescing fix
+export const getServicePrice = (serviceId: string): number | null => {
+  const service = SERVICE_PRICING[serviceId];
+  if (!service) return null;
+  return service.price ?? null;  // FIXED - was: service.price || null
+};
+
+// route.ts - Email after commit
+await client.query('COMMIT');
+// Email now sent HERE (after commit) instead of before
+if (shouldSendEmail && !isHistorical) {
+    await sendBookingEmail(bookingId, emailSubject, emailContent);
+}
+```
+
+---
+
+## 🎉 V9 Achievements Summary
+
+**Payment Preferences System:**
+
+✅ **Database Field**: Added `payment_preference` VARCHAR(20) column to owners table with CHECK constraint
+✅ **Payment Options**: Per Service (default), Weekly, Fortnightly, Monthly
+✅ **Admin Client Editor**: New "Payment Preferences" section with radio button selection
+✅ **API Integration**: Full CRUD support in `/api/dog-walking/admin/clients/[clientId]` endpoint
+✅ **Default Behaviour**: New clients default to 'per_service' (current system behaviour)
+
+**Payment Preference Values:**
+- `per_service` - Pay after each service (default, current behavior)
+- `weekly` - Pay on Monday after week ends
+- `fortnightly` - Pay on Monday after 2-week period ends
+- `monthly` - Pay on 1st of new month
+
+**Outstanding Balance Dashboard Card:**
+
+✅ **Customer Dashboard**: New "Outstanding Balance" card showing total unpaid amount
+✅ **Calculation**: Sum of `price_pounds` for all bookings with status = 'completed'
+✅ **Visual Design**: Red background (#7f1d1d) with prominent total amount display
+✅ **Conditional Display**: Only shows when outstanding balance > £0
+✅ **Location**: Appears between customer info card and tab navigation
+
+**Technical Implementation:**
+- ClientEditor.tsx: Added payment_preference to form state and save request
+- API route.ts: Added payment_preference to interfaces, GET query, PUT handler
+- DashboardMain.tsx: Added outstanding balance calculation and card component
+
+**Manual Invoice & Reminder System:**
+
+✅ **Send Invoice Route**: `/api/dog-walking/admin/send-invoice` - Sends professional invoice email with all completed (unpaid) bookings
+✅ **Send Reminder Route**: `/api/dog-walking/admin/send-reminder` - Sends payment reminder email with outstanding balance
+✅ **Admin UI Integration**: "Customers with Outstanding Balance" section on Payment Status page
+✅ **Per-Customer Buttons**: Send Invoice and Send Reminder buttons for each customer with unpaid bookings
+✅ **Email Templates**: Professional HTML emails with service breakdown table, totals, and bank details
+✅ **Multi-Recipient Support**: Emails sent to customer + partner (if configured) + BCC to business
+
+**Invoice Email Features:**
+- Blue header with Hunter's Hounds branding
+- Period label based on payment_preference (Weekly/Fortnightly/Monthly)
+- Service table with date, service type, and price for each booking
+- Total amount in green
+- Bank payment details in green callout box
+
+**Reminder Email Features:**
+- Amber/orange header for urgency
+- Friendly but direct reminder tone
+- Service table with red total footer
+- Bank payment details in amber callout box
+- "Payment crossing" disclaimer to avoid confusion
+
+**Admin Workflow:**
+1. Go to Payment Management page (Awaiting Payment tab)
+2. View "Customers with Outstanding Balance" section at top
+3. Click "Send Invoice" for first-time payment requests
+4. Click "Send Reminder" for follow-up reminders
+5. Success/error messages confirm email sent
 
 ---
 

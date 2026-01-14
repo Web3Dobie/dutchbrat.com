@@ -60,6 +60,7 @@ export default function AdminCreateBooking() {
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [bookingData, setBookingData] = useState<Partial<BookingData>>({
         service_type: "Meet & Greet - for new clients",
+        duration_minutes: 30,
         create_calendar_event: true,
         send_email: false,
     });

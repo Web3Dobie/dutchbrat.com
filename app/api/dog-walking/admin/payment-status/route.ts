@@ -41,8 +41,9 @@ export async function GET(request: NextRequest) {
 
         // Fetch bookings with customer and dog information INCLUDING walk_summary
         const bookingsQuery = `
-            SELECT 
+            SELECT
                 b.id,
+                b.owner_id,
                 b.service_type,
                 b.start_time,
                 b.end_time,
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
         // Transform bookings data
         const bookings = bookingsResult.rows.map(row => ({
             id: row.id,
+            owner_id: row.owner_id,
             service_type: row.service_type,
             start_time: row.start_time,
             end_time: row.end_time,

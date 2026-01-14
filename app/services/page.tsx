@@ -110,11 +110,27 @@ export default function ServicesPage() {
                     <h3 className="text-3xl font-bold text-blue-400">Quick Walk</h3>
                   </div>
                   <div className="mb-6">
-                    <span className="text-4xl font-bold text-white">£10</span>
-                    <span className="text-gray-300 ml-3">30 minutes</span>
+                    <span className="text-4xl font-bold text-white">£10 / £14</span>
+                    <span className="text-gray-300 ml-3">30 minutes • 1 or 2 dogs</span>
                   </div>
+
+                  {/* Pricing Breakdown */}
+                  <div className="bg-gray-800/50 rounded-xl p-4 mb-6">
+                    <h4 className="text-lg font-semibold text-blue-400 mb-3">Quick Walk Pricing</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300">30 minutes (1 dog)</span>
+                        <span className="text-white font-medium">£10</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-300">30 minutes (2 dogs)</span>
+                        <span className="text-white font-medium">£14</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <p className="text-gray-300 leading-relaxed mb-6">
-                    Perfect for busy days or when your dog needs a quick energy boost. A focused 30-minute session 
+                    Perfect for busy days or when your dog needs a quick energy boost. A focused 30-minute session
                     that includes exercise, toilet break, and some playtime to break up their day.
                   </p>
                   <ul className="text-gray-300 space-y-2">
@@ -331,7 +347,10 @@ export default function ServicesPage() {
                 
                 <div className="bg-gray-800/50 rounded-xl p-6 text-center border border-blue-500/30">
                   <h4 className="text-lg font-semibold text-blue-400 mb-2">Quick Walk</h4>
-                  <div className="text-2xl font-bold text-white mb-1">£10</div>
+                  <div className="text-lg font-bold text-white mb-1">
+                    <div>£10 (1 dog)</div>
+                    <div>£14 (2 dogs)</div>
+                  </div>
                   <div className="text-sm text-gray-400">30 minutes</div>
                 </div>
                 

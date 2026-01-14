@@ -72,11 +72,11 @@ function HuntersHoundsBooking() {
 
       console.log("🔍 Checking authentication - URL params:", { userId, userPhone, userEmail });
 
-      // If user context provided, fetch user data
+      // If user context provided via URL, fetch user data
       if (userPhone || userEmail) {
-        const queryParam = userEmail 
+        const queryParam = userEmail
           ? `email=${encodeURIComponent(userEmail)}`
-          : userPhone 
+          : userPhone
           ? `phone=${encodeURIComponent(userPhone)}`
           : '';
 
@@ -99,13 +99,52 @@ function HuntersHoundsBooking() {
             };
 
             setAuthenticatedUser(user);
-            console.log("✅ User authenticated:", user.owner_name);
+            console.log("✅ User authenticated via URL:", user.owner_name);
+
+            // Also set session cookie for future visits
+            try {
+              await fetch('/api/dog-walking/customer-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  owner_id: user.owner_id,
+                  owner_name: user.owner_name,
+                  email: user.email,
+                  phone: user.phone
+                })
+              });
+            } catch (sessionErr) {
+              console.error('[BookNow] Failed to set session cookie:', sessionErr);
+            }
           } else {
             console.log("❌ User authentication failed");
           }
         }
       } else {
-        console.log("ℹ️ No authentication context provided - normal booking flow");
+        // No URL params - check for existing session cookie
+        console.log("🍪 No URL params - checking session cookie...");
+        try {
+          const sessionResponse = await fetch('/api/dog-walking/customer-session');
+          const sessionData = await sessionResponse.json();
+
+          if (sessionData.authenticated && sessionData.customer) {
+            const user: User = {
+              owner_id: sessionData.customer.owner_id,
+              owner_name: sessionData.customer.owner_name,
+              phone: sessionData.customer.phone,
+              email: sessionData.customer.email,
+              address: sessionData.customer.address,
+              dogs: sessionData.customer.dogs || []
+            };
+
+            setAuthenticatedUser(user);
+            console.log("✅ User authenticated via session cookie:", user.owner_name);
+          } else {
+            console.log("ℹ️ No session cookie found - normal booking flow");
+          }
+        } catch (sessionErr) {
+          console.error("🍪 Session check failed:", sessionErr);
+        }
       }
     } catch (error) {
       console.error("💥 Authentication check failed:", error);

@@ -61,7 +61,9 @@ export const SERVICE_PRICING: Record<string, ServicePricing> = {
 
 // ← ADD THESE EXPORTS:
 export const getServicePrice = (serviceId: string): number | null => {
-  return SERVICE_PRICING[serviceId]?.price || null;
+  const service = SERVICE_PRICING[serviceId];
+  if (!service) return null;
+  return service.price ?? null;
 };
 
 export const requiresManualPricing = (serviceId: string): boolean => {

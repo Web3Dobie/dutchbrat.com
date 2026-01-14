@@ -69,6 +69,16 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [hasPartner, setHasPartner] = useState(!!customer.partner_name || !!customer.partner_email);
 
+    // Add Dog form state
+    const [showAddDogForm, setShowAddDogForm] = useState(false);
+    const [newDogData, setNewDogData] = useState({
+        dogName: '',
+        dogBreed: '',
+        dogAge: '',
+    });
+    const [addDogLoading, setAddDogLoading] = useState(false);
+    const [addDogError, setAddDogError] = useState<string | null>(null);
+
     // --- Styles (matching existing dashboard theme) ---
     const styles = {
         container: {
@@ -168,6 +178,27 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
             marginRight: "12px",
             transform: "scale(1.2)",
         } as React.CSSProperties,
+        dogCard: {
+            backgroundColor: "#1f2937",
+            border: "1px solid #4b5563",
+            borderRadius: "8px",
+            padding: "16px",
+            marginBottom: "12px",
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+        } as React.CSSProperties,
+        addDogButton: {
+            backgroundColor: "#7c3aed",
+            color: "#fff",
+            padding: "12px 24px",
+            fontSize: "1rem",
+            fontWeight: "600",
+            borderRadius: "6px",
+            border: "none",
+            cursor: "pointer",
+            transition: "all 0.2s",
+        } as React.CSSProperties,
     };
 
     // --- Handlers ---
@@ -249,12 +280,17 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
             updateData.vet_info = formData.vet_info;
             updateData.pet_insurance = formData.pet_insurance;
 
-            const response = await fetch(`/api/dog-walking/admin/clients/${customer.owner_id}`, {
+            const response = await fetch(`/api/dog-walking/customer-update`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(updateData),
+                body: JSON.stringify({
+                    owner_id: customer.owner_id,
+                    verification_email: customer.email, // Use original email for verification
+                    verification_phone: customer.phone, // Or phone if they logged in that way
+                    ...updateData,
+                }),
             });
 
             const data = await response.json();
@@ -285,6 +321,65 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
             setError(err.message || "Failed to update account details. Please try again.");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // --- Add Dog Handler ---
+    const handleAddDog = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setAddDogError(null);
+
+        // Validate inputs
+        if (!newDogData.dogName.trim()) {
+            setAddDogError("Dog's name is required");
+            return;
+        }
+        if (!newDogData.dogBreed.trim()) {
+            setAddDogError("Dog's breed is required");
+            return;
+        }
+        if (!newDogData.dogAge || parseInt(newDogData.dogAge) < 0 || parseInt(newDogData.dogAge) > 30) {
+            setAddDogError("Dog's age must be between 0 and 30 years");
+            return;
+        }
+
+        setAddDogLoading(true);
+
+        try {
+            const res = await fetch("/api/dog-walking/dog-add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ownerId: customer.owner_id,
+                    dogName: newDogData.dogName,
+                    dogBreed: newDogData.dogBreed,
+                    dogAge: parseInt(newDogData.dogAge),
+                }),
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || "Failed to add dog");
+            }
+
+            const data = await res.json();
+
+            // Update customer with new dog
+            const updatedCustomer: Customer = {
+                ...customer,
+                dogs: [...customer.dogs, data.dog],
+            };
+            onCustomerUpdated(updatedCustomer);
+
+            // Reset form and hide it
+            setNewDogData({ dogName: '', dogBreed: '', dogAge: '' });
+            setShowAddDogForm(false);
+            setSuccessMessage(`${data.dog.dog_name} has been added to your account!`);
+
+        } catch (err: any) {
+            setAddDogError(err.message || "Failed to add dog. Please try again.");
+        } finally {
+            setAddDogLoading(false);
         }
     };
 
@@ -373,6 +468,133 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                             required
                         />
                     </div>
+                </div>
+
+                {/* My Dogs Section */}
+                <div style={styles.card}>
+                    <h3 style={styles.sectionHeader}>My Dogs</h3>
+
+                    {/* List existing dogs */}
+                    {customer.dogs.map((dog) => (
+                        <div key={dog.id} style={styles.dogCard}>
+                            {dog.image_filename && (
+                                <img
+                                    src={`/images/dog-walking/${dog.image_filename}`}
+                                    alt={dog.dog_name}
+                                    style={{
+                                        width: "60px",
+                                        height: "60px",
+                                        borderRadius: "50%",
+                                        objectFit: "cover",
+                                        border: "2px solid #4b5563",
+                                    }}
+                                />
+                            )}
+                            <div>
+                                <div style={{ fontWeight: "600", color: "#fff", fontSize: "1.1rem" }}>
+                                    {dog.dog_name}
+                                </div>
+                                <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
+                                    {dog.dog_breed} • {dog.dog_age} {dog.dog_age === 1 ? 'year' : 'years'} old
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Add Dog Form */}
+                    {showAddDogForm ? (
+                        <div style={{
+                            backgroundColor: "#111827",
+                            border: "1px solid #6b7280",
+                            borderRadius: "8px",
+                            padding: "16px",
+                            marginTop: "16px",
+                        }}>
+                            <h4 style={{ color: "#fff", marginBottom: "16px", fontSize: "1rem" }}>
+                                Add a New Dog
+                            </h4>
+
+                            {addDogError && (
+                                <div style={styles.errorMessage}>{addDogError}</div>
+                            )}
+
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Dog's Name *</label>
+                                <input
+                                    style={styles.input}
+                                    type="text"
+                                    value={newDogData.dogName}
+                                    onChange={(e) => setNewDogData({ ...newDogData, dogName: e.target.value })}
+                                    placeholder="e.g., Buddy"
+                                    required
+                                />
+                            </div>
+
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Breed *</label>
+                                <input
+                                    style={styles.input}
+                                    type="text"
+                                    value={newDogData.dogBreed}
+                                    onChange={(e) => setNewDogData({ ...newDogData, dogBreed: e.target.value })}
+                                    placeholder="e.g., Labrador, Golden Retriever"
+                                    required
+                                />
+                            </div>
+
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Age (years) *</label>
+                                <input
+                                    style={styles.input}
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    value={newDogData.dogAge}
+                                    onChange={(e) => setNewDogData({ ...newDogData, dogAge: e.target.value })}
+                                    placeholder="e.g., 3"
+                                    required
+                                />
+                            </div>
+
+                            <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowAddDogForm(false);
+                                        setNewDogData({ dogName: '', dogBreed: '', dogAge: '' });
+                                        setAddDogError(null);
+                                    }}
+                                    style={{ ...styles.button, ...styles.secondaryButton }}
+                                    disabled={addDogLoading}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleAddDog}
+                                    style={{
+                                        ...styles.addDogButton,
+                                        ...(addDogLoading ? { opacity: 0.7, cursor: 'not-allowed' } : {}),
+                                    }}
+                                    disabled={addDogLoading}
+                                >
+                                    {addDogLoading ? "Adding..." : "Add Dog"}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setShowAddDogForm(true)}
+                            style={{
+                                ...styles.addDogButton,
+                                marginTop: "16px",
+                                width: "100%",
+                            }}
+                        >
+                            + Add Another Dog
+                        </button>
+                    )}
                 </div>
 
                 {/* Partner Information */}

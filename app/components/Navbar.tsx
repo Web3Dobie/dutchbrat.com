@@ -116,6 +116,12 @@ export default function Navbar() {
                                 Book Now
                             </Link>
                             <Link
+                                href="/register"
+                                className="text-gray-200 hover:text-white transition-colors duration-300"
+                            >
+                                Register
+                            </Link>
+                            <Link
                                 href="/my-account"
                                 className="text-gray-200 hover:text-white transition-colors duration-300"
                             >
@@ -179,6 +185,13 @@ export default function Navbar() {
                                     onClick={closeMobileMenu}
                                 >
                                     Book Now
+                                </Link>
+                                <Link
+                                    href="/register"
+                                    className="block text-gray-200 hover:text-white transition-colors duration-300 py-2"
+                                    onClick={closeMobileMenu}
+                                >
+                                    Register
                                 </Link>
                                 <Link
                                     href="/my-account"
