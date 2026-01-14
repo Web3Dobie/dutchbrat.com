@@ -127,6 +127,12 @@ export default function Navbar() {
                             >
                                 My Account
                             </Link>
+                            <Link
+                                href="/reviews"
+                                className="text-gray-200 hover:text-white transition-colors duration-300"
+                            >
+                                Reviews
+                            </Link>
                         </div>
 
                         {/* Mobile Menu Button */}
@@ -199,6 +205,13 @@ export default function Navbar() {
                                     onClick={closeMobileMenu}
                                 >
                                     My Account
+                                </Link>
+                                <Link
+                                    href="/reviews"
+                                    className="block text-gray-200 hover:text-white transition-colors duration-300 py-2"
+                                    onClick={closeMobileMenu}
+                                >
+                                    Reviews
                                 </Link>
                             </div>
                         </div>
