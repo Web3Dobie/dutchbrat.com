@@ -285,8 +285,8 @@ function HuntersHoundsBooking() {
               
               <div className="bg-gray-800/30 rounded-xl p-6 text-center border border-blue-500/30">
                 <h3 className="text-lg font-semibold text-blue-400 mb-2">Quick Walk</h3>
-                <p className="text-2xl font-bold text-white mb-2">£10</p>
-                <p className="text-sm text-gray-300">30 minutes</p>
+                <p className="text-2xl font-bold text-white mb-2">£10 / £14</p>
+                <p className="text-sm text-gray-300">30 minutes • 1 or 2 dogs</p>
               </div>
               
               <div className="bg-gray-800/30 rounded-xl p-6 text-center border border-purple-500/30">

@@ -98,6 +98,7 @@ export async function GET(request: NextRequest) {
                     o.partner_name,
                     o.partner_email,
                     o.partner_phone,
+                    o.payment_preference,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
                 FROM hunters_hounds.owners o
                 LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
                 WHERE o.id = $1
-                GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.partner_name, o.partner_email, o.partner_phone;
+                GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.partner_name, o.partner_email, o.partner_phone, o.payment_preference;
             `;
 
             const result = await client.query(query, [owner_id]);
@@ -141,6 +142,7 @@ export async function GET(request: NextRequest) {
                     partner_name: customer.partner_name,
                     partner_email: customer.partner_email,
                     partner_phone: customer.partner_phone,
+                    payment_preference: customer.payment_preference,
                     dogs: customer.dogs || []
                 }
             });

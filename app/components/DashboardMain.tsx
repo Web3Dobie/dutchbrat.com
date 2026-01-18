@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format, isPast, isToday, isTomorrow, addHours, isBefore } from "date-fns";
+import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths } from "date-fns";
 import { formatPrice } from '@/lib/pricing';
 
 // --- Types ---
@@ -23,6 +23,8 @@ interface Customer {
     partner_name?: string | null;
     partner_email?: string | null;
     partner_phone?: string | null;
+    // Payment preference for period-aware status display
+    payment_preference?: string | null;
 }
 
 interface Booking {
@@ -121,19 +123,6 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
             borderRadius: "12px",
             textTransform: "capitalize" as const,
         } as React.CSSProperties,
-        logoutButton: {
-            position: "absolute" as const,
-            top: "20px",
-            right: "20px",
-            padding: "8px 16px",
-            fontSize: "0.875rem",
-            color: "#9ca3af",
-            backgroundColor: "transparent",
-            border: "1px solid #4b5563",
-            borderRadius: "4px",
-            cursor: "pointer",
-            transition: "all 0.2s",
-        } as React.CSSProperties,
     };
 
     // --- Effects ---
@@ -178,15 +167,54 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
         }
     };
 
-    // NEW: Customer status display mapping with time-based logic
+    // Calculate payment due date based on customer's payment preference
+    const getPaymentDueDate = (bookingEndTime: Date, paymentPreference: string): Date => {
+        switch (paymentPreference) {
+            case 'weekly': {
+                // Find the Monday after the booking week, then add 3 days
+                const endOfBookingWeek = endOfWeek(bookingEndTime, { weekStartsOn: 1 }); // Monday start
+                const nextMonday = addDays(endOfBookingWeek, 1);
+                return addDays(nextMonday, 3);
+            }
+            case 'fortnightly': {
+                // Find the Monday after the 2-week period, then add 3 days
+                // Use ISO week numbers: odd weeks are first week of period, even weeks are second
+                const weekNumber = getISOWeek(bookingEndTime);
+                const isEvenWeek = weekNumber % 2 === 0;
+
+                if (isEvenWeek) {
+                    // Already in an even week, payment due after this week
+                    const endOfThisWeek = endOfWeek(bookingEndTime, { weekStartsOn: 1 });
+                    const nextMonday = addDays(endOfThisWeek, 1);
+                    return addDays(nextMonday, 3);
+                } else {
+                    // In odd week, payment due after next week (the even week)
+                    const endOfNextWeek = addWeeks(endOfWeek(bookingEndTime, { weekStartsOn: 1 }), 1);
+                    const mondayAfter = addDays(endOfNextWeek, 1);
+                    return addDays(mondayAfter, 3);
+                }
+            }
+            case 'monthly': {
+                // Find the 1st of the next month, then add 3 days
+                const nextMonth = startOfMonth(addMonths(bookingEndTime, 1));
+                return addDays(nextMonth, 3);
+            }
+            case 'per_service':
+            default: {
+                // Current behavior: 3 days after booking end
+                return addDays(bookingEndTime, 3);
+            }
+        }
+    };
+
+    // Customer status display mapping with payment preference-aware logic
     const getCustomerStatusDisplay = (status: string, booking: Booking): string => {
         if (status === 'completed') {
-            // Check if booking is 3+ days overdue
             const endTime = new Date(booking.end_time);
             const now = new Date();
-            const daysOverdue = Math.floor((now.getTime() - endTime.getTime()) / (1000 * 60 * 60 * 24));
+            const paymentDueDate = getPaymentDueDate(endTime, customer.payment_preference || 'per_service');
 
-            if (daysOverdue >= 3) {
+            if (now >= paymentDueDate) {
                 return 'Completed - Payment Pending';
             } else {
                 return 'Completed';
@@ -217,12 +245,12 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
 
     const getBookingStatusColor = (booking: Booking): string => {
         if (booking.status === 'completed') {
-            // Check if booking is 3+ days overdue for red color
+            // Use payment preference-aware due date calculation
             const endTime = new Date(booking.end_time);
             const now = new Date();
-            const daysOverdue = Math.floor((now.getTime() - endTime.getTime()) / (1000 * 60 * 60 * 24));
+            const paymentDueDate = getPaymentDueDate(endTime, customer.payment_preference || 'per_service');
 
-            if (daysOverdue >= 3) {
+            if (now >= paymentDueDate) {
                 return '#ef4444'; // Red for payment pending
             } else {
                 return '#10b981'; // Green for recently completed
@@ -378,22 +406,6 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     // --- Render ---
     return (
         <div style={styles.container}>
-            {/* Logout Button */}
-            <button
-                onClick={onLogout}
-                style={styles.logoutButton}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "#374151";
-                    e.currentTarget.style.color = "#fff";
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.color = "#9ca3af";
-                }}
-            >
-                Logout
-            </button>
-
             {/* Customer Info Card */}
             <div style={styles.card}>
                 <h2 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.25rem" }}>
@@ -491,6 +503,12 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                         >
                             📅 Book New Service
                         </a>
+                        <button
+                            onClick={onLogout}
+                            className="inline-block px-4 py-2 text-sm font-semibold rounded bg-gray-600 text-white hover:bg-gray-700 transition-all duration-200 mr-2 mt-2"
+                        >
+                            🚪 Log Out
+                        </button>
                     </div>
 
                     {/* Loading State */}

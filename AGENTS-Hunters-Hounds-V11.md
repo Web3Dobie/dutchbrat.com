@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V10.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V11.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V10 - 15-Minute Time Slots + Persistent Customer Sessions** 🎉
+**Status**: **V11 - Manual Review Request System** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -85,7 +85,9 @@ export function useClientDomainDetection() {
 # Customer Review System Routes
 🔗 /api/dog-walking/reviews/submit              → GET: Fetch review by token, POST: Submit review
 🔗 /api/dog-walking/reviews/public              → GET: Published reviews with average rating
-🔗 /api/dog-walking/admin/reviews               → GET: Admin review list, PUT: Add response, DELETE: Remove response
+🔗 /api/dog-walking/admin/reviews               → GET: Reviews (section=submitted) or eligible bookings (section=eligible)
+                                                → PUT: Add response, DELETE: Remove response
+🔗 /api/dog-walking/admin/request-review        → POST: Create review + send request email (V11)
 
 # Admin Authentication Routes
 🔗 /api/dog-walking/admin/auth          → POST: Admin login (sets session cookie)
@@ -834,6 +836,88 @@ const getBookingRecipients = (booking) => {
 
 ---
 
+## 🎉 V11 Achievements Summary
+
+**Manual Review Request System:**
+
+The review request system has been overhauled to give admin explicit control over when review requests are sent, solving problems with recurring payment customers being bombarded with emails.
+
+**Problems Solved:**
+- ❌ Repeat customers received review request emails for every payment (even if already reviewed)
+- ❌ Recurring payment customers (weekly/bi-weekly/monthly) received 5-10 emails
+- ❌ Payment confirmation emails only existed to trigger review requests
+
+**New Review Request Flow:**
+
+✅ **Decoupled from Payment**: Mark-paid route now only updates booking status (no email, no review creation)
+✅ **Admin-Controlled Requests**: New "Request Review" tab in Manage Reviews page shows eligible bookings
+✅ **Manual Triggering**: Admin clicks "Request Review" button to send email for specific booking
+✅ **Smart Eligibility**: Only shows bookings that are 'completed & paid' AND have no review request yet
+✅ **Walk Summary in Email**: Review request email includes the walk summary/note from Ernesto
+✅ **Telegram Notification**: Admin receives notification when review request is sent
+
+**New API Route:**
+```
+🔗 /api/dog-walking/admin/request-review    → POST: Create review record + send review request email
+   Body: { booking_id: number }
+   Returns: { success, review_token, email_sent, message }
+```
+
+**Extended Reviews Admin API:**
+```
+🔗 /api/dog-walking/admin/reviews?section=eligible  → GET: Bookings eligible for review request
+🔗 /api/dog-walking/admin/reviews?section=submitted → GET: Submitted reviews (existing behavior)
+```
+
+**Updated Manage Reviews Page:**
+- New tab navigation: [Submitted Reviews] [Request Review]
+- "Request Review" tab shows completed & paid bookings without review requests
+- Displays: Customer name, dogs, service type, date, walk summary
+- Purple "Request Review" button per booking
+- Booking disappears from list after request is sent
+
+**New Review Request Email Template:**
+- Purple gradient header (distinct from green payment emails)
+- Title: "We'd Love Your Feedback!"
+- Includes walk summary/note from Ernesto in blue callout
+- Dog images displayed
+- Prominent yellow "Leave a Review" CTA button
+- Subject: `${dogNames} had a great time! Share your experience`
+
+**Simplified Mark-Paid Route:**
+- Removed: Email sending code
+- Removed: Review record creation
+- Removed: `generatePaymentReceivedEmail` and `sendBookingEmail` imports
+- Kept: Status update to 'completed & paid'
+- Kept: Telegram notification (without email count)
+
+**Files Created:**
+```
+/app/api/dog-walking/admin/request-review/route.ts  → Manual review request API
+```
+
+**Files Modified:**
+```
+/lib/emailTemplates.ts                              → Added generateReviewRequestEmail()
+/app/api/dog-walking/admin/mark-paid/route.ts       → Removed email/review creation
+/app/api/dog-walking/admin/reviews/route.ts         → Added section=eligible query
+/app/dog-walking/admin/manage-reviews/page.tsx      → Added tabs + request review section
+```
+
+**Admin Workflow (New):**
+```
+1. Mark bookings as paid → Only updates status (no email)
+2. Go to Manage Reviews → "Request Review" tab
+3. See eligible bookings with walk summaries
+4. Click "Request Review" for desired booking
+5. Customer receives email with review link
+6. After submission → Review appears in "Submitted Reviews" tab
+```
+
+**For AI Agents**: V11 changes the review request system from automatic (triggered by mark-paid) to manual (admin-controlled). The mark-paid route now only updates booking status without creating review records or sending emails. Admin can request reviews through the new "Request Review" tab in the Manage Reviews page, which shows eligible bookings (completed & paid, no review yet). Clicking "Request Review" creates the review record and sends an email via the new `/api/dog-walking/admin/request-review` endpoint. This prevents recurring payment customers from being spammed with review requests and gives admin control over which bookings to request reviews for. The new email template includes the walk summary and uses a purple color scheme to distinguish from other emails.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**
@@ -1152,8 +1236,8 @@ if (shouldSendEmail && !isHistorical) {
 ## ⭐ Customer Review System
 
 ### **System Overview**
-**Purpose**: Allow customers to leave reviews after bookings are marked as paid, with admin response capability
-**Trigger**: Automated review request email sent when booking is marked "completed & paid"
+**Purpose**: Allow customers to leave reviews after services, with admin response capability
+**Trigger**: Manual review request from admin via Manage Reviews page (V11 change - previously automatic)
 **Architecture**: Token-based secure review submission + public reviews page + admin management
 **Privacy**: Customers only need to click email link (no account required), first name only shown publicly
 
@@ -1231,50 +1315,56 @@ CREATE INDEX idx_reviews_booking_id ON hunters_hounds.reviews(booking_id);
 🔗 /api/dog-walking/reviews/public      → GET: Fetch published reviews with average
 
 # Admin Review Endpoints (Protected)
-🔗 /api/dog-walking/admin/reviews       → GET: List all submitted reviews (with filters)
+🔗 /api/dog-walking/admin/reviews       → GET: List reviews (section=submitted) or eligible bookings (section=eligible)
                                         → PUT: Add/update admin response
                                         → DELETE: Remove admin response
+🔗 /api/dog-walking/admin/request-review → POST: Create review record + send review request email (V11)
 ```
 
 ### **Review Workflow**
 
 ```
-Complete Review Flow:
-1. Admin marks booking as "completed & paid" via admin dashboard
-2. System creates review record with unique UUID token in database
-3. Payment received email sent to customer with embedded review link
-4. Customer clicks link → Review form loads with dog image + service details
-5. Customer selects 1-5 star rating and writes review text
-6. Customer submits → Review marked as submitted with timestamp
-7. Review appears immediately on public /reviews page
-8. Admin sees review in manage-reviews page (appears in "Pending Response")
-9. Admin adds optional response → Response displays on public review
-10. Customer and public can see complete review with business response
+Complete Review Flow (V11 - Manual Request):
+1. Admin marks booking as "completed & paid" via admin dashboard (no email sent)
+2. Admin goes to Manage Reviews → "Request Review" tab
+3. Admin sees eligible bookings (completed & paid, no review request yet)
+4. Admin clicks "Request Review" for desired booking
+5. System creates review record with unique UUID token in database
+6. Review request email sent to customer with embedded review link
+7. Customer clicks link → Review form loads with dog image + service details
+8. Customer selects 1-5 star rating and writes review text
+9. Customer submits → Review marked as submitted with timestamp
+10. Review appears immediately on public /reviews page
+11. Admin sees review in "Submitted Reviews" tab (appears in "Pending Response")
+12. Admin adds optional response → Response displays on public review
 ```
 
 ### **Email Integration**
 
-**Automatic Review Request (Triggered by Mark Paid):**
+**Manual Review Request (V11 - Triggered by Admin):**
 ```typescript
-// In /api/dog-walking/admin/mark-paid/route.ts
-// Creates review record and sends payment received email with review link
+// In /api/dog-walking/admin/request-review/route.ts
+// Creates review record and sends review request email
 
 const reviewUrl = `https://hunters-hounds.london/review/${reviewToken}`;
-const { subject, html } = generatePaymentReceivedEmail({
+const { subject, html } = generateReviewRequestEmail({
     ownerName: booking.owner_name.split(' ')[0],
     dogNames,
     dogImageUrls,
     serviceType: booking.service_type,
     serviceDate,
+    walkSummary: booking.walk_summary,  // V11: Includes walk note
     reviewUrl
 });
 ```
 
-**Email Content:**
-- Thanks customer for payment
+**Review Request Email Content (V11):**
+- Purple gradient header (distinct from payment/other emails)
+- "We'd Love Your Feedback!" title
 - Shows dog image(s) and service details
-- Includes prominent "Leave a Review" button/link
-- Uses Hunter's Hounds branding
+- Includes walk summary/note from Ernesto (if present)
+- Prominent yellow "Leave a Review" CTA button
+- Subject: `${dogNames} had a great time! Share your experience`
 
 ### **Components**
 
@@ -1367,16 +1457,20 @@ interface ReviewCardProps {
 /app/reviews/page.tsx                   → Public reviews listing
 
 # Admin Pages
-/app/dog-walking/admin/manage-reviews/page.tsx → Admin review management
+/app/dog-walking/admin/manage-reviews/page.tsx → Admin review management (V11: with tabs)
 
 # API Routes
-/app/api/dog-walking/reviews/submit/route.ts    → Submit review endpoint
-/app/api/dog-walking/reviews/public/route.ts    → Public reviews endpoint
-/app/api/dog-walking/admin/reviews/route.ts     → Admin review management
+/app/api/dog-walking/reviews/submit/route.ts     → Submit review endpoint
+/app/api/dog-walking/reviews/public/route.ts     → Public reviews endpoint
+/app/api/dog-walking/admin/reviews/route.ts      → Admin review management (V11: section param)
+/app/api/dog-walking/admin/request-review/route.ts → V11: Manual review request endpoint
 
 # Components
 /app/components/StarRating.tsx          → Interactive/readonly star rating
 /app/components/ReviewCard.tsx          → Review display card
+
+# Email Templates
+/lib/emailTemplates.ts                  → V11: generateReviewRequestEmail() added
 
 # Database Scripts
 /sql/create_reviews_table.sql           → Initial table creation
@@ -1385,4 +1479,4 @@ interface ReviewCardProps {
 
 ### **Review System Summary**
 
-**For AI Agents**: Hunter's Hounds includes a complete customer review system. When bookings are marked as "completed & paid" via the admin panel, the system automatically creates a review record with a unique UUID token and sends a payment confirmation email containing a review link. Customers can click the link to access a secure review form (no login required) where they see their dog's image, service details, and can submit a 1-5 star rating with written feedback. Submitted reviews immediately appear on the public `/reviews` page showing the average rating, individual reviews with dog images, and admin responses. The admin panel at `/dog-walking/admin/manage-reviews` allows filtering reviews by response status and adding/editing professional responses that display publicly. Database table `hunters_hounds.reviews` stores review data with token-based security, and all admin endpoints are protected by authentication.
+**For AI Agents**: Hunter's Hounds includes a complete customer review system with manual admin-controlled review requests (V11). When bookings are marked as "completed & paid", only the status is updated - no email is sent. Admin can then go to the Manage Reviews page "Request Review" tab to see eligible bookings (completed & paid with no review request yet). Clicking "Request Review" creates a review record with a unique UUID token and sends a review request email via the `/api/dog-walking/admin/request-review` endpoint. The email uses a purple color scheme (distinct from other emails) and includes the walk summary if present. Customers can click the link to access a secure review form (no login required) where they see their dog's image, service details, and can submit a 1-5 star rating with written feedback. Submitted reviews immediately appear on the public `/reviews` page showing the average rating, individual reviews with dog images, and admin responses. The admin panel at `/dog-walking/admin/manage-reviews` has two tabs: "Submitted Reviews" for managing responses and "Request Review" for sending new review requests. Database table `hunters_hounds.reviews` stores review data with token-based security, and all admin endpoints are protected by authentication. This manual approach prevents recurring payment customers from being spammed with review request emails.

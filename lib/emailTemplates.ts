@@ -566,6 +566,128 @@ export function generatePaymentReminderEmail(data: PaymentReminderEmailData): { 
     return { subject, html };
 }
 
+// Review Request Email (separate from payment confirmation)
+export interface ReviewRequestEmailData {
+    ownerName: string;
+    dogNames: string;
+    dogImageUrls: string[];
+    serviceType: string;
+    serviceDate: string;
+    walkSummary: string | null;
+    reviewUrl: string;
+}
+
+export function generateReviewRequestEmail(data: ReviewRequestEmailData): { subject: string; html: string } {
+    const { ownerName, dogNames, dogImageUrls, serviceType, serviceDate, walkSummary, reviewUrl } = data;
+
+    const subject = `${dogNames} had a great time! Share your experience`;
+
+    // Build dog image HTML (circular, centered)
+    const dogImageHtml = dogImageUrls.length > 0
+        ? `
+            <div style="text-align: center; margin: 25px 0;">
+                ${dogImageUrls.map(url => `
+                    <img src="${url}"
+                         alt="${dogNames}"
+                         style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 4px solid #7c3aed; margin: 0 8px;"
+                    />
+                `).join('')}
+            </div>
+        `
+        : '';
+
+    // Walk summary section if provided
+    const walkSummaryHtml = walkSummary
+        ? `
+            <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 20px; border-radius: 8px; margin: 25px 0;">
+                <h3 style="color: #0369a1; margin: 0 0 10px 0; font-size: 16px;">Note from Ernesto</h3>
+                <p style="color: #0369a1; line-height: 1.6; margin: 0; font-size: 15px; font-style: italic;">
+                    "${walkSummary}"
+                </p>
+            </div>
+        `
+        : '';
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>We'd Love Your Feedback - Hunter's Hounds</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+            <!-- Header with purple gradient -->
+            <div style="background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Hunter's Hounds</h1>
+                <p style="color: #e9d5ff; margin: 10px 0 0 0; font-size: 16px;">Professional Dog Walking & Pet Care</p>
+            </div>
+
+            <!-- Main content -->
+            <div style="padding: 40px 30px;">
+
+                <!-- Greeting -->
+                <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">Hi ${ownerName}! ⭐</h2>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
+                    I hope you and <strong>${dogNames}</strong> are doing well! I wanted to reach out and ask
+                    if you'd be willing to share your experience from our recent <strong>${serviceType}</strong>
+                    on <strong>${serviceDate}</strong>.
+                </p>
+
+                <!-- Dog Image -->
+                ${dogImageHtml}
+
+                <!-- Walk Summary -->
+                ${walkSummaryHtml}
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 25px 0;">
+                    Your feedback helps other dog owners in the neighbourhood discover quality care for their
+                    furry family members. It would mean the world to me if you could take a moment to leave a review!
+                </p>
+
+                <!-- Call to action -->
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${reviewUrl}"
+                       style="display: inline-block; background: linear-gradient(135deg, #facc15 0%, #eab308 100%); color: #1f2937; padding: 16px 40px;
+                              text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        ⭐ Leave a Review ⭐
+                    </a>
+                </div>
+
+                <p style="color: #6b7280; line-height: 1.6; font-size: 14px; margin: 25px 0 0 0; text-align: center;">
+                    It only takes a minute, and I'd really appreciate it!
+                </p>
+
+                <!-- Personal signature -->
+                <div style="margin-top: 30px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Thank you so much,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                    Hunter's Hounds - Professional Dog Walking Service<br>
+                    Serving Highbury Fields & Clissold Park Areas
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+
+    return { subject, html };
+}
+
 export function generateChristmasEmail(data: ChristmasEmailData): string {
     const { ownerName, dogNames } = data;
 

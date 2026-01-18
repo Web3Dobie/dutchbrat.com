@@ -11,20 +11,78 @@ const pool = new Pool({
     ssl: false,
 });
 
-// GET - List all reviews for admin
+// GET - List reviews or eligible bookings for admin
 export async function GET(request: NextRequest) {
     if (!isAuthenticated(request)) {
         return unauthorizedResponse();
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const filter = searchParams.get("filter") || "all"; // all, pending, responded
+    const section = searchParams.get("section") || "submitted"; // submitted, eligible
+    const filter = searchParams.get("filter") || "all"; // all, pending, responded (only for submitted)
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
     const client = await pool.connect();
 
     try {
+        // Handle "eligible" section - bookings that can receive review requests
+        if (section === "eligible") {
+            const eligibleQuery = `
+                SELECT
+                    b.id as booking_id,
+                    b.service_type,
+                    b.start_time,
+                    b.walk_summary,
+                    o.id as owner_id,
+                    o.owner_name,
+                    o.email as owner_email,
+                    COALESCE(d1.dog_name, '') as dog_name_1,
+                    COALESCE(d2.dog_name, '') as dog_name_2,
+                    COALESCE(d1.image_filename, '') as dog_image_1,
+                    COALESCE(d2.image_filename, '') as dog_image_2
+                FROM hunters_hounds.bookings b
+                JOIN hunters_hounds.owners o ON b.owner_id = o.id
+                LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
+                LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
+                LEFT JOIN hunters_hounds.reviews r ON b.id = r.booking_id
+                WHERE b.status = 'completed & paid' AND r.id IS NULL
+                ORDER BY b.start_time DESC
+                LIMIT $1 OFFSET $2
+            `;
+
+            const eligibleCountQuery = `
+                SELECT COUNT(*) as total
+                FROM hunters_hounds.bookings b
+                LEFT JOIN hunters_hounds.reviews r ON b.id = r.booking_id
+                WHERE b.status = 'completed & paid' AND r.id IS NULL
+            `;
+
+            const [eligibleResult, countResult] = await Promise.all([
+                client.query(eligibleQuery, [limit, offset]),
+                client.query(eligibleCountQuery)
+            ]);
+
+            const eligibleBookings = eligibleResult.rows.map(row => ({
+                bookingId: row.booking_id,
+                serviceType: row.service_type,
+                serviceDate: row.start_time,
+                walkSummary: row.walk_summary,
+                ownerId: row.owner_id,
+                ownerName: row.owner_name,
+                ownerEmail: row.owner_email,
+                dogNames: [row.dog_name_1, row.dog_name_2].filter(n => n),
+                dogImages: [row.dog_image_1, row.dog_image_2].filter(img => img)
+            }));
+
+            return NextResponse.json({
+                success: true,
+                eligibleBookings,
+                total: parseInt(countResult.rows[0].total)
+            });
+        }
+
+        // Default: Handle "submitted" section - existing behavior
         let whereClause = "WHERE r.submitted_at IS NOT NULL";
 
         if (filter === "pending") {

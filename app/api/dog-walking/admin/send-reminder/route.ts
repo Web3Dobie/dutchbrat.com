@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
 import { generatePaymentReminderEmail, type PaymentReminderEmailData } from "@/lib/emailTemplates";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 
 // Database Connection
 const pool = new Pool({
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
         // Format services for email
         const services = bookingsResult.rows.map(row => ({
-            date: format(parseISO(row.start_time), "EEEE, d MMMM yyyy"),
+            date: format(new Date(row.start_time), "EEEE, d MMMM yyyy"),
             serviceType: row.service_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
             price: parseFloat(row.price_pounds)
         }));
