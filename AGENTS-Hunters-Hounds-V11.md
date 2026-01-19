@@ -1012,16 +1012,19 @@ End: Wednesday, January 22, 2025 at 2:00 PM
 
 **Files Modified:**
 ```
-/app/components/BookingManager.tsx    → Multi-day date display + smart duration formatting
-/app/components/DashboardMain.tsx     → Multi-day date display in booking list
+/app/components/BookingManager.tsx              → Multi-day date display + smart duration formatting
+/app/components/DashboardMain.tsx               → Multi-day date display in booking list
+/lib/emailTemplates.ts                          → Added formatDurationForEmail() utility function
+/app/api/dog-walking/book/route.ts              → Smart duration in booking confirmation emails
+/app/api/dog-walking/admin/create-booking/route.ts → Smart duration in admin booking emails
 ```
 
 **Technical Implementation:**
 ```typescript
-// BookingManager.tsx - formatDuration() helper function
-const formatDuration = (minutes: number | null, startTime: Date, endTime: Date | null): string => {
+// lib/emailTemplates.ts - Shared utility for emails
+export function formatDurationForEmail(minutes: number | null, startTime?: Date, endTime?: Date): string {
     // Multi-day: show days
-    if (endTime && !isSameDay(startTime, endTime)) {
+    if (startTime && endTime && !isSameDay(startTime, endTime)) {
         const days = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60 * 24));
         return days === 1 ? "1 day" : `${days} days`;
     }
@@ -1029,10 +1032,20 @@ const formatDuration = (minutes: number | null, startTime: Date, endTime: Date |
     let durationMins = minutes ?? Math.round((endTime!.getTime() - startTime.getTime()) / (1000 * 60));
     // >= 60 min: show hours, < 60 min: show minutes
     return durationMins >= 60 ? `${durationMins / 60} hours` : `${durationMins} minutes`;
+}
+
+// BookingManager.tsx - Similar function for dashboard display
+const formatDuration = (minutes: number | null, startTime: Date, endTime: Date | null): string => {
+    // Same logic as above
 };
 ```
 
-**For AI Agents**: V11.2 enhances the customer dashboard booking display. Multi-day bookings now show both start and end dates (using `isSameDay()` from date-fns to detect). Duration display is now intelligent: shows days for multi-day bookings, hours for >= 60 minutes, and minutes for < 60 minutes. When `duration_minutes` is null (variable-duration sittings), the duration is calculated from start/end times. BookingManager.tsx handles the detailed booking view, DashboardMain.tsx handles the booking list cards.
+**Email Duration Examples:**
+- 2-hour Solo Walk → "Duration: 2 hours"
+- 30-minute Quick Walk → "Duration: 30 minutes"
+- 3-day Dog Sitting → "Duration: 3 days"
+
+**For AI Agents**: V11.2 enhances booking display across dashboard AND emails. Multi-day bookings now show both start and end dates (using `isSameDay()` from date-fns to detect). Duration display is now intelligent everywhere: shows days for multi-day bookings, hours for >= 60 minutes, and minutes for < 60 minutes. When `duration_minutes` is null (variable-duration sittings), the duration is calculated from start/end times. BookingManager.tsx handles the detailed booking view, DashboardMain.tsx handles the booking list cards. For emails, the shared `formatDurationForEmail()` utility in lib/emailTemplates.ts is used by both customer booking confirmations and admin booking confirmations.
 
 ---
 

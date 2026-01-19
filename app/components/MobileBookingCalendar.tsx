@@ -125,11 +125,15 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
         setSelectedBookingEnd(null);
         setError(null);
 
-        // Reset duration when changing services
+        // Reset duration when changing services - use service's defined duration
+        const service = ALL_SERVICES.find(s => s.id === serviceId);
         if (serviceId === "sitting") {
             setSelectedDuration(null); // Dog sitting has no fixed duration
-        } else if (serviceId !== "solo") {
-            setSelectedDuration(60); // Reset to default for other services
+        } else if (serviceId === "solo") {
+            setSelectedDuration(60); // Solo walk defaults to 1 hour (user can change)
+        } else {
+            // Use the service's defined duration (e.g., 30 for Quick Walk, Meet & Greet)
+            setSelectedDuration(service?.duration ?? 60);
         }
 
         // For dog sitting, we don't need the main selectedDay since it has its own date selection

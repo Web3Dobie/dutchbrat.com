@@ -23,6 +23,45 @@ export interface ChristmasEmailData {
     dogNames: string;
 }
 
+/**
+ * Formats duration intelligently for display in emails
+ * - Multi-day: "2 days", "3 days"
+ * - Hours (>= 60 min): "1 hour", "2 hours"
+ * - Minutes (< 60 min): "30 minutes"
+ */
+export function formatDurationForEmail(minutes: number | null, startTime?: Date, endTime?: Date): string {
+    // For multi-day bookings, calculate days from dates
+    if (startTime && endTime) {
+        const startDay = new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate());
+        const endDay = new Date(endTime.getFullYear(), endTime.getMonth(), endTime.getDate());
+        if (startDay.getTime() !== endDay.getTime()) {
+            const diffMs = endTime.getTime() - startTime.getTime();
+            const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+            return days === 1 ? "1 day" : `${days} days`;
+        }
+    }
+
+    // If minutes is null, calculate from start/end times
+    let durationMins = minutes;
+    if (durationMins === null && startTime && endTime) {
+        durationMins = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+    }
+
+    // Fallback if still no duration
+    if (durationMins === null) {
+        return "Variable";
+    }
+
+    // For bookings >= 60 minutes, show hours
+    if (durationMins >= 60) {
+        const hours = durationMins / 60;
+        return hours === 1 ? "1 hour" : `${hours} hours`;
+    }
+
+    // For short bookings (< 60 min), show minutes
+    return `${durationMins} minutes`;
+}
+
 export function generateWelcomeEmail(data: WelcomeEmailData): string {
     const { ownerName, dogName, dogBreed, dogAge } = data;
 

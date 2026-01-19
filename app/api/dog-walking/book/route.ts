@@ -9,6 +9,7 @@ import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
 import { sendBookingEmail } from "@/lib/emailService";
+import { formatDurationForEmail } from "@/lib/emailTemplates";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -459,7 +460,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                     <p>Your booking for a <strong>${service_type}</strong> is confirmed!</p>
                     <p><strong>Date & Time:</strong> ${displayDate}</p>
                     <p><strong>Dog(s):</strong> ${dogNames}</p>
-                    <p><strong>Duration:</strong> ${duration_minutes} minutes</p>
+                    <p><strong>Duration:</strong> ${formatDurationForEmail(duration_minutes)}</p>
                     <p><strong>Location:</strong> ${addressLabel}</p>
                     <p><strong>Address:</strong> ${eventAddress}</p>
                     ${priceDisplay}
