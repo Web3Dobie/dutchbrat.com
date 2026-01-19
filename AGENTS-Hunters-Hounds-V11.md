@@ -236,17 +236,50 @@ if (isHuntersHoundsDomain()) {
 - **Time Buffers**: 15-minute buffer between appointments
 - **Multi-Day Support**: Dog sitting supports single-day and multi-day bookings
 
-**Availability Logic - Service Type Awareness:**
-The walk availability API (`/api/dog-walking/availability`) uses smart conflict detection based on booking type:
+**Availability Logic - Service Type Awareness (Bidirectional):**
+
+The booking system uses intelligent conflict detection that allows walks and 6+ hour single-day sittings to coexist on the same day. This reflects real-world operations where the dog stays at home during extended sitting, allowing the walker to go out and walk other dogs.
+
+**Walk Availability API** (`/api/dog-walking/availability`):
 
 | Existing Booking | Can Book Walk? | Reason |
 |------------------|----------------|--------|
-| Multi-day dog sitting (e.g., 4 days) | **YES** | Dog stays at home, walker can go out to walk other dogs |
-| Single-day timed sitting (e.g., 4 hours) | **NO** | Actively watching the dog during those hours |
+| Multi-day dog sitting (e.g., 4 days) | **YES** | Dog stays at home, walker can go out |
+| Single-day sitting (6+ hours) | **YES** | Dog rests at home between walks |
+| Single-day sitting (<6 hours) | **NO** | Actively watching the dog during those hours |
 | Other walks | **NO** | Buffer time applied between walk appointments |
 | Weekend | **NO** | Walks only available Monday-Friday |
 
-**Implementation:** Calendar events with "Multi-Day Dog Sitting" in the description are excluded from busy time calculations, allowing walk bookings on those days. Single-day sitting events (containing "Single-Day Dog Sitting") still block walk availability during those hours.
+**Sitting Availability API** (`/api/dog-walking/sitting-availability`):
+
+| Existing Booking | Can Book Sitting? | Conditions |
+|------------------|-------------------|------------|
+| Walks scheduled | **YES** | Must be 6+ hours minimum |
+| Multi-day sitting | **NO** | No overlapping sittings allowed |
+| Single-day sitting | **NO** | No overlapping sittings allowed |
+
+**API Response Enhancement:**
+The sitting availability API returns a `hasWalks` flag when walks exist on the selected day:
+```typescript
+interface SittingAvailabilityResponse {
+    available: boolean;
+    type: 'single' | 'multi';
+    availableRanges?: ApiRange[];
+    hasWalks?: boolean;  // True when walks scheduled on this day
+    message?: string;    // "Minimum 6 hours required (walks scheduled)"
+}
+```
+
+**UI Enforcement (SittingBookingFlow.tsx):**
+When `hasWalks` is true, the component:
+1. Displays a yellow warning: "⚠️ Walks are already scheduled on this day. Minimum 6-hour sitting is required so your dog can rest at home in between his walks, while I walk other dogs."
+2. Filters end time options to only show times that create a 6+ hour booking
+3. Prevents booking of short sittings (<6 hours) when walks exist
+
+**Implementation Details:**
+- Walk availability API extracts duration from "Single-Day Dog Sitting" calendar events and excludes 6+ hour sittings from busy times
+- Sitting availability API filters out walk events from busy times but returns the `hasWalks` flag
+- Frontend enforces minimum duration via `getSittingEndTimes(ranges, startTime, minDurationMinutes)` function with `minDurationMinutes = 360` when walks exist
 
 ## 🗄️ Enhanced Database Schema & Architecture
 
@@ -838,6 +871,40 @@ const getBookingRecipients = (booking) => {
 
 ## 🎉 V11 Achievements Summary
 
+**Bidirectional Walk/Sitting Coexistence (V11.1):**
+
+Implemented smart booking logic that allows walks and 6+ hour single-day sittings to coexist on the same day, in both directions.
+
+**Problems Solved:**
+- ❌ Previously: Single-day sitting blocked ALL other services
+- ❌ Walks couldn't be booked when sitting existed (even long sittings where dog rests at home)
+- ❌ Sittings couldn't be booked when walks existed (even when sitting would be 6+ hours)
+
+**New Bidirectional Logic:**
+- ✅ Walks can be booked when 6+ hour single-day sitting exists (dog rests at home)
+- ✅ 6+ hour sitting can be booked when walks exist on the same day
+- ✅ Single-day sitting <6 hours still blocks walks (actively watching dog)
+- ✅ Multi-day sitting + walks: Allowed (no change - dog stays at home)
+- ✅ Sitting + Sitting: Never allowed (no 2 dogs at once)
+
+**UX Approach:**
+When walks exist on a day, the sitting booking flow:
+1. Returns `hasWalks: true` in API response
+2. Displays yellow warning message explaining the 6-hour minimum
+3. Only shows end time options that create 6+ hour bookings
+4. Prevents invalid short sitting bookings via UI filtering
+
+**Files Modified:**
+```
+/app/api/dog-walking/availability/route.ts      → Allow walks during 6+ hour sitting
+/app/api/dog-walking/sitting-availability/route.ts → Return hasWalks flag, filter walk events
+/app/components/SittingBookingFlow.tsx          → 6-hour minimum enforcement + warning message
+```
+
+**For AI Agents**: V11.1 implements bidirectional coexistence between walks and 6+ hour single-day sittings. The walk availability API extracts sitting duration and excludes 6+ hour sittings from busy times. The sitting availability API returns a `hasWalks` boolean flag when walks exist. The SittingBookingFlow component uses this flag to enforce a 360-minute minimum duration and display a warning message. The `getSittingEndTimes()` function accepts a `minDurationMinutes` parameter (60 normally, 360 when walks exist).
+
+---
+
 **Manual Review Request System:**
 
 The review request system has been overhauled to give admin explicit control over when review requests are sent, solving problems with recurring payment customers being bombarded with emails.
@@ -914,7 +981,58 @@ The review request system has been overhauled to give admin explicit control ove
 6. After submission → Review appears in "Submitted Reviews" tab
 ```
 
-**For AI Agents**: V11 changes the review request system from automatic (triggered by mark-paid) to manual (admin-controlled). The mark-paid route now only updates booking status without creating review records or sending emails. Admin can request reviews through the new "Request Review" tab in the Manage Reviews page, which shows eligible bookings (completed & paid, no review yet). Clicking "Request Review" creates the review record and sends an email via the new `/api/dog-walking/admin/request-review` endpoint. This prevents recurring payment customers from being spammed with review requests and gives admin control over which bookings to request reviews for. The new email template includes the walk summary and uses a purple color scheme to distinguish from other emails.
+**For AI Agents**: V11 introduces two major changes: (1) **Manual Review Requests** - The review request system changed from automatic (triggered by mark-paid) to manual (admin-controlled). The mark-paid route now only updates booking status without creating review records or sending emails. Admin can request reviews through the new "Request Review" tab in the Manage Reviews page, which shows eligible bookings (completed & paid, no review yet). Clicking "Request Review" creates the review record and sends an email via the new `/api/dog-walking/admin/request-review` endpoint. This prevents recurring payment customers from being spammed with review requests. (2) **Bidirectional Walk/Sitting Coexistence (V11.1)** - Walks and 6+ hour single-day sittings can now coexist on the same day. The walk availability API extracts sitting duration from calendar events and excludes 6+ hour sittings from busy times. The sitting availability API returns a `hasWalks` boolean flag when walks exist on the day. The SittingBookingFlow component uses this flag to enforce a 360-minute (6 hour) minimum duration and displays a yellow warning message. Short sittings (<6 hours) still block walks as the dog is actively being watched.
+
+---
+
+**Enhanced Customer Dashboard Booking Display (V11.2):**
+
+Improved how variable/multi-day bookings are displayed in the customer dashboard for better clarity.
+
+**Problems Solved:**
+- ❌ Multi-day bookings only showed start date, not end date
+- ❌ Duration always displayed as "X minutes" even for multi-day bookings
+- ❌ Variable-duration bookings showed "null minutes" when duration_minutes was null
+
+**New Display Logic:**
+
+✅ **Multi-Day Bookings**: Now show both start and end dates with times
+```
+Start: Monday, January 20, 2025 at 10:00 AM
+End: Wednesday, January 22, 2025 at 2:00 PM
+```
+
+✅ **Smart Duration Display**:
+- Multi-day bookings → "2 days", "3 days"
+- Bookings >= 1 hour → "2 hours", "10 hours"
+- Short bookings < 1 hour → "30 minutes"
+- Calculates from start/end times when duration_minutes is null
+
+✅ **Same-Day Bookings**: Keep existing format (Date + Time range)
+
+**Files Modified:**
+```
+/app/components/BookingManager.tsx    → Multi-day date display + smart duration formatting
+/app/components/DashboardMain.tsx     → Multi-day date display in booking list
+```
+
+**Technical Implementation:**
+```typescript
+// BookingManager.tsx - formatDuration() helper function
+const formatDuration = (minutes: number | null, startTime: Date, endTime: Date | null): string => {
+    // Multi-day: show days
+    if (endTime && !isSameDay(startTime, endTime)) {
+        const days = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60 * 24));
+        return days === 1 ? "1 day" : `${days} days`;
+    }
+    // Calculate from times if minutes is null
+    let durationMins = minutes ?? Math.round((endTime!.getTime() - startTime.getTime()) / (1000 * 60));
+    // >= 60 min: show hours, < 60 min: show minutes
+    return durationMins >= 60 ? `${durationMins / 60} hours` : `${durationMins} minutes`;
+};
+```
+
+**For AI Agents**: V11.2 enhances the customer dashboard booking display. Multi-day bookings now show both start and end dates (using `isSameDay()` from date-fns to detect). Duration display is now intelligent: shows days for multi-day bookings, hours for >= 60 minutes, and minutes for < 60 minutes. When `duration_minutes` is null (variable-duration sittings), the duration is calculated from start/end times. BookingManager.tsx handles the detailed booking view, DashboardMain.tsx handles the booking list cards.
 
 ---
 

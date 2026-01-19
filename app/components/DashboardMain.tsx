@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths } from "date-fns";
+import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths, isSameDay } from "date-fns";
 import { formatPrice } from '@/lib/pricing';
 
 // --- Types ---
@@ -226,6 +226,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     const formatBookingDateTime = (startTime: string, endTime: string, durationMinutes: number) => {
         const start = new Date(startTime);
         const end = new Date(endTime);
+        const isMultiDay = !isSameDay(start, end);
 
         let dateDisplay = "";
         if (isToday(start)) {
@@ -238,9 +239,22 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
             dateDisplay = format(start, "EEE, MMM d");
         }
 
-        const timeDisplay = `${format(start, "h:mm a")} - ${format(end, "h:mm a")}`;
+        let endDateDisplay = "";
+        if (isMultiDay) {
+            if (isToday(end)) {
+                endDateDisplay = "Today";
+            } else if (isTomorrow(end)) {
+                endDateDisplay = "Tomorrow";
+            } else {
+                endDateDisplay = format(end, "EEE, MMM d");
+            }
+        }
 
-        return { dateDisplay, timeDisplay };
+        const timeDisplay = isMultiDay
+            ? `${format(start, "h:mm a")} → ${format(end, "h:mm a")}`
+            : `${format(start, "h:mm a")} - ${format(end, "h:mm a")}`;
+
+        return { dateDisplay, endDateDisplay, timeDisplay, isMultiDay };
     };
 
     const getBookingStatusColor = (booking: Booking): string => {
@@ -301,7 +315,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
 
     // --- Helper Function to Render Booking Card ---
     const renderBookingCard = (booking: Booking, showCancel: boolean = true) => {
-        const { dateDisplay, timeDisplay } = formatBookingDateTime(
+        const { dateDisplay, endDateDisplay, timeDisplay, isMultiDay } = formatBookingDateTime(
             booking.start_time,
             booking.end_time,
             booking.duration_minutes
@@ -350,7 +364,10 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     <div className="flex justify-between items-center mb-3">
                         <div>
                             <p className="text-gray-400 text-sm">
-                                {dateDisplay} • {timeDisplay}
+                                {isMultiDay
+                                    ? `${dateDisplay} → ${endDateDisplay} • ${timeDisplay}`
+                                    : `${dateDisplay} • ${timeDisplay}`
+                                }
                             </p>
                         </div>
                         {booking.price_pounds && (

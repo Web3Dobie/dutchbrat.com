@@ -415,7 +415,7 @@ export default function SittingBookingFlow({
                         {apiData.available && apiData.type === 'single' && apiData.hasWalks && (
                             <div className="p-3 rounded-lg bg-yellow-800 text-yellow-200 border border-yellow-600">
                                 <p className="text-sm">
-                                    ⚠️ <strong>Walks scheduled on this day.</strong> Minimum 6-hour sitting required so the dog can be left at home while you walk other dogs.
+                                    ⚠️ <strong>Walks are already scheduled on this day.</strong> Minimum 6-hour sitting is required so your dog can rest at home in between his walks, while I walk other dogs.
                                 </p>
                             </div>
                         )}
@@ -449,7 +449,7 @@ export default function SittingBookingFlow({
                         {apiData.available && apiData.type === 'multi' && (
                             <div className="p-3 rounded-lg bg-blue-800 text-blue-200 border border-blue-600">
                                 <p className="text-sm">
-                                    ℹ️ <strong>Note:</strong> Dog walking appointments may be scheduled during your sitting period. 
+                                    ℹ️ <strong>Note:</strong> Dog walking appointments may be scheduled during your sitting period.
                                     This is normal - I can walk other dogs while caring for your pet.
                                 </p>
                             </div>

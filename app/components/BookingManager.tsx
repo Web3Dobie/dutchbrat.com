@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format, isPast, isToday, isTomorrow, addHours, isBefore, addMinutes } from "date-fns";
+import { format, isPast, isToday, isTomorrow, addHours, isBefore, addMinutes, isSameDay } from "date-fns";
 
 // Import existing calendar components
 import ResponsiveDatePicker from "./ResponsiveDatePicker";
@@ -281,6 +281,36 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         },
     };
 
+    // --- Helper Functions ---
+    const formatDuration = (minutes: number | null, startTime: Date, endTime: Date | null): string => {
+        // For multi-day bookings, calculate days from dates
+        if (endTime && !isSameDay(startTime, endTime)) {
+            const diffMs = endTime.getTime() - startTime.getTime();
+            const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+            return days === 1 ? "1 day" : `${days} days`;
+        }
+
+        // If duration_minutes is null, calculate from start/end times
+        let durationMins = minutes;
+        if (durationMins === null && endTime) {
+            durationMins = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+        }
+
+        // Fallback if still no duration
+        if (durationMins === null) {
+            return "Variable";
+        }
+
+        // For bookings >= 60 minutes, show hours
+        if (durationMins >= 60) {
+            const hours = durationMins / 60;
+            return hours === 1 ? "1 hour" : `${hours} hours`;
+        }
+
+        // For short bookings (< 60 min), show minutes
+        return `${durationMins} minutes`;
+    };
+
     // --- Render Functions ---
     const renderDetailsView = () => {
         if (!booking) return null;
@@ -313,23 +343,44 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                     </h2>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <span className="text-gray-400">Date:</span>
-                            <span className="text-white font-medium ml-2">
-                                {format(startTime, "EEEE, MMMM d, yyyy")}
-                            </span>
-                        </div>
-                        <div>
-                            <span className="text-gray-400">Time:</span>
-                            <span className="text-white font-medium ml-2">
-                                {format(startTime, "h:mm a")}
-                                {endTime && ` - ${format(endTime, "h:mm a")}`}
-                            </span>
-                        </div>
+                        {endTime && !isSameDay(startTime, endTime) ? (
+                            // Multi-day booking: show start and end with dates
+                            <>
+                                <div>
+                                    <span className="text-gray-400">Start:</span>
+                                    <span className="text-white font-medium ml-2">
+                                        {format(startTime, "EEEE, MMMM d, yyyy")} at {format(startTime, "h:mm a")}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-gray-400">End:</span>
+                                    <span className="text-white font-medium ml-2">
+                                        {format(endTime, "EEEE, MMMM d, yyyy")} at {format(endTime, "h:mm a")}
+                                    </span>
+                                </div>
+                            </>
+                        ) : (
+                            // Same-day booking: keep current format
+                            <>
+                                <div>
+                                    <span className="text-gray-400">Date:</span>
+                                    <span className="text-white font-medium ml-2">
+                                        {format(startTime, "EEEE, MMMM d, yyyy")}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-gray-400">Time:</span>
+                                    <span className="text-white font-medium ml-2">
+                                        {format(startTime, "h:mm a")}
+                                        {endTime && ` - ${format(endTime, "h:mm a")}`}
+                                    </span>
+                                </div>
+                            </>
+                        )}
                         <div>
                             <span className="text-gray-400">Duration:</span>
                             <span className="text-white font-medium ml-2">
-                                {booking.duration_minutes} minutes
+                                {formatDuration(booking.duration_minutes, startTime, endTime)}
                             </span>
                         </div>
                         <div>
