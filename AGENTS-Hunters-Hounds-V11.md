@@ -1017,6 +1017,7 @@ End: Wednesday, January 22, 2025 at 2:00 PM
 /lib/emailTemplates.ts                          → Added formatDurationForEmail() utility function
 /app/api/dog-walking/book/route.ts              → Smart duration in booking confirmation emails
 /app/api/dog-walking/admin/create-booking/route.ts → Smart duration in admin booking emails
+/scripts/send-reminders.js                      → Smart duration in appointment reminder emails
 ```
 
 **Technical Implementation:**
@@ -1045,7 +1046,7 @@ const formatDuration = (minutes: number | null, startTime: Date, endTime: Date |
 - 30-minute Quick Walk → "Duration: 30 minutes"
 - 3-day Dog Sitting → "Duration: 3 days"
 
-**For AI Agents**: V11.2 enhances booking display across dashboard AND emails. Multi-day bookings now show both start and end dates (using `isSameDay()` from date-fns to detect). Duration display is now intelligent everywhere: shows days for multi-day bookings, hours for >= 60 minutes, and minutes for < 60 minutes. When `duration_minutes` is null (variable-duration sittings), the duration is calculated from start/end times. BookingManager.tsx handles the detailed booking view, DashboardMain.tsx handles the booking list cards. For emails, the shared `formatDurationForEmail()` utility in lib/emailTemplates.ts is used by both customer booking confirmations and admin booking confirmations.
+**For AI Agents**: V11.2 enhances booking display across dashboard AND emails. Multi-day bookings now show both start and end dates (using `isSameDay()` from date-fns to detect). Duration display is now intelligent everywhere: shows days for multi-day bookings, hours for >= 60 minutes, and minutes for < 60 minutes. When `duration_minutes` is null (variable-duration sittings), the duration is calculated from start/end times. BookingManager.tsx handles the detailed booking view, DashboardMain.tsx handles the booking list cards. For emails, the shared `formatDurationForEmail()` utility in lib/emailTemplates.ts is used by both customer booking confirmations and admin booking confirmations. The standalone reminder script (`/scripts/send-reminders.js`) also uses smart duration formatting via its own `formatDuration()` function.
 
 ---
 

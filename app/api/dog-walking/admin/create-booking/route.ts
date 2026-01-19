@@ -246,7 +246,7 @@ Status: ${status.toUpperCase()}
                     <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
                         <p><strong>Service:</strong> ${data.service_type}</p>
                         <p><strong>Date & Time:</strong> ${format(startTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>
-                        ${booking_type === 'single' ? `<p><strong>Duration:</strong> ${formatDurationForEmail(data.duration_minutes)}</p>` : `<p><strong>End Time:</strong> ${format(endTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>`}
+                        ${booking_type === 'single' ? `<p><strong>Duration:</strong> ${formatDurationForEmail(data.duration_minutes ?? null)}</p>` : `<p><strong>End Time:</strong> ${format(endTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>`}
                         ${finalPrice !== null ? `<p><strong>Price:</strong> £${finalPrice.toFixed(2)}</p>` : ''}
                     </div>
 

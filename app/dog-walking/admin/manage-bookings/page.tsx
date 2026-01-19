@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 
 // Types
@@ -34,6 +34,13 @@ export default function ManageBookings() {
     const [priceValue, setPriceValue] = useState<string>('');
     const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
     const [updatingPrice, setUpdatingPrice] = useState<number | null>(null);
+
+    // Filter State
+    const [filterClient, setFilterClient] = useState<string>('');
+    const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+    const [filterDateTo, setFilterDateTo] = useState<string>('');
+    const [filterService, setFilterService] = useState<string>('');
+    const [filterStatus, setFilterStatus] = useState<string>('');
 
     // Effects
     useEffect(() => {
@@ -215,13 +222,82 @@ export default function ManageBookings() {
         updatePrice(bookingId, newPrice);
     };
 
+    // Extract unique values for filter dropdowns
+    const uniqueClients = useMemo(() => {
+        const clients = Array.from(new Set(bookings.map(b => b.owner_name)));
+        return clients.sort((a, b) => a.localeCompare(b));
+    }, [bookings]);
+
+    const uniqueServices = useMemo(() => {
+        const services = Array.from(new Set(bookings.map(b => b.service_type)));
+        return services.sort((a, b) => a.localeCompare(b));
+    }, [bookings]);
+
+    const uniqueStatuses = useMemo(() => {
+        const statuses = Array.from(new Set(bookings.map(b => b.status)));
+        return statuses;
+    }, [bookings]);
+
+    // Apply filters
+    const filteredBookings = useMemo(() => {
+        return bookings.filter(booking => {
+            // Client filter
+            if (filterClient && booking.owner_name !== filterClient) {
+                return false;
+            }
+
+            // Date from filter
+            if (filterDateFrom) {
+                const bookingDate = new Date(booking.start_time);
+                const fromDate = new Date(filterDateFrom);
+                fromDate.setHours(0, 0, 0, 0);
+                if (bookingDate < fromDate) {
+                    return false;
+                }
+            }
+
+            // Date to filter
+            if (filterDateTo) {
+                const bookingDate = new Date(booking.start_time);
+                const toDate = new Date(filterDateTo);
+                toDate.setHours(23, 59, 59, 999);
+                if (bookingDate > toDate) {
+                    return false;
+                }
+            }
+
+            // Service filter
+            if (filterService && booking.service_type !== filterService) {
+                return false;
+            }
+
+            // Status filter
+            if (filterStatus && booking.status !== filterStatus) {
+                return false;
+            }
+
+            return true;
+        });
+    }, [bookings, filterClient, filterDateFrom, filterDateTo, filterService, filterStatus]);
+
+    // Clear all filters
+    const clearFilters = () => {
+        setFilterClient('');
+        setFilterDateFrom('');
+        setFilterDateTo('');
+        setFilterService('');
+        setFilterStatus('');
+    };
+
+    const hasActiveFilters = filterClient || filterDateFrom || filterDateTo || filterService || filterStatus;
+
     // Separate and sort bookings
     const now = new Date();
-    const upcomingBookings = bookings
+    const upcomingBookings = filteredBookings
         .filter(booking => new Date(booking.start_time) >= now)
         .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
-    const pastBookings = bookings
+    const pastBookings = filteredBookings
         .filter(booking => new Date(booking.start_time) < now)
         .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
 
@@ -481,6 +557,57 @@ export default function ManageBookings() {
             color: "#9ca3af",
             fontSize: "0.875rem",
         } as React.CSSProperties,
+        filterBar: {
+            backgroundColor: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: "8px",
+            padding: "16px",
+            marginBottom: "24px",
+        } as React.CSSProperties,
+        filterRow: {
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "16px",
+            alignItems: "flex-end",
+        } as React.CSSProperties,
+        filterGroup: {
+            display: "flex",
+            flexDirection: "column",
+            minWidth: "150px",
+        } as React.CSSProperties,
+        filterLabel: {
+            color: "#9ca3af",
+            fontSize: "0.75rem",
+            marginBottom: "4px",
+            fontWeight: "bold",
+        } as React.CSSProperties,
+        filterSelect: {
+            padding: "8px 12px",
+            backgroundColor: "#374151",
+            color: "#d1d5db",
+            border: "1px solid #4b5563",
+            borderRadius: "6px",
+            fontSize: "0.875rem",
+            cursor: "pointer",
+        } as React.CSSProperties,
+        filterInput: {
+            padding: "8px 12px",
+            backgroundColor: "#374151",
+            color: "#d1d5db",
+            border: "1px solid #4b5563",
+            borderRadius: "6px",
+            fontSize: "0.875rem",
+        } as React.CSSProperties,
+        clearButton: {
+            padding: "8px 16px",
+            backgroundColor: "#ef4444",
+            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            fontSize: "0.875rem",
+            fontWeight: "bold",
+            cursor: "pointer",
+        } as React.CSSProperties,
     };
 
     if (loading) {
@@ -559,21 +686,121 @@ export default function ManageBookings() {
                 "No Show" status automatically sends an email to the customer.
             </div>
 
-            {/* Stats */}
-            <div style={styles.stats}>
-                <strong>{bookings.length}</strong> editable booking{bookings.length !== 1 ? 's' : ''} found
-                <span style={{ color: "#9ca3af", marginLeft: "16px" }}>
-                    ({upcomingBookings.length} upcoming, {pastBookings.length} past)
-                </span>
+            {/* Filter Bar */}
+            <div style={styles.filterBar}>
+                <div style={styles.filterRow}>
+                    {/* Client Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>Client</label>
+                        <select
+                            value={filterClient}
+                            onChange={(e) => setFilterClient(e.target.value)}
+                            style={styles.filterSelect}
+                        >
+                            <option value="">All Clients</option>
+                            {uniqueClients.map(client => (
+                                <option key={client} value={client}>{client}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Date From Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>From Date</label>
+                        <input
+                            type="date"
+                            value={filterDateFrom}
+                            onChange={(e) => setFilterDateFrom(e.target.value)}
+                            style={styles.filterInput}
+                        />
+                    </div>
+
+                    {/* Date To Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>To Date</label>
+                        <input
+                            type="date"
+                            value={filterDateTo}
+                            onChange={(e) => setFilterDateTo(e.target.value)}
+                            style={styles.filterInput}
+                        />
+                    </div>
+
+                    {/* Service Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>Service</label>
+                        <select
+                            value={filterService}
+                            onChange={(e) => setFilterService(e.target.value)}
+                            style={styles.filterSelect}
+                        >
+                            <option value="">All Services</option>
+                            {uniqueServices.map(service => (
+                                <option key={service} value={service}>{service}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>Status</label>
+                        <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            style={styles.filterSelect}
+                        >
+                            <option value="">All Statuses</option>
+                            {uniqueStatuses.map(status => (
+                                <option key={status} value={status}>{getStatusDisplayName(status)}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Clear Filters Button */}
+                    {hasActiveFilters && (
+                        <div style={styles.filterGroup}>
+                            <label style={styles.filterLabel}>&nbsp;</label>
+                            <button
+                                onClick={clearFilters}
+                                style={styles.clearButton}
+                            >
+                                Clear Filters
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {bookings.length > 0 ? (
+            {/* Stats */}
+            <div style={styles.stats}>
+                {hasActiveFilters ? (
+                    <>
+                        <strong>{filteredBookings.length}</strong> of <strong>{bookings.length}</strong> bookings shown
+                        <span style={{ color: "#9ca3af", marginLeft: "16px" }}>
+                            ({upcomingBookings.length} upcoming, {pastBookings.length} past)
+                        </span>
+                    </>
+                ) : (
+                    <>
+                        <strong>{bookings.length}</strong> editable booking{bookings.length !== 1 ? 's' : ''} found
+                        <span style={{ color: "#9ca3af", marginLeft: "16px" }}>
+                            ({upcomingBookings.length} upcoming, {pastBookings.length} past)
+                        </span>
+                    </>
+                )}
+            </div>
+
+            {filteredBookings.length > 0 ? (
                 <div>
                     {/* Upcoming Bookings Section */}
                     {renderBookingSection("📅 Upcoming Bookings", upcomingBookings, "#3b82f6")}
 
                     {/* Past Bookings Section */}
                     {renderBookingSection("📋 Past Bookings", pastBookings, "#6b7280")}
+                </div>
+            ) : hasActiveFilters ? (
+                <div style={styles.noData}>
+                    No bookings match your filters. Try adjusting or clearing the filters.
                 </div>
             ) : (
                 <div style={styles.noData}>
