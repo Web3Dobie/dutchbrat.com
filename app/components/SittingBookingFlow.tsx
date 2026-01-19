@@ -18,6 +18,7 @@ interface SittingAvailabilityResponse {
     endDayRanges?: ApiRange[];
     conflicts?: string[];
     conflictDetails?: string[];
+    hasWalks?: boolean;
     message?: string;
 }
 
@@ -69,13 +70,13 @@ const getSittingStartTimes = (ranges: ApiRange[]): string[] => {
 };
 
 // Function to get available end times for a given start time
-const getSittingEndTimes = (ranges: ApiRange[], startTime: string): string[] => {
+const getSittingEndTimes = (ranges: ApiRange[], startTime: string, minDurationMinutes: number = 60): string[] => {
     if (ranges.length === 0) return [];
 
     const slots: string[] = [];
     const startTimeObj = parseTime(startTime);
     const startTimeInMinutes = startTimeObj.getHours() * 60 + startTimeObj.getMinutes();
-    const minEndTimeInMinutes = startTimeInMinutes + 60; // 1 hour minimum
+    const minEndTimeInMinutes = startTimeInMinutes + minDurationMinutes; // Use parameter for minimum duration
 
     // Find the single relevant range that contains the start time
     const relevantRange = ranges.find(range => {
@@ -250,9 +251,11 @@ export default function SittingBookingFlow({
     }, [apiData]);
 
     // Get available end times for selected start time
+    // If walks exist on this day, require 6-hour minimum (360 minutes); otherwise 1-hour minimum (60 minutes)
     const availableEndTimes = useMemo(() => {
         if (!selectedStartTime || !apiData || apiData.type !== 'single' || !apiData.availableRanges) return [];
-        return getSittingEndTimes(apiData.availableRanges, selectedStartTime);
+        const minDurationMinutes = apiData.hasWalks ? 360 : 60;
+        return getSittingEndTimes(apiData.availableRanges, selectedStartTime, minDurationMinutes);
     }, [selectedStartTime, apiData]);
 
     // Generate time options for multi-day dropdowns
@@ -399,14 +402,23 @@ export default function SittingBookingFlow({
                     <div className="space-y-3">
                         {/* Main availability message */}
                         <div className={`p-3 rounded-lg ${apiData.available ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200'}`}>
-                            {apiData.available 
-                                ? (apiData.type === 'single' 
+                            {apiData.available
+                                ? (apiData.type === 'single'
                                     ? `${availableStartTimes.length} time slots available on ${format(startDate!, "MMM d")}`
                                     : apiData.message || "Available for multi-day booking"
                                 )
                                 : (apiData.message || "Not available")
                             }
                         </div>
+
+                        {/* 6-hour minimum warning when walks exist */}
+                        {apiData.available && apiData.type === 'single' && apiData.hasWalks && (
+                            <div className="p-3 rounded-lg bg-yellow-800 text-yellow-200 border border-yellow-600">
+                                <p className="text-sm">
+                                    ⚠️ <strong>Walks scheduled on this day.</strong> Minimum 6-hour sitting required so the dog can be left at home while you walk other dogs.
+                                </p>
+                            </div>
+                        )}
 
                         {/* ✨ NEW: Detailed conflict information */}
                         {!apiData.available && apiData.conflicts && apiData.conflicts.length > 0 && (

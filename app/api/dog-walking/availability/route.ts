@@ -86,17 +86,31 @@ export async function GET(request: NextRequest) {
         // 6. Sanitize and "Pad" all busy events with conditional logic
         const paddedBusyTimes: TimeRange[] = busyEvents
             .filter((event) => event.start?.dateTime && event.end?.dateTime)
-            // Skip multi-day dog sitting events - walks can occur during multi-day sitting
-            // (dog is staying at home, walker can still go out to walk other dogs)
-            // Single-day timed sitting (e.g., 4 hours) still blocks as you're actively watching the dog
+            // Skip dog sitting events where walks can occur:
+            // - Multi-day sitting: dog stays at home, walker can go out to walk other dogs
+            // - Single-day sitting (6+ hours): long enough that dog can be left at home
+            // Short single-day sitting (<6 hours) still blocks walks
             .filter((event) => {
                 const description = event.description || '';
-                // Multi-day sitting has "Multi-Day Dog Sitting" in description
-                // We want to EXCLUDE these (return false to filter them out)
+
+                // Multi-day sitting: EXCLUDE (allow walks)
                 if (description.includes('Multi-Day Dog Sitting')) {
                     return false;
                 }
-                return true;
+
+                // Single-day sitting 6+ hours: EXCLUDE (allow walks)
+                if (description.includes('Single-Day Dog Sitting')) {
+                    // Extract duration from description (e.g., "Duration: 9 hours")
+                    const durationMatch = description.match(/Duration:\s*(\d+)\s*hours?/i);
+                    if (durationMatch) {
+                        const hours = parseInt(durationMatch[1], 10);
+                        if (hours >= 6) {
+                            return false; // Long sitting - allow walks
+                        }
+                    }
+                }
+
+                return true; // Include everything else (blocks walks)
             })
             .map((event) => {
                 const start = new Date(event.start!.dateTime!);

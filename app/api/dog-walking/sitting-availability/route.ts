@@ -44,6 +44,7 @@ interface AvailabilityResult {
     endDayRanges?: { start: string; end: string; }[];
     conflicts?: string[];
     conflictDetails?: string[];
+    hasWalks?: boolean;
     message?: string;
 }
 
@@ -75,9 +76,24 @@ async function checkSingleDayAvailability(date: string): Promise<AvailabilityRes
 
     const busyEvents = await getBusyEvents(dayStart, dayEnd);
 
+    // Check if there are walks on this day (for 6-hour minimum enforcement)
+    const hasWalks = busyEvents.some(event => {
+        const summary = (event.summary || '').toLowerCase();
+        return summary.includes('walk') || summary.includes('meet');
+    });
+
     // Process busy events with buffers
+    // Exclude walk events - sitting can coexist with walks (if 6+ hours, enforced by frontend)
     const paddedBusyTimes: TimeRange[] = busyEvents
         .filter((event) => event.start?.dateTime && event.end?.dateTime)
+        .filter((event) => {
+            const summary = (event.summary || '').toLowerCase();
+            // Walk events contain 'walk' or 'meet' in summary - exclude them
+            if (summary.includes('walk') || summary.includes('meet')) {
+                return false; // EXCLUDE walks (allow sitting to span these times)
+            }
+            return true; // INCLUDE other events (sitting, etc.)
+        })
         .map((event) => {
             const start = new Date(event.start!.dateTime!);
             const end = new Date(event.end!.dateTime!);
@@ -138,8 +154,11 @@ async function checkSingleDayAvailability(date: string): Promise<AvailabilityRes
         available: formattedRanges.length > 0,
         type: 'single',
         availableRanges: formattedRanges,
+        hasWalks: hasWalks,
         message: formattedRanges.length > 0
-            ? `${formattedRanges.length} time slots available on ${format(targetDate, 'MMM d')}`
+            ? hasWalks
+                ? `Available (minimum 6 hours required - walks scheduled)`
+                : `${formattedRanges.length} time slots available on ${format(targetDate, 'MMM d')}`
             : `No availability on ${format(targetDate, 'MMM d')} - fully booked`
     };
 }

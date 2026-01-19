@@ -4,6 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { google } from "googleapis";
 import { format, differenceInDays, differenceInHours, isSameDay } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
@@ -81,6 +82,51 @@ export async function POST(request: NextRequest) {
                     { error: `Multi-day bookings are only available for Dog Sitting. Service received: ${service_type}` },
                     { status: 400 }
                 );
+            }
+        }
+
+        // Validate: Single-day sitting overlapping walks must be 6+ hours
+        // (Backup validation - frontend should prevent invalid selections)
+        if (booking_type === 'single_day_sitting' && end_time) {
+            const sittingDuration = differenceInHours(new Date(end_time), new Date(start_time));
+
+            if (sittingDuration < 6) {
+                // Check if there are walks on this day via Google Calendar
+                // Use TZDate for consistent London timezone handling
+                const startDateObj = new Date(start_time);
+                const dayStart = new TZDate(
+                    startDateObj.getFullYear(),
+                    startDateObj.getMonth(),
+                    startDateObj.getDate(),
+                    0, 0, 0,
+                    "Europe/London"
+                );
+                const dayEnd = new TZDate(
+                    startDateObj.getFullYear(),
+                    startDateObj.getMonth(),
+                    startDateObj.getDate(),
+                    23, 59, 59,
+                    "Europe/London"
+                );
+
+                const calendarEvents = await calendar.events.list({
+                    calendarId: process.env.GOOGLE_CALENDAR_ID,
+                    timeMin: dayStart.toISOString(),
+                    timeMax: dayEnd.toISOString(),
+                    singleEvents: true,
+                });
+
+                const hasWalks = (calendarEvents.data.items || []).some(event => {
+                    const summary = (event.summary || '').toLowerCase();
+                    return summary.includes('walk') || summary.includes('meet');
+                });
+
+                if (hasWalks) {
+                    return NextResponse.json(
+                        { error: "Single-day sitting must be at least 6 hours when walks are booked on the same day" },
+                        { status: 400 }
+                    );
+                }
             }
         }
 

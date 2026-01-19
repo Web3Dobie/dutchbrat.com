@@ -69,6 +69,9 @@ export default function AdminLayout({
                             <Link href="/dog-walking/admin/payments" style={styles.navLink}>
                                 Payments
                             </Link>
+                            <Link href="/dog-walking/admin/revenue" style={styles.navLink}>
+                                Revenue
+                            </Link>
                             <Link href="/dog-walking/admin/manage-clients" style={styles.navLink}>
                                 Clients
                             </Link>
