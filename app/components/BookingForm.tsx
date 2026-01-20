@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { getSoloWalkPrice, formatSoloWalkPrice } from "@/lib/pricing";
 
 // --- Types ---
@@ -232,13 +232,23 @@ export default function BookingForm({
     const renderSummary = () => {
         const price = calculatePrice();
         const addressInfo = getSelectedAddressInfo();
+        const isMultiDay = !isSameDay(startTime, endTime);
 
         return (
             <div style={styles.summary}>
                 <h3 style={{ color: "#fff", marginBottom: "12px" }}>Booking Summary</h3>
                 <p><strong>Service:</strong> {serviceName}</p>
-                <p><strong>Date:</strong> {format(startTime, "EEEE, MMMM d, yyyy")}</p>
-                <p><strong>Time:</strong> {format(startTime, "h:mm a")} - {format(endTime, "h:mm a")}</p>
+                {isMultiDay ? (
+                    <>
+                        <p><strong>Start:</strong> {format(startTime, "EEEE, MMMM d, yyyy")} at {format(startTime, "h:mm a")}</p>
+                        <p><strong>End:</strong> {format(endTime, "EEEE, MMMM d, yyyy")} at {format(endTime, "h:mm a")}</p>
+                    </>
+                ) : (
+                    <>
+                        <p><strong>Date:</strong> {format(startTime, "EEEE, MMMM d, yyyy")}</p>
+                        <p><strong>Time:</strong> {format(startTime, "h:mm a")} - {format(endTime, "h:mm a")}</p>
+                    </>
+                )}
                 {selectedDogIds.length > 0 && currentUser && (
                     <p><strong>Dog(s):</strong> {
                         selectedDogIds.map(id =>
