@@ -1050,6 +1050,51 @@ const formatDuration = (minutes: number | null, startTime: Date, endTime: Date |
 
 ---
 
+**Rescheduling Availability Self-Conflict Fix (V11.3):**
+
+Fixed an issue where customers couldn't reschedule bookings to times that overlapped with their original booking.
+
+**Problem:**
+When a customer tried to reschedule (e.g., move a 10am Solo Walk to 9:30am), the availability API showed the new time as unavailable because their original booking was still on the Google Calendar.
+
+**Solution:**
+Pass the booking ID to the availability API so it can exclude that booking's calendar event from the busy times calculation.
+
+**Files Modified:**
+```
+/app/api/dog-walking/availability/route.ts  → Added exclude_booking_id parameter
+/app/components/BookingManager.tsx          → Pass booking ID when fetching availability
+```
+
+**Technical Implementation:**
+```typescript
+// availability/route.ts - New parameter and database lookup
+const excludeBookingId = searchParams.get("exclude_booking_id");
+
+let excludedEventId: string | null = null;
+if (excludeBookingId) {
+    const result = await client.query(
+        'SELECT google_event_id FROM hunters_hounds.bookings WHERE id = $1',
+        [parseInt(excludeBookingId)]
+    );
+    if (result.rows.length > 0) {
+        excludedEventId = result.rows[0].google_event_id;
+    }
+}
+
+// Filter out the excluded event
+const busyEvents = (res.data.items || []).filter(event =>
+    !excludedEventId || event.id !== excludedEventId
+);
+
+// BookingManager.tsx - Pass booking ID in URL
+const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}&exclude_booking_id=${booking.id}`;
+```
+
+**For AI Agents**: V11.3 fixes rescheduling self-conflict. The availability API now accepts an optional `exclude_booking_id` parameter. When provided, it looks up the booking's `google_event_id` from the database and filters out that calendar event from the busy times. BookingManager.tsx passes the booking ID when fetching availability during reschedule, allowing customers to select times that overlap with their original booking.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**

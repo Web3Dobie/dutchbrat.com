@@ -117,7 +117,8 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
             };
             
             const serviceType = serviceTypeMap[booking.service_type] || booking.service_type;
-            const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}`;
+            // Include booking ID to exclude its calendar event when rescheduling
+            const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}&exclude_booking_id=${booking.id}`;
             
             const response = await fetch(url);
             

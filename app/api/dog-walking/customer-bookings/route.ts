@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     try {
         // Fetch all bookings for the customer with dog information AND walk_summary
         const query = `
-            SELECT 
+            SELECT
                 b.id,
                 b.service_type,
                 b.start_time,
@@ -46,29 +46,21 @@ export async function GET(request: NextRequest) {
                 b.price_pounds,
                 b.walk_summary,
                 b.created_at,
-                -- Aggregate dog names for this booking
-                array_agg(
-                    CASE 
-                        WHEN d1.id IS NOT NULL THEN d1.dog_name
-                        WHEN d2.id IS NOT NULL THEN d2.dog_name
-                        ELSE NULL
-                    END
-                ) FILTER (WHERE d1.id IS NOT NULL OR d2.id IS NOT NULL) as dog_names
+                ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names
             FROM hunters_hounds.bookings b
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.owner_id = $1
-            GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, b.status, b.price_pounds, b.walk_summary, b.created_at
-            ORDER BY 
-                CASE 
-                    WHEN b.status IN ('confirmed', 'completed') THEN 0 
-                    ELSE 1 
+            ORDER BY
+                CASE
+                    WHEN b.status IN ('confirmed', 'completed') THEN 0
+                    ELSE 1
                 END,
-                CASE 
-                    WHEN b.status IN ('confirmed', 'completed') THEN b.start_time 
+                CASE
+                    WHEN b.status IN ('confirmed', 'completed') THEN b.start_time
                 END ASC,
-                CASE 
-                    WHEN b.status NOT IN ('confirmed', 'completed') THEN b.start_time 
+                CASE
+                    WHEN b.status NOT IN ('confirmed', 'completed') THEN b.start_time
                 END DESC
         `;
 

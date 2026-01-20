@@ -13,6 +13,17 @@ import {
 import {
     TZDate
 } from "@date-fns/tz";
+import { Pool } from "pg";
+
+// --- Database Connection (for exclude_booking_id lookup) ---
+const pool = new Pool({
+    host: process.env.POSTGRES_HOST || "postgres",
+    port: parseInt(process.env.POSTGRES_PORT || "5432"),
+    database: process.env.POSTGRES_DB || "agents_platform",
+    user: process.env.POSTGRES_USER || "hunter_admin",
+    password: process.env.POSTGRES_PASSWORD,
+    ssl: false,
+});
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -37,6 +48,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const dateQuery = searchParams.get("date"); // e.g., "2023-10-31"
     const serviceType = searchParams.get("service_type"); // NEW: Get service type
+    const excludeBookingId = searchParams.get("exclude_booking_id"); // For rescheduling: exclude original booking
 
     if (!dateQuery) {
         return NextResponse.json(
@@ -46,6 +58,22 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+        // If exclude_booking_id provided, look up its Google Calendar event ID
+        let excludedEventId: string | null = null;
+        if (excludeBookingId) {
+            const client = await pool.connect();
+            try {
+                const result = await client.query(
+                    'SELECT google_event_id FROM hunters_hounds.bookings WHERE id = $1',
+                    [parseInt(excludeBookingId)]
+                );
+                if (result.rows.length > 0 && result.rows[0].google_event_id) {
+                    excludedEventId = result.rows[0].google_event_id;
+                }
+            } finally {
+                client.release();
+            }
+        }
         // 1. Get the target date using the TZDate constructor
         const targetDate = new TZDate(dateQuery, TIMEZONE);
 
@@ -74,7 +102,10 @@ export async function GET(request: NextRequest) {
             orderBy: "startTime",
         });
 
-        const busyEvents = res.data.items || [];
+        // Filter out the excluded event (for rescheduling)
+        const busyEvents = (res.data.items || []).filter(event =>
+            !excludedEventId || event.id !== excludedEventId
+        );
 
         // 5. Define working hours for walk services (9:00-20:00)
         const workDayStart = new TZDate(targetDate, TIMEZONE);
