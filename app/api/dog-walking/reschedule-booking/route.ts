@@ -114,10 +114,15 @@ export async function POST(request: NextRequest) {
 
         const booking = bookingResult.rows[0];
 
-        // Check for time conflicts (optional - depends on your business rules)
+        // Check for time conflicts with OTHER bookings (explicitly exclude the booking being rescheduled)
+        // Also exclude long dog sittings (6+ hours) which can coexist with walks (per V11.1)
+        const bookingIdNum = parseInt(String(data.booking_id));
+
+        console.log(`Reschedule check: booking_id=${bookingIdNum}, new_start=${data.new_start_time}, new_end=${data.new_end_time}`);
+
         const conflictQuery = `
-            SELECT id FROM hunters_hounds.bookings 
-            WHERE id != $1 
+            SELECT id, start_time, end_time, service_type, duration_minutes FROM hunters_hounds.bookings
+            WHERE id != $1
             AND status = 'confirmed'
             AND (
                 (start_time <= $2 AND end_time > $2) OR
@@ -127,18 +132,50 @@ export async function POST(request: NextRequest) {
         `;
 
         const conflictResult = await client.query(conflictQuery, [
-            data.booking_id,
+            bookingIdNum,
             data.new_start_time,
             data.new_end_time
         ]);
 
-        if (conflictResult.rows.length > 0) {
+        // Filter out conflicts that don't actually block this booking:
+        // 1. The booking being rescheduled (shouldn't happen due to SQL, but double-check)
+        // 2. Long dog sittings (6+ hours) - walks can coexist with these (V11.1)
+        // 3. Multi-day dog sittings - walks can coexist with these
+        const actualConflicts = conflictResult.rows.filter(row => {
+            // Exclude the booking being rescheduled
+            if (Number(row.id) === bookingIdNum) return false;
+
+            // Check if this is a dog sitting that allows walk coexistence
+            const serviceType = (row.service_type || '').toLowerCase();
+            const isSitting = serviceType.includes('sitting');
+
+            if (isSitting) {
+                // Calculate duration in hours
+                const startTime = new Date(row.start_time);
+                const endTime = new Date(row.end_time);
+                const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+
+                // Long sittings (6+ hours) don't block walks
+                if (durationHours >= 6) {
+                    console.log(`Allowing coexistence: booking ${row.id} is a ${durationHours}h sitting, walks can coexist`);
+                    return false;
+                }
+            }
+
+            return true; // This is a real conflict
+        });
+
+        if (actualConflicts.length > 0) {
+            console.log(`Reschedule conflict found: booking ${bookingIdNum} conflicts with bookings:`,
+                actualConflicts.map(r => `id=${r.id} (${r.start_time} - ${r.end_time})`).join(', '));
             await client.query("ROLLBACK");
             return NextResponse.json(
                 { error: "The requested time slot conflicts with another booking" },
                 { status: 409 }
             );
         }
+
+        console.log(`Reschedule check passed: no conflicts found for booking ${bookingIdNum}`);
 
         // Calculate new duration (in case it's different)
         const newDurationMinutes = Math.round((newEndTime.getTime() - newStartTime.getTime()) / (1000 * 60));

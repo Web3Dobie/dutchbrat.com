@@ -1062,8 +1062,9 @@ Pass the booking ID to the availability API so it can exclude that booking's cal
 
 **Files Modified:**
 ```
-/app/api/dog-walking/availability/route.ts  → Added exclude_booking_id parameter
-/app/components/BookingManager.tsx          → Pass booking ID when fetching availability
+/app/api/dog-walking/availability/route.ts    → Added exclude_booking_id parameter to exclude original calendar event
+/app/components/BookingManager.tsx            → Pass booking ID when fetching availability
+/app/api/dog-walking/reschedule-booking/route.ts → Robust conflict check with explicit booking exclusion
 ```
 
 **Technical Implementation:**
@@ -1091,7 +1092,30 @@ const busyEvents = (res.data.items || []).filter(event =>
 const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}&exclude_booking_id=${booking.id}`;
 ```
 
-**For AI Agents**: V11.3 fixes rescheduling self-conflict. The availability API now accepts an optional `exclude_booking_id` parameter. When provided, it looks up the booking's `google_event_id` from the database and filters out that calendar event from the busy times. BookingManager.tsx passes the booking ID when fetching availability during reschedule, allowing customers to select times that overlap with their original booking.
+**Reschedule Conflict Check - Walk/Sitting Coexistence:**
+
+The reschedule-booking API's conflict check now also respects V11.1's walk/sitting coexistence rules:
+- Dog sittings 6+ hours do NOT block walks from being rescheduled to overlapping times
+- Short sittings (<6 hours) still block walks
+
+```typescript
+// reschedule-booking/route.ts - Smart conflict filtering
+const actualConflicts = conflictResult.rows.filter(row => {
+    // Exclude the booking being rescheduled
+    if (Number(row.id) === bookingIdNum) return false;
+
+    // Check if this is a long sitting that allows walk coexistence
+    const isSitting = (row.service_type || '').toLowerCase().includes('sitting');
+    if (isSitting) {
+        const durationHours = (new Date(row.end_time) - new Date(row.start_time)) / (1000 * 60 * 60);
+        if (durationHours >= 6) return false; // Long sittings don't block walks
+    }
+
+    return true; // Real conflict
+});
+```
+
+**For AI Agents**: V11.3 fixes rescheduling in two ways: (1) The availability API accepts `exclude_booking_id` to filter out the original booking's calendar event. (2) The reschedule-booking API's conflict check now respects V11.1 coexistence rules - walks can be rescheduled to times overlapping with 6+ hour dog sittings. Both the availability display AND the actual reschedule submission now allow walk/sitting coexistence.
 
 ---
 
