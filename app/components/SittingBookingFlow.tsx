@@ -150,6 +150,7 @@ export default function SittingBookingFlow({
     const [selectedStartTime, setSelectedStartTime] = useState<string>("");
     const [selectedEndTime, setSelectedEndTime] = useState<string>("");
     const [displayMonth, setDisplayMonth] = useState<Date>(new Date());
+    const [endDisplayMonth, setEndDisplayMonth] = useState<Date>(new Date()); // Separate month state for end date picker
     const [previousStartDate, setPreviousStartDate] = useState<Date | undefined>(startDate);
 
     // API state
@@ -193,8 +194,13 @@ export default function SittingBookingFlow({
             if (!isSameMonth(displayMonth, targetMonth)) {
                 setDisplayMonth(targetMonth);
             }
+            // Only sync end date calendar when startDate is FIRST selected (previousStartDate was undefined)
+            // After that, leave the end calendar independent so user can navigate freely
+            if (!previousStartDate && !isSameMonth(endDisplayMonth, targetMonth)) {
+                setEndDisplayMonth(targetMonth);
+            }
         }
-    }, [startDate, displayMonth]);
+    }, [startDate, displayMonth, endDisplayMonth, previousStartDate]);
 
     useEffect(() => {
         setPreviousStartDate(startDate);
@@ -381,8 +387,8 @@ export default function SittingBookingFlow({
                                 onSelect={setEndDate}
                                 disabled={{ before: startDate || new Date() }}
                                 className="rdp-custom-compact"
-                                month={displayMonth}
-                                onMonthChange={setDisplayMonth}
+                                month={endDisplayMonth}
+                                onMonthChange={setEndDisplayMonth}
                             />
                         </div>
                         {startDate && (
