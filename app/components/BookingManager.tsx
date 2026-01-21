@@ -48,7 +48,7 @@ interface BookingManagerProps {
     onBookingUpdated: () => void;
 }
 
-type View = "details" | "cancel" | "reschedule";
+type View = "details" | "cancel" | "reschedule" | "modify-dogs";
 
 export default function BookingManager({ bookingId, onBack, onBookingUpdated }: BookingManagerProps) {
     // --- State ---
@@ -64,6 +64,10 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
     const [loadingSlots, setLoadingSlots] = useState(false);
     const [selectedStartTime, setSelectedStartTime] = useState<Date | null>(null);
     const [selectedEndTime, setSelectedEndTime] = useState<Date | null>(null);
+
+    // Modify dogs specific state
+    const [ownerDogs, setOwnerDogs] = useState<Dog[]>([]);
+    const [selectedDogIds, setSelectedDogIds] = useState<number[]>([]);
 
     // --- Effects ---
     useEffect(() => {
@@ -91,6 +95,14 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
             }
             
             setBooking(data.booking);
+            // Store owner's dogs for modify dogs feature
+            if (data.owner_dogs) {
+                setOwnerDogs(data.owner_dogs);
+            }
+            // Initialize selected dogs from booking
+            if (data.booking.dogs) {
+                setSelectedDogIds(data.booking.dogs.map((d: Dog) => d.id));
+            }
         } catch (err: any) {
             console.error("Failed to fetch booking details:", err);
             setError(err.message || "Could not load booking details. Please try again.");
@@ -214,6 +226,80 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
     const handleTimeSlotSelect = (startTime: Date, endTime: Date) => {
         setSelectedStartTime(startTime);
         setSelectedEndTime(endTime);
+    };
+
+    const handleDogToggle = (dogId: number) => {
+        setSelectedDogIds(prev => {
+            if (prev.includes(dogId)) {
+                // Remove dog (but keep at least 1)
+                return prev.filter(id => id !== dogId);
+            } else {
+                // Add dog (max 2)
+                if (prev.length >= 2) return prev;
+                return [...prev, dogId];
+            }
+        });
+    };
+
+    const handleModifyDogs = async () => {
+        if (!booking || selectedDogIds.length === 0) return;
+
+        setIsProcessing(true);
+        setError(null);
+
+        try {
+            const response = await fetch("/api/dog-walking/modify-booking-dogs", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    booking_id: booking.id,
+                    dog_id_1: selectedDogIds[0],
+                    dog_id_2: selectedDogIds[1] || null,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to modify booking");
+            }
+
+            // Success
+            onBookingUpdated();
+            onBack();
+        } catch (err: any) {
+            console.error("Failed to modify booking dogs:", err);
+            setError(err.message || "Could not modify booking. Please try again.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // Calculate price for selected dogs (Solo Walk only)
+    const getPreviewPrice = () => {
+        if (!booking || booking.service_type !== 'solo') return null;
+
+        const dogCount = selectedDogIds.length;
+        const duration = booking.duration_minutes;
+
+        // Solo Walk pricing
+        if (duration === 60) {
+            return dogCount === 2 ? 25.00 : 17.50;
+        } else if (duration === 120) {
+            return dogCount === 2 ? 32.50 : 25.00;
+        }
+        return null;
+    };
+
+    // Check if dogs have actually changed
+    const dogsHaveChanged = () => {
+        if (!booking) return false;
+        const currentDogIds = booking.dogs.map(d => d.id).sort();
+        const newDogIds = [...selectedDogIds].sort();
+        if (currentDogIds.length !== newDogIds.length) return true;
+        return !currentDogIds.every((id, i) => id === newDogIds[i]);
     };
 
     // --- Helper Functions ---
@@ -408,7 +494,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                 {/* Actions */}
                 <div style={styles.card}>
                     <h3 className="text-white text-md font-medium mb-4">Actions</h3>
-                    
+
                     <div className="flex flex-col sm:flex-row gap-3">
                         {canRescheduleBooking() && (
                             <button
@@ -419,7 +505,21 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                                 Reschedule Booking
                             </button>
                         )}
-                        
+
+                        {canRescheduleBooking() && ownerDogs.length > 1 && (
+                            <button
+                                style={{ ...styles.button, backgroundColor: '#8b5cf6', color: 'white' }}
+                                onClick={() => {
+                                    // Reset selected dogs to current booking dogs
+                                    setSelectedDogIds(booking.dogs.map(d => d.id));
+                                    setView("modify-dogs");
+                                }}
+                                className="hover:opacity-90"
+                            >
+                                Modify Dogs
+                            </button>
+                        )}
+
                         {canCancelBooking() && (
                             <button
                                 style={{ ...styles.button, ...styles.dangerButton }}
@@ -429,7 +529,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                                 Cancel Booking
                             </button>
                         )}
-                        
+
                         {!canCancelBooking() && (
                             <p className="text-gray-400 text-sm">
                                 Bookings can only be modified more than 2 hours before the start time.
@@ -616,6 +716,170 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         );
     };
 
+    const renderModifyDogsView = () => {
+        if (!booking) return null;
+
+        const previewPrice = getPreviewPrice();
+        const currentPrice = booking.price_pounds;
+
+        return (
+            <div>
+                {/* Header */}
+                <div style={styles.card}>
+                    <div className="flex justify-between items-start mb-4">
+                        <h1 className="text-white text-xl font-bold">
+                            Modify Dogs
+                        </h1>
+                        <button
+                            style={{ ...styles.button, ...styles.secondaryButton }}
+                            onClick={() => setView("details")}
+                            className="hover:bg-gray-600"
+                        >
+                            ← Back
+                        </button>
+                    </div>
+                </div>
+
+                {/* Current Booking Info */}
+                <div style={styles.card}>
+                    <h3 className="text-white text-md font-medium mb-2">Current Booking</h3>
+                    <p className="text-gray-300 text-sm">
+                        {getServiceDisplayName(booking.service_type)} on{" "}
+                        {format(new Date(booking.start_time), "EEEE, MMMM d, yyyy 'at' h:mm a")}
+                    </p>
+                    <p className="text-gray-400 text-sm mt-1">
+                        Current dogs: {booking.dogs.map(d => d.dog_name).join(", ")}
+                    </p>
+                </div>
+
+                {/* Dog Selection */}
+                <div style={styles.card}>
+                    <h3 className="text-white text-md font-medium mb-4">Select Dogs (1-2)</h3>
+
+                    <div className="space-y-3">
+                        {ownerDogs.map(dog => (
+                            <label
+                                key={dog.id}
+                                className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                                    selectedDogIds.includes(dog.id)
+                                        ? 'bg-purple-900 border-2 border-purple-500'
+                                        : 'bg-gray-800 border-2 border-gray-700 hover:border-gray-600'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selectedDogIds.includes(dog.id)}
+                                    onChange={() => handleDogToggle(dog.id)}
+                                    className="w-5 h-5 rounded text-purple-500 focus:ring-purple-500"
+                                    disabled={
+                                        !selectedDogIds.includes(dog.id) && selectedDogIds.length >= 2
+                                    }
+                                />
+                                <div className="ml-3">
+                                    <span className="text-white font-medium">{dog.dog_name}</span>
+                                    {dog.dog_breed && (
+                                        <span className="text-gray-400 text-sm ml-2">
+                                            ({dog.dog_breed})
+                                        </span>
+                                    )}
+                                </div>
+                            </label>
+                        ))}
+                    </div>
+
+                    {selectedDogIds.length === 0 && (
+                        <p className="text-red-400 text-sm mt-3">
+                            Please select at least one dog
+                        </p>
+                    )}
+
+                    {selectedDogIds.length >= 2 && (
+                        <p className="text-gray-400 text-sm mt-3">
+                            Maximum 2 dogs per booking
+                        </p>
+                    )}
+                </div>
+
+                {/* Price Preview (Solo Walk only) */}
+                {booking.service_type === 'solo' && previewPrice !== null && (
+                    <div style={styles.card}>
+                        <h3 className="text-white text-md font-medium mb-3">Price Update</h3>
+
+                        <div className="flex items-center gap-4">
+                            <div className="text-gray-400">
+                                <span className="text-sm">Current:</span>
+                                <span className="text-white ml-2">
+                                    £{currentPrice?.toFixed(2) || '0.00'}
+                                </span>
+                            </div>
+                            <span className="text-gray-500">→</span>
+                            <div className="text-gray-400">
+                                <span className="text-sm">New:</span>
+                                <span className={`ml-2 font-medium ${
+                                    previewPrice > (currentPrice || 0) ? 'text-yellow-400' :
+                                    previewPrice < (currentPrice || 0) ? 'text-green-400' : 'text-white'
+                                }`}>
+                                    £{previewPrice.toFixed(2)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {previewPrice !== currentPrice && (
+                            <p className="text-sm text-gray-400 mt-2">
+                                {previewPrice > (currentPrice || 0)
+                                    ? `Adding a second dog increases the price by £${(previewPrice - (currentPrice || 0)).toFixed(2)}`
+                                    : `Removing the second dog decreases the price by £${((currentPrice || 0) - previewPrice).toFixed(2)}`
+                                }
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* Confirm */}
+                <div style={styles.card}>
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-900 border border-red-600 rounded text-red-200 text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                            style={{
+                                ...styles.button,
+                                backgroundColor: '#8b5cf6',
+                                color: 'white',
+                                ...(isProcessing || selectedDogIds.length === 0 || !dogsHaveChanged()
+                                    ? { opacity: 0.6, cursor: 'not-allowed' }
+                                    : {})
+                            }}
+                            onClick={handleModifyDogs}
+                            disabled={isProcessing || selectedDogIds.length === 0 || !dogsHaveChanged()}
+                            className="hover:opacity-90"
+                        >
+                            {isProcessing ? "Updating..." : "Confirm Changes"}
+                        </button>
+
+                        <button
+                            style={{ ...styles.button, ...styles.secondaryButton }}
+                            onClick={() => setView("details")}
+                            disabled={isProcessing}
+                            className="hover:bg-gray-600"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+
+                    {!dogsHaveChanged() && selectedDogIds.length > 0 && (
+                        <p className="text-gray-400 text-sm mt-3">
+                            No changes detected
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     // --- Main Render ---
     if (isLoading) {
         return (
@@ -658,6 +922,8 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
                         return renderRescheduleView();
                     case "cancel":
                         return renderCancelView();
+                    case "modify-dogs":
+                        return renderModifyDogsView();
                     default:
                         return renderDetailsView();
                 }

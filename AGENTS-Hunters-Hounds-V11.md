@@ -1158,6 +1158,66 @@ The API logs whether login was via primary or partner credentials:
 
 ---
 
+**Modify Dogs on Existing Booking (V11.5):**
+
+Allows customers to add or remove a second dog from an existing booking via the customer dashboard.
+
+**Features:**
+- Purple "Modify Dogs" button in booking details (alongside Reschedule and Cancel)
+- Only shows if owner has more than 1 dog registered
+- Allows selecting 1-2 dogs with checkbox UI
+- Price preview for Solo Walk showing the price change
+- Validation: must keep at least 1 dog, max 2 dogs
+
+**Pricing Impact (Solo Walk only):**
+| Duration | 1 Dog | 2 Dogs | Change |
+|----------|-------|--------|--------|
+| 60 min | £17.50 | £25.00 | ±£7.50 |
+| 120 min | £25.00 | £32.50 | ±£7.50 |
+
+Other services (Quick Walk, Meet & Greet, Dog Sitting) keep their existing price.
+
+**Files Created/Modified:**
+```
+/app/api/dog-walking/modify-booking-dogs/route.ts  → NEW: API endpoint for dog modifications
+/app/api/dog-walking/booking-details/route.ts      → Added owner_dogs to response
+/app/components/BookingManager.tsx                 → Added Modify Dogs button and view
+```
+
+**New API Endpoint:**
+```
+🔗 /api/dog-walking/modify-booking-dogs
+   → POST: Modify dogs on a booking
+   Body: { booking_id, dog_id_1, dog_id_2? }
+   Returns: { success, booking_id, dog_id_1, dog_id_2, new_price }
+```
+
+**API Validation:**
+- Booking must exist and be in 'confirmed' status
+- Booking must be more than 2 hours in the future
+- `dog_id_1` required (error: "Booking must have at least one dog")
+- Dogs must belong to the booking's owner
+- Maximum 2 dogs per booking
+
+**Updates on Modification:**
+1. Database: `dog_id_1`, `dog_id_2`, `price_pounds` updated
+2. Google Calendar: Event description updated with new dog names
+3. Email: Confirmation sent to customer with updated details
+4. Telegram: Business notification with change details
+
+**UI Flow:**
+1. Customer opens booking from dashboard
+2. Clicks purple "Modify Dogs" button
+3. Sees all their dogs as checkboxes (pre-selected: current dogs)
+4. Selects/deselects dogs (1-2 allowed)
+5. For Solo Walk: sees price preview with change amount
+6. Clicks "Confirm Changes"
+7. Receives confirmation email
+
+**For AI Agents**: V11.5 adds the ability to modify dogs on an existing booking. The new `/api/dog-walking/modify-booking-dogs` endpoint accepts `booking_id`, `dog_id_1` (required), and `dog_id_2` (optional). It validates ownership, recalculates price for Solo Walk using `getSoloWalkPrice()`, updates the database, patches the Google Calendar event, and sends email/Telegram notifications. The BookingManager component shows a purple "Modify Dogs" button when the owner has multiple dogs, with a checkbox UI for selection and live price preview for Solo Walk bookings.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**

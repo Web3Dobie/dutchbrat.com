@@ -106,9 +106,20 @@ export async function GET(request: NextRequest) {
             dogs: row.dogs || []
         };
 
+        // Fetch ALL dogs belonging to the owner (for modify dogs feature)
+        const ownerDogsQuery = `
+            SELECT d.id, d.dog_name, d.dog_breed, d.dog_age
+            FROM hunters_hounds.dogs d
+            JOIN hunters_hounds.bookings b ON b.owner_id = d.owner_id
+            WHERE b.id = $1
+            ORDER BY d.id;
+        `;
+        const ownerDogsResult = await client.query(ownerDogsQuery, [bookingIdNum]);
+
         return NextResponse.json({
             success: true,
-            booking: booking
+            booking: booking,
+            owner_dogs: ownerDogsResult.rows
         });
 
     } catch (error) {
