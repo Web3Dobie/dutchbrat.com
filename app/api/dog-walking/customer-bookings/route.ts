@@ -53,12 +53,16 @@ export async function GET(request: NextRequest) {
             WHERE b.owner_id = $1
             ORDER BY
                 CASE
-                    WHEN b.status IN ('confirmed', 'completed') THEN 0
-                    ELSE 1
+                    WHEN b.status = 'confirmed' THEN 0
+                    WHEN b.status = 'completed' THEN 1
+                    ELSE 2
                 END,
                 CASE
-                    WHEN b.status IN ('confirmed', 'completed') THEN b.start_time
+                    WHEN b.status = 'confirmed' THEN b.start_time
                 END ASC,
+                CASE
+                    WHEN b.status = 'completed' THEN b.start_time
+                END DESC,
                 CASE
                     WHEN b.status NOT IN ('confirmed', 'completed') THEN b.start_time
                 END DESC

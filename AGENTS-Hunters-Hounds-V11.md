@@ -1218,6 +1218,43 @@ Other services (Quick Walk, Meet & Greet, Dog Sitting) keep their existing price
 
 ---
 
+**Customer Dashboard Booking Sorting (V11.6):**
+
+Improved booking sort order in the customer dashboard for better usability.
+
+**Problem:**
+Bookings were sorted with confirmed and completed mixed together by start_time ASC. Customers saw old completed bookings before their upcoming confirmed bookings.
+
+**Solution:**
+Updated the ORDER BY clause in the customer-bookings API to prioritize confirmed over completed.
+
+**New Sort Order:**
+1. **Confirmed bookings** - sorted by start_time ASC (closest appointment first)
+2. **Completed bookings** - sorted by start_time DESC (most recent first)
+3. **Other statuses** (cancelled, etc.) - sorted by start_time DESC
+
+**File Modified:**
+```
+/app/api/dog-walking/customer-bookings/route.ts → Updated ORDER BY clause
+```
+
+**Technical Implementation:**
+```sql
+ORDER BY
+    CASE
+        WHEN b.status = 'confirmed' THEN 0
+        WHEN b.status = 'completed' THEN 1
+        ELSE 2
+    END,
+    CASE WHEN b.status = 'confirmed' THEN b.start_time END ASC,
+    CASE WHEN b.status = 'completed' THEN b.start_time END DESC,
+    CASE WHEN b.status NOT IN ('confirmed', 'completed') THEN b.start_time END DESC
+```
+
+**For AI Agents**: V11.6 changes the customer dashboard booking sort order. Confirmed bookings now appear first (sorted by closest date), followed by completed bookings (sorted by most recent). This ensures customers see their upcoming appointments before past completed ones.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**
