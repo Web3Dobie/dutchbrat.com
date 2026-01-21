@@ -1119,6 +1119,45 @@ const actualConflicts = conflictResult.rows.filter(row => {
 
 ---
 
+**Spouse/Partner Login Support (V11.4):**
+
+Allows spouses/partners to log in using their own email or phone number, giving them access to the same account and dogs.
+
+**Problem:**
+Only the primary owner could log in using their email or phone. The spouse/partner (stored in `partner_email` and `partner_phone` fields in the owners table) could not authenticate, even though their contact details were in the system.
+
+**Solution:**
+Updated the customer-lookup API to also search `partner_email` and `partner_phone` in the owners table.
+
+**Files Modified:**
+```
+/app/api/dog-walking/customer-lookup/route.ts  → Extended WHERE clauses to include partner fields
+```
+
+**Technical Implementation:**
+```sql
+-- Email search now includes partner_email
+WHERE LOWER(o.email) = LOWER($1) OR LOWER(o.partner_email) = LOWER($1)
+
+-- Phone search now includes partner_phone
+WHERE normalized(o.phone) = $1 OR normalized(o.partner_phone) = $1
+```
+
+**Logging:**
+The API logs whether login was via primary or partner credentials:
+```
+[Customer Lookup] Found customer: Charlotte Cinalli with 2 dogs (via partner_email)
+```
+
+**Scope:**
+- Only searches `partner_email` and `partner_phone` in the `owners` table
+- Does NOT include secondary address contacts (intentional - those are location-specific contacts, not account holders)
+- Returns the full owner account with all dogs
+
+**For AI Agents**: V11.4 enables spouse/partner login by extending the customer-lookup API's WHERE clauses to match against `partner_email` and `partner_phone` in addition to the primary `email` and `phone` fields. When a partner logs in, they see the same account and dogs as the primary owner. Secondary address contacts are intentionally excluded to maintain privacy boundaries.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**

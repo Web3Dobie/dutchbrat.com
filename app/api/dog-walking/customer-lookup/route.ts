@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
                     ) as dogs
                 FROM hunters_hounds.owners o
                 LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
-                WHERE LOWER(o.email) = LOWER($1)
+                WHERE LOWER(o.email) = LOWER($1) OR LOWER(o.partner_email) = LOWER($1)
                 GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.payment_preference;
             `;
             params = [email.trim()];
@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
                 FROM hunters_hounds.owners o
                 LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
                 WHERE REPLACE(REPLACE(REPLACE(REPLACE(o.phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
+                   OR REPLACE(REPLACE(REPLACE(REPLACE(o.partner_phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
                 GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.payment_preference;
             `;
             params = [normalizedPhone];
@@ -112,7 +113,24 @@ export async function GET(request: NextRequest) {
         }
 
         const customer = result.rows[0];
-        console.log(`[Customer Lookup] Found customer: ${customer.owner_name} with ${customer.dogs.length} dogs`);
+
+        // Determine if this was a partner login
+        let loginType = "primary";
+        if (email) {
+            if (customer.partner_email && customer.partner_email.toLowerCase() === email.trim().toLowerCase()
+                && customer.email.toLowerCase() !== email.trim().toLowerCase()) {
+                loginType = "partner_email";
+            }
+        } else if (phone) {
+            const normalizedInput = phone.replace(/[\s\-\(\)]/g, "");
+            const normalizedPrimary = customer.phone?.replace(/[\s\-\(\)]/g, "") || "";
+            const normalizedPartner = customer.partner_phone?.replace(/[\s\-\(\)]/g, "") || "";
+            if (normalizedPartner === normalizedInput && normalizedPrimary !== normalizedInput) {
+                loginType = "partner_phone";
+            }
+        }
+
+        console.log(`[Customer Lookup] Found customer: ${customer.owner_name} with ${customer.dogs.length} dogs (via ${loginType})`);
 
         // Log image filenames for debugging
         customer.dogs.forEach(dog => {
