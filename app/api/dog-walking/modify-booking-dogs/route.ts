@@ -125,10 +125,36 @@ export async function POST(request: NextRequest) {
 
         // Calculate new price for Solo Walk service
         let newPrice = booking.price_pounds;
-        if (booking.service_type === 'solo') {
-            const dogCount = data.dog_id_2 ? 2 : 1;
-            newPrice = getSoloWalkPrice(booking.duration_minutes, dogCount);
+        const dogCount = data.dog_id_2 ? 2 : 1;
+        const isSoloWalk = booking.service_type === 'solo' ||
+                          booking.service_type.toLowerCase().includes('solo');
+
+        console.log(`[Modify Dogs] Calculating price: service_type=${booking.service_type}, isSoloWalk=${isSoloWalk}, duration=${booking.duration_minutes}, dogCount=${dogCount}`);
+
+        if (isSoloWalk) {
+            // Use duration_minutes, default to 60 if null/undefined
+            const duration = booking.duration_minutes || 60;
+            const calculatedPrice = getSoloWalkPrice(duration, dogCount);
+
+            console.log(`[Modify Dogs] Solo Walk price calculation: duration=${duration}, dogCount=${dogCount}, calculatedPrice=${calculatedPrice}`);
+
+            // Only update if we got a valid price
+            if (calculatedPrice > 0) {
+                newPrice = calculatedPrice;
+            } else {
+                // Fallback: calculate manually if getSoloWalkPrice fails
+                // 60 min: £17.50 (1 dog) / £25.00 (2 dogs)
+                // 120 min: £25.00 (1 dog) / £32.50 (2 dogs)
+                if (duration <= 60) {
+                    newPrice = dogCount === 2 ? 25.00 : 17.50;
+                } else {
+                    newPrice = dogCount === 2 ? 32.50 : 25.00;
+                }
+                console.log(`[Modify Dogs] Used fallback pricing: newPrice=${newPrice}`);
+            }
         }
+
+        console.log(`[Modify Dogs] Final price: ${newPrice} (was ${booking.price_pounds})`);
 
         // Check if anything actually changed
         const dog1Changed = data.dog_id_1 !== booking.current_dog_id_1;

@@ -1255,6 +1255,41 @@ ORDER BY
 
 ---
 
+**Modify Dogs Price Recalculation Fix (V11.7):**
+
+Fixed a bug where the price wasn't recalculated when modifying dogs on a Solo Walk booking.
+
+**Problem:**
+When a customer changed from 2 dogs to 1 dog on a Solo Walk, the price stayed at £25.00 instead of updating to £17.50. The dog names updated correctly but the price didn't change.
+
+**Root Cause:**
+The `service_type` field is stored inconsistently in the database:
+- Some bookings: `'solo'`
+- Other bookings: `'Solo Walk (1 hour)'` or `'Solo Walk (2 hours)'`
+
+The code only checked for exact match `=== 'solo'`, missing the longer format.
+
+**Fix:**
+Updated the service type check to handle both formats:
+```typescript
+const isSoloWalk = booking.service_type === 'solo' ||
+                  booking.service_type.toLowerCase().includes('solo');
+```
+
+Also added:
+- Fallback pricing if `getSoloWalkPrice()` returns 0
+- Default duration to 60 if `duration_minutes` is null
+- Logging for debugging price calculations
+
+**File Modified:**
+```
+/app/api/dog-walking/modify-booking-dogs/route.ts → Fixed service type matching
+```
+
+**For AI Agents**: V11.7 fixes the Modify Dogs price recalculation. The `service_type` field can be stored as either `'solo'` or `'Solo Walk (1 hour)'` depending on how the booking was created. The fix uses case-insensitive matching (`includes('solo')`) to detect Solo Walk bookings regardless of format. Also includes fallback pricing and logging for robustness.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**
