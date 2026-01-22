@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // Revenue-specific currency formatter (always shows £, unlike formatCurrency which shows "FREE" for £0)
 const formatCurrency = (amount: number): string => `£${amount.toFixed(2)}`;
@@ -498,7 +499,7 @@ export default function RevenueDashboard() {
                                             {format(parseISO(booking.start_time), "h:mm a")}
                                         </div>
                                     </td>
-                                    <td style={styles.td}>{booking.service_type}</td>
+                                    <td style={styles.td}>{getServiceDisplayName(booking.service_type)}</td>
                                     <td style={styles.td}>
                                         {booking.duration_minutes ? `${booking.duration_minutes} min` : "-"}
                                     </td>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 interface BookingForPayment {
     id: number;
@@ -762,7 +763,7 @@ export default function AdminPaymentManagement() {
                                     <div style={{ fontWeight: "bold" }}>{booking.owner_name}</div>
                                     <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>{booking.phone}</div>
                                 </td>
-                                <td style={styles.td}>{booking.service_type}</td>
+                                <td style={styles.td}>{getServiceDisplayName(booking.service_type)}</td>
                                 <td style={styles.td}>{booking.dog_names.join(", ")}</td>
                                 <td style={styles.td}>
                                     {booking.price_pounds ? (

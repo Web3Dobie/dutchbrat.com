@@ -3,6 +3,8 @@
  * Email templates for Hunter's Hounds
  */
 
+import { getServiceDisplayName } from './serviceTypes';
+
 export interface WelcomeEmailData {
     ownerName: string;
     dogName: string;
@@ -187,14 +189,14 @@ export function generateNoShowEmail(data: NoShowEmailData): string {
                 <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">We missed you today, ${ownerName} 🐕</h2>
                 
                 <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
-                    We missed you and <strong>${dogNames}</strong> today for your scheduled <strong>${serviceType}</strong> appointment.
+                    We missed you and <strong>${dogNames}</strong> today for your scheduled <strong>${getServiceDisplayName(serviceType)}</strong> appointment.
                 </p>
 
                 <!-- Appointment details -->
                 <div style="background-color: #f3f4f6; border-radius: 8px; padding: 25px; margin: 25px 0;">
                     <h3 style="color: #1f2937; margin: 0 0 15px 0; font-size: 18px;">Appointment Details</h3>
                     <p style="color: #4b5563; line-height: 1.6; margin: 0;">
-                        <strong>Service:</strong> ${serviceType}<br>
+                        <strong>Service:</strong> ${getServiceDisplayName(serviceType)}<br>
                         <strong>Date:</strong> ${appointmentDate}<br>
                         <strong>Time:</strong> ${appointmentTime}<br>
                         <strong>Dog(s):</strong> ${dogNames}
@@ -314,7 +316,7 @@ export function generatePaymentReceivedEmail(data: PaymentReceivedEmailData): { 
 
                 <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
                     Just a quick note to say I've received your payment for <strong>${dogNames}'s</strong>
-                    <strong>${serviceType}</strong> on <strong>${serviceDate}</strong> - thank you so much!
+                    <strong>${getServiceDisplayName(serviceType)}</strong> on <strong>${serviceDate}</strong> - thank you so much!
                 </p>
 
                 <!-- Dog Image -->
@@ -395,7 +397,7 @@ export function generatePaymentInvoiceEmail(data: PaymentInvoiceEmailData): { su
     const servicesHtml = services.map(s => `
         <tr>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.date}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.serviceType}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${getServiceDisplayName(s.serviceType)}</td>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold;">£${s.price.toFixed(2)}</td>
         </tr>
     `).join('');
@@ -507,7 +509,7 @@ export function generatePaymentReminderEmail(data: PaymentReminderEmailData): { 
     const servicesHtml = services.map(s => `
         <tr>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.date}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${s.serviceType}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${getServiceDisplayName(s.serviceType)}</td>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold;">£${s.price.toFixed(2)}</td>
         </tr>
     `).join('');
@@ -672,7 +674,7 @@ export function generateReviewRequestEmail(data: ReviewRequestEmailData): { subj
 
                 <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
                     I hope you and <strong>${dogNames}</strong> are doing well! I wanted to reach out and ask
-                    if you'd be willing to share your experience from our recent <strong>${serviceType}</strong>
+                    if you'd be willing to share your experience from our recent <strong>${getServiceDisplayName(serviceType)}</strong>
                     on <strong>${serviceDate}</strong>.
                 </p>
 

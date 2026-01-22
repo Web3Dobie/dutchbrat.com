@@ -1290,6 +1290,82 @@ Also added:
 
 ---
 
+**Service Type Normalization (V11.8):**
+
+Standardized `service_type` storage format across all booking creation methods to prevent inconsistencies.
+
+**Problem:**
+The `service_type` field was stored inconsistently:
+- Customer bookings: `"Solo Walk (1 hour)"`, `"Meet & Greet - for new clients"`
+- Admin bookings: `"solo"`, `"meetgreet"`
+
+This caused issues with service type detection in features like price recalculation (V11.7).
+
+**Solution:**
+1. Created shared utility for service type handling
+2. All bookings now store normalized short IDs (`solo`, `quick`, `meetgreet`, `sitting`)
+3. Display functions convert to human-readable names (`Solo Walk`, `Quick Walk`, etc.)
+4. Duration preserved separately in `duration_minutes` column
+
+**Normalized Values:**
+| Stored | Displayed |
+|--------|-----------|
+| `solo` | `Solo Walk` |
+| `quick` | `Quick Walk` |
+| `meetgreet` | `Meet & Greet` |
+| `sitting` | `Dog Sitting` |
+
+**Files Created/Modified:**
+```
+# Core Utility
+/lib/serviceTypes.ts                              → NEW: Shared utility (normalizeServiceType, getServiceDisplayName)
+/lib/emailTemplates.ts                            → Import and use getServiceDisplayName for all email templates
+
+# Booking Creation (normalize before INSERT)
+/app/api/dog-walking/book/route.ts                → Normalize service_type
+/app/api/dog-walking/admin/create-booking/route.ts → Normalize service_type
+
+# API Routes (display in emails/telegram)
+/app/api/dog-walking/cancel/route.ts              → Use getServiceDisplayName in emails & telegram
+/app/api/dog-walking/reschedule-booking/route.ts  → Replaced local function with shared import
+/app/api/dog-walking/modify-booking-dogs/route.ts → Replaced local function with shared import
+/app/api/dog-walking/admin/send-reminder/route.ts → Let email template handle display
+/app/api/dog-walking/admin/send-invoice/route.ts  → Let email template handle display
+/app/api/dog-walking/admin/request-review/route.ts → Use getServiceDisplayName in telegram
+/app/api/dog-walking/admin/bookings/[id]/status/route.ts → Use getServiceDisplayName in telegram
+
+# Frontend Components (display in UI)
+/app/components/DashboardMain.tsx                 → Use shared getServiceDisplayName
+/app/components/BookingManager.tsx                → Use shared getServiceDisplayName
+/app/components/ReviewCard.tsx                    → Use shared getServiceDisplayName
+/app/dog-walking/admin/manage-bookings/page.tsx   → Use shared getServiceDisplayName
+/app/dog-walking/admin/revenue/page.tsx           → Use shared getServiceDisplayName
+/app/dog-walking/admin/payments/page.tsx          → Use shared getServiceDisplayName
+/app/dog-walking/admin/manage-reviews/page.tsx    → Use shared getServiceDisplayName
+/app/review/[token]/page.tsx                      → Use shared getServiceDisplayName
+
+# Database Migration
+/sql/normalize_service_types.sql                  → Migration script for existing records
+```
+
+**SQL Migration:**
+Run the migration script to normalize existing database records:
+```sql
+UPDATE hunters_hounds.bookings
+SET service_type = CASE
+    WHEN LOWER(service_type) LIKE '%solo%' THEN 'solo'
+    WHEN LOWER(service_type) LIKE '%quick%' THEN 'quick'
+    WHEN LOWER(service_type) LIKE '%meet%' OR LOWER(service_type) LIKE '%greet%' THEN 'meetgreet'
+    WHEN LOWER(service_type) LIKE '%sitting%' THEN 'sitting'
+    ELSE service_type
+END
+WHERE service_type NOT IN ('solo', 'quick', 'meetgreet', 'sitting');
+```
+
+**For AI Agents**: V11.8 normalizes service_type storage and display across the entire application. All bookings now store short IDs (`solo`, `quick`, `meetgreet`, `sitting`) regardless of creation method. Use `normalizeServiceType()` before storing and `getServiceDisplayName()` for display. Both functions are in `/lib/serviceTypes.ts`. The shared utility is used in: (1) email templates for all customer emails, (2) API routes for Telegram notifications, (3) all admin pages (manage-bookings, revenue, payments, manage-reviews), (4) customer-facing pages (dashboard, review submission), and (5) shared components (BookingManager, ReviewCard). Duration information is preserved in `duration_minutes` column. Run the SQL migration in `/sql/normalize_service_types.sql` to fix existing records. When adding new features that display service_type, always import and use `getServiceDisplayName()` from `/lib/serviceTypes`.
+
+---
+
 ## 🎉 V10 Achievements Summary
 
 **15-Minute Walk Time Slots:**

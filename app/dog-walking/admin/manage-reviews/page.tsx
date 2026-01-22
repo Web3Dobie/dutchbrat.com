@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import StarRating from "@/app/components/StarRating";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 interface Review {
     id: number;
@@ -433,7 +434,7 @@ export default function ManageReviewsPage() {
                                         {review.ownerName} - {review.dogNames.join(" & ")}
                                     </div>
                                     <div style={styles.serviceInfo}>
-                                        {review.serviceType} on {formatDate(review.serviceDate)}
+                                        {getServiceDisplayName(review.serviceType)} on {formatDate(review.serviceDate)}
                                     </div>
                                 </div>
                                 <StarRating rating={review.rating} readonly size="sm" />
@@ -549,7 +550,7 @@ export default function ManageReviewsPage() {
                                     {booking.ownerName} - {booking.dogNames.join(" & ")}
                                 </div>
                                 <div style={styles.serviceInfo}>
-                                    {booking.serviceType} on {formatDate(booking.serviceDate)}
+                                    {getServiceDisplayName(booking.serviceType)} on {formatDate(booking.serviceDate)}
                                 </div>
                                 {booking.walkSummary && (
                                     <div style={styles.walkSummary}>

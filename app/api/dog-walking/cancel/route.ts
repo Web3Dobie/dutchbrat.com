@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail, sendBookingEmail } from "@/lib/emailService";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // --- Initialization ---
 
@@ -127,16 +128,17 @@ export async function POST(request: NextRequest) {
         const dogNames = booking.dog_name_2
             ? `${booking.dog_name_1} & ${booking.dog_name_2}`
             : booking.dog_name_1;
+        const serviceDisplayName = getServiceDisplayName(booking.service_type);
 
         try {
             const emailSubject = `Booking Cancelled - ${displayDate}`;
             const emailContent = `
                 <h1>Booking Cancellation Confirmed</h1>
                 <p>Hi ${booking.owner_name},</p>
-                <p>Your booking for a <strong>${booking.service_type}</strong> has been successfully cancelled.</p>
-                
+                <p>Your booking for a <strong>${serviceDisplayName}</strong> has been successfully cancelled.</p>
+
                 <h3>Cancelled Booking Details:</h3>
-                <p><strong>Service:</strong> ${booking.service_type}</p>
+                <p><strong>Service:</strong> ${serviceDisplayName}</p>
                 <p><strong>Date & Time:</strong> ${displayDate}</p>
                 <p><strong>Dog(s):</strong> ${dogNames}</p>
                 <p><strong>Booking ID:</strong> ${booking.id}</p>
@@ -171,8 +173,8 @@ export async function POST(request: NextRequest) {
         // --- 5. Send Telegram Notification ---
         const telegramMessage = `
             ❌ <b>BOOKING CANCELLED</b> ❌
-            
-            <b>Service:</b> ${booking.service_type}
+
+            <b>Service:</b> ${serviceDisplayName}
             <b>Time:</b> ${displayDate}
             <b>Client:</b> ${booking.owner_name} (${booking.phone})
             <b>Dog(s):</b> ${dogs}

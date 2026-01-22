@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { format, isPast, isToday, isTomorrow, addHours, isBefore, addMinutes, isSameDay } from "date-fns";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // Import existing calendar components
 import ResponsiveDatePicker from "./ResponsiveDatePicker";
@@ -303,15 +304,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
     };
 
     // --- Helper Functions ---
-    const getServiceDisplayName = (serviceType: string) => {
-        const serviceMap: Record<string, string> = {
-            'meetgreet': 'Meet & Greet',
-            'solo': 'Solo Walk (60 min)',
-            'quick': 'Quick Walk (30 min)',
-            'sitting': 'Dog Sitting',
-        };
-        return serviceMap[serviceType] || serviceType;
-    };
+    // getServiceDisplayName is now imported from @/lib/serviceTypes
 
     const canCancelBooking = () => {
         if (!booking || booking.status !== 'confirmed') return false;

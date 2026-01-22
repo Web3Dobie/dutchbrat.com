@@ -5,6 +5,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { format } from "date-fns";
 import StarRating from "@/app/components/StarRating";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 interface ReviewData {
     id: number;
@@ -235,7 +236,7 @@ export default function ReviewPage() {
                     <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                             <span className="text-gray-400">Service:</span>
-                            <span className="text-white font-medium">{reviewData?.serviceType}</span>
+                            <span className="text-white font-medium">{reviewData?.serviceType ? getServiceDisplayName(reviewData.serviceType) : ''}</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-400">Date:</span>

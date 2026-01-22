@@ -3,6 +3,7 @@
 import React from "react";
 import { format } from "date-fns";
 import StarRating from "./StarRating";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 interface ReviewCardProps {
     rating: number;
@@ -63,7 +64,7 @@ export default function ReviewCard({
                         <StarRating rating={rating} readonly size="sm" />
                     </div>
                     <p className="text-gray-400 text-sm">
-                        {serviceType}
+                        {getServiceDisplayName(serviceType)}
                     </p>
                     <p className="text-gray-500 text-xs">
                         {formatDate(serviceDate)}

@@ -95,10 +95,10 @@ export async function POST(request: NextRequest) {
         // Get dog names from first booking for email
         const dogNames = bookingsResult.rows[0].dog_names;
 
-        // Format services for email
+        // Format services for email (serviceType display handled by email template)
         const services = bookingsResult.rows.map(row => ({
             date: format(new Date(row.start_time), "EEEE, d MMMM yyyy"),
-            serviceType: row.service_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+            serviceType: row.service_type,
             price: parseFloat(row.price_pounds)
         }));
 

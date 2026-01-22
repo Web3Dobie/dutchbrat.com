@@ -8,6 +8,7 @@ import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // ← ADDED 
 import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
+import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -56,6 +57,11 @@ export async function POST(request: NextRequest) {
 
         const startTime = new Date(data.start_time);
         const isHistorical = isPast(startTime);
+
+        // Normalize service type for consistent storage
+        const normalizedServiceType = normalizeServiceType(data.service_type);
+        const serviceDisplayName = getServiceDisplayName(normalizedServiceType);
+        console.log(`[Admin Booking] Service type: "${data.service_type}" -> normalized: "${normalizedServiceType}", display: "${serviceDisplayName}"`);
 
         // Determine booking type
         const booking_type = data.end_time && !data.duration_minutes ? 'multi_day' : 'single';
@@ -152,7 +158,7 @@ export async function POST(request: NextRequest) {
                 data.owner_id,
                 data.dog_id_1,
                 data.dog_id_2 || null,
-                data.service_type,
+                normalizedServiceType,
                 startTime.toISOString(),
                 endTime.toISOString(),
                 booking_type === 'single' ? data.duration_minutes : null,
@@ -177,15 +183,15 @@ export async function POST(request: NextRequest) {
                         : customer.dog_name_1;
 
                     const eventTitle = booking_type === 'multi_day'
-                        ? `${data.service_type} - ${dogNames} (Multi-day)`
-                        : `${data.service_type} - ${dogNames}`;
+                        ? `${serviceDisplayName} - ${dogNames} (Multi-day)`
+                        : `${serviceDisplayName} - ${dogNames}`;
 
                     const eventDescription = `
 ${isHistorical ? 'HISTORICAL BOOKING' : 'BOOKING CONFIRMATION'}
 
 Owner: ${customer.owner_name}
 Dog(s): ${dogNames}
-Service: ${data.service_type}
+Service: ${serviceDisplayName}
 ${booking_type === 'single' ? `Duration: ${data.duration_minutes} minutes` : 'Multi-day booking'}
 Address: ${customer.address}
 Phone: ${customer.phone}
@@ -235,7 +241,7 @@ Status: ${status.toUpperCase()}
 
             const emailSubject = booking_type === 'multi_day'
                 ? `Multi-Day Dog Sitting Confirmation - ${dogNamesForEmail}`
-                : `Booking Confirmation - ${data.service_type}`;
+                : `Booking Confirmation - ${serviceDisplayName}`;
 
             const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -244,7 +250,7 @@ Status: ${status.toUpperCase()}
                     <p>Your booking has been confirmed for ${dogNamesForEmail}.</p>
 
                     <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                        <p><strong>Service:</strong> ${data.service_type}</p>
+                        <p><strong>Service:</strong> ${serviceDisplayName}</p>
                         <p><strong>Date & Time:</strong> ${format(startTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>
                         ${booking_type === 'single' ? `<p><strong>Duration:</strong> ${formatDurationForEmail(data.duration_minutes ?? null)}</p>` : `<p><strong>End Time:</strong> ${format(endTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>`}
                         ${finalPrice !== null ? `<p><strong>Price:</strong> £${finalPrice.toFixed(2)}</p>` : ''}
@@ -275,7 +281,7 @@ ${isHistorical ? '📋 HISTORICAL BOOKING ADDED' : '🐕 NEW ADMIN BOOKING'}
 📅 ${format(startTime, "EEE, MMM d 'at' HH:mm")} ${booking_type === 'multi_day' ? `→ ${format(endTime, "MMM d 'at' HH:mm")}` : `(${data.duration_minutes}min)`}
 👤 ${customer.owner_name} (${customer.phone})
 🐾 ${dogNames}
-🎯 ${data.service_type}
+🎯 ${serviceDisplayName}
 📍 ${customer.address}
 📧 ${customer.email}
 ${finalPrice !== null ? (finalPrice === 0 ? '💰 FREE' : `💰 £${finalPrice.toFixed(2)}`) : '💰 POA'}

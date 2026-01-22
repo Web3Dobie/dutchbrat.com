@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths, isSameDay } from "date-fns";
 import { formatPrice } from '@/lib/pricing';
+import { getServiceDisplayName } from '@/lib/serviceTypes';
 
 // --- Types ---
 interface Dog {
@@ -154,18 +155,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     };
 
     // --- Helper Functions ---
-    const getServiceDisplayName = (serviceType: string): string => {
-        switch (serviceType) {
-            case 'dog_walking':
-                return 'Dog Walking';
-            case 'dog_sitting':
-                return 'Dog Sitting';
-            case 'meet_greet':
-                return 'Meet & Greet';
-            default:
-                return serviceType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        }
-    };
+    // getServiceDisplayName is now imported from @/lib/serviceTypes
 
     // Calculate payment due date based on customer's payment preference
     const getPaymentDueDate = (bookingEndTime: Date, paymentPreference: string): Date => {

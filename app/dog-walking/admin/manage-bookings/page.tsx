@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // Types
 interface EditableBooking {
@@ -437,7 +438,7 @@ export default function ManageBookings() {
                                         </div>
                                     </td>
                                     <td style={styles.td}>
-                                        {booking.service_type}
+                                        {getServiceDisplayName(booking.service_type)}
                                         <div style={{ color: "#9ca3af", fontSize: "0.875rem" }}>
                                             {booking.duration_minutes} min
                                         </div>
@@ -736,7 +737,7 @@ export default function ManageBookings() {
                         >
                             <option value="">All Services</option>
                             {uniqueServices.map(service => (
-                                <option key={service} value={service}>{service}</option>
+                                <option key={service} value={service}>{getServiceDisplayName(service)}</option>
                             ))}
                         </select>
                     </div>

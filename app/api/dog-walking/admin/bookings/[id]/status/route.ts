@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/emailService";
 import { generateNoShowEmail } from "@/lib/emailTemplates";
 import { format } from "date-fns";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // Database Connection
 const pool = new Pool({
@@ -178,7 +179,7 @@ ${statusEmoji} <b>STATUS UPDATED</b> ${statusEmoji}
 
 <b>Booking:</b> #${bookingId}
 <b>Customer:</b> ${booking.owner_name}
-<b>Service:</b> ${booking.service_type} (${dogNames})
+<b>Service:</b> ${getServiceDisplayName(booking.service_type)} (${dogNames})
 <b>Date:</b> ${appointmentDateForTelegram}
 
 <b>Status Change:</b>

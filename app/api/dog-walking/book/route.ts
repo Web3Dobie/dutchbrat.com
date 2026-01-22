@@ -10,6 +10,7 @@ import { sendEmail } from "@/lib/emailService";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
 import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
+import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -42,6 +43,10 @@ export async function POST(request: NextRequest) {
             dog_name_2,
             secondary_address_id // NEW: Secondary address selection
         } = body;
+
+        // Normalize service type for consistent storage
+        const normalizedServiceType = normalizeServiceType(service_type);
+        console.log(`[Booking] Service type: "${service_type}" -> normalized: "${normalizedServiceType}"`);
 
         // Log secondary address selection
         if (secondary_address_id) {
@@ -219,7 +224,7 @@ export async function POST(request: NextRequest) {
                 ownerId,
                 dog_id_1,
                 dog_id_2 || null,
-                service_type,
+                normalizedServiceType,
                 start_time,
                 calculatedEndTime,
                 booking_type === 'single' ? duration_minutes : null,

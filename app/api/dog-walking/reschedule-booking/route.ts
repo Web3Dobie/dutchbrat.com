@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/emailService";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // Database Connection
 const pool = new Pool({
@@ -331,15 +332,4 @@ ${booking.price_pounds ? `**Price:** £${parseFloat(booking.price_pounds).toFixe
     } finally {
         client.release();
     }
-}
-
-// Helper function to get service display name
-function getServiceDisplayName(serviceType: string): string {
-    const serviceMap: Record<string, string> = {
-        'meetgreet': 'Meet & Greet',
-        'solo': 'Solo Walk (60 min)',
-        'quick': 'Quick Walk (30 min)',
-        'sitting': 'Dog Sitting',
-    };
-    return serviceMap[serviceType] || serviceType;
 }

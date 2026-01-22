@@ -5,6 +5,7 @@ import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { sendBookingEmail } from "@/lib/emailService";
 import { generateReviewRequestEmail } from "@/lib/emailTemplates";
 import { format } from "date-fns";
+import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 // Database Connection
 const pool = new Pool({
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
 
 <b>Customer:</b> ${booking.owner_name}
 <b>Dog(s):</b> ${dogNames}
-<b>Service:</b> ${booking.service_type}
+<b>Service:</b> ${getServiceDisplayName(booking.service_type)}
 <b>Date:</b> ${serviceDate}
 
 <i>Review request email sent</i>
