@@ -276,7 +276,7 @@ Status: ${status.toUpperCase()}
                     : customer.dog_name_1;
 
                 const telegramMessage = `
-${isHistorical ? '📋 HISTORICAL BOOKING ADDED' : '🐕 NEW ADMIN BOOKING'}
+${isHistorical ? '📋 HISTORICAL BOOKING ADDED' : '🐕 NEW ADMIN BOOKING'} (#${bookingId})
 
 📅 ${format(startTime, "EEE, MMM d 'at' HH:mm")} ${booking_type === 'multi_day' ? `→ ${format(endTime, "MMM d 'at' HH:mm")}` : `(${data.duration_minutes}min)`}
 👤 ${customer.owner_name} (${customer.phone})

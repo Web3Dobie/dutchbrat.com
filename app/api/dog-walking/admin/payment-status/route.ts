@@ -55,23 +55,12 @@ export async function GET(request: NextRequest) {
                 o.owner_name,
                 o.phone,
                 o.email,
-                -- Aggregate dog names for this booking
-                array_agg(
-                    CASE 
-                        WHEN d1.id IS NOT NULL THEN d1.dog_name
-                        WHEN d2.id IS NOT NULL THEN d2.dog_name
-                        ELSE NULL
-                    END
-                ) FILTER (WHERE d1.id IS NOT NULL OR d2.id IS NOT NULL) as dog_names
+                ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names
             FROM hunters_hounds.bookings b
             JOIN hunters_hounds.owners o ON b.owner_id = o.id
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             ${whereClause}
-            GROUP BY 
-                b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, 
-                b.price_pounds, b.status, b.walk_summary, b.created_at,
-                o.owner_name, o.phone, o.email
             ORDER BY b.start_time DESC;
         `;
 

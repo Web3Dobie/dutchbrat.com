@@ -179,18 +179,11 @@ export async function GET(request: NextRequest) {
                     b.service_type,
                     b.duration_minutes,
                     b.price_pounds,
-                    array_agg(
-                        CASE
-                            WHEN d1.id IS NOT NULL THEN d1.dog_name
-                            WHEN d2.id IS NOT NULL THEN d2.dog_name
-                            ELSE NULL
-                        END
-                    ) FILTER (WHERE d1.id IS NOT NULL OR d2.id IS NOT NULL) as dog_names
+                    ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names
                 FROM hunters_hounds.bookings b
                 LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
                 LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
                 ${whereClause}
-                GROUP BY b.id, b.start_time, b.service_type, b.duration_minutes, b.price_pounds
                 ORDER BY b.start_time DESC;
             `;
 

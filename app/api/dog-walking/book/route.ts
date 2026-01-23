@@ -509,7 +509,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
             if (booking_type === 'multi_day') {
                 const numDays = differenceInDays(new Date(end_time), new Date(start_time)) + 1;
                 telegramMessage = `
-🐕 NEW MULTI-DAY DOG SITTING BOOKING
+🐕 NEW MULTI-DAY DOG SITTING BOOKING (#${bookingId})
 
 📅 ${numDays} days: ${format(new Date(start_time), "MMM d HH:mm")} → ${format(new Date(end_time), "MMM d HH:mm")}
 👤 ${owner_name} (${phone})
@@ -521,7 +521,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 // NEW: Same-day dog sitting notification
                 const numHours = differenceInHours(new Date(end_time), new Date(start_time));
                 telegramMessage = `
-🐕 NEW ${numHours}H DOG SITTING BOOKING
+🐕 NEW ${numHours}H DOG SITTING BOOKING (#${bookingId})
 
 📅 ${format(new Date(start_time), "EEE, MMM d")} ${format(new Date(start_time), "HH:mm")} → ${format(new Date(end_time), "HH:mm")}
 👤 ${owner_name} (${phone})
@@ -534,7 +534,7 @@ End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
                 // Standard walk bookings
                 const priceInfo = finalPrice ? `💰 £${finalPrice.toFixed(2)}` : '';
                 telegramMessage = `
-🐕 NEW BOOKING: ${service_type.toUpperCase()}
+🐕 NEW BOOKING: ${service_type.toUpperCase()} (#${bookingId})
 
 📅 ${format(new Date(start_time), "EEE, MMM d 'at' HH:mm")}
 👤 ${owner_name} (${phone})
