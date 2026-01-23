@@ -1364,6 +1364,56 @@ WHERE service_type NOT IN ('solo', 'quick', 'meetgreet', 'sitting');
 
 **For AI Agents**: V11.8 normalizes service_type storage and display across the entire application. All bookings now store short IDs (`solo`, `quick`, `meetgreet`, `sitting`) regardless of creation method. Use `normalizeServiceType()` before storing and `getServiceDisplayName()` for display. Both functions are in `/lib/serviceTypes.ts`. The shared utility is used in: (1) email templates for all customer emails, (2) API routes for Telegram notifications, (3) all admin pages (manage-bookings, revenue, payments, manage-reviews), (4) customer-facing pages (dashboard, review submission), and (5) shared components (BookingManager, ReviewCard). Duration information is preserved in `duration_minutes` column. Run the SQL migration in `/sql/normalize_service_types.sql` to fix existing records. When adding new features that display service_type, always import and use `getServiceDisplayName()` from `/lib/serviceTypes`.
 
+**Payments Page Filters (V11.9):**
+
+The admin payments page (`/dog-walking/admin/payments`) now includes client and date range filters for both "Awaiting Payment" and "All Bookings" views.
+
+**Filter Features:**
+- **Client Filter**: Dropdown populated with unique client names from the current view
+- **Date From**: Filter bookings on or after a specific date
+- **Date To**: Filter bookings on or before a specific date
+- **Clear Filters**: Button to reset all filters
+- **Results Count**: Shows "Showing X of Y bookings" when filters are active
+
+**Implementation Details:**
+```typescript
+// Filter state variables
+const [filterClient, setFilterClient] = useState<string>('');
+const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+const [filterDateTo, setFilterDateTo] = useState<string>('');
+
+// Unique clients computed from bookings
+const uniqueClients = useMemo(() => {
+    const clients = Array.from(new Set(bookings.map(b => b.owner_name)));
+    return clients.sort((a, b) => a.localeCompare(b));
+}, [bookings]);
+
+// Filtered bookings computed with all filter criteria
+const filteredBookings = useMemo(() => {
+    return bookings.filter(booking => {
+        if (filterClient && booking.owner_name !== filterClient) return false;
+        if (filterDateFrom) {
+            const bookingDate = new Date(booking.start_time);
+            const fromDate = new Date(filterDateFrom);
+            fromDate.setHours(0, 0, 0, 0);
+            if (bookingDate < fromDate) return false;
+        }
+        if (filterDateTo) {
+            const bookingDate = new Date(booking.start_time);
+            const toDate = new Date(filterDateTo);
+            toDate.setHours(23, 59, 59, 999);
+            if (bookingDate > toDate) return false;
+        }
+        return true;
+    });
+}, [bookings, filterClient, filterDateFrom, filterDateTo]);
+```
+
+**File Modified:**
+- `/app/dog-walking/admin/payments/page.tsx` - Added filter state, useMemo logic, filter UI, and updated table to use `filteredBookings`
+
+**For AI Agents**: V11.9 adds client-side filtering to the payments page. The filters are applied via `useMemo` hooks - `uniqueClients` extracts sorted unique client names from bookings, and `filteredBookings` applies all filter criteria. The table, select-all checkbox, and action button visibility all use `filteredBookings` instead of `bookings`. Filters work across all view modes (awaiting_payment, paid, all). The filter UI appears below the tabs and above the table.
+
 ---
 
 ## 🎉 V10 Achievements Summary

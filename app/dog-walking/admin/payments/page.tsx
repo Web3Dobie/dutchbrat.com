@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 
@@ -59,6 +59,11 @@ export default function AdminPaymentManagement() {
     const [sendingInvoice, setSendingInvoice] = useState<number | null>(null);
     const [sendingReminder, setSendingReminder] = useState<number | null>(null);
 
+    // Filter states
+    const [filterClient, setFilterClient] = useState<string>('');
+    const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+    const [filterDateTo, setFilterDateTo] = useState<string>('');
+
     useEffect(() => {
         fetchPaymentData();
     }, [viewMode]);
@@ -85,6 +90,53 @@ export default function AdminPaymentManagement() {
             setIsLoading(false);
         }
     };
+
+    // Extract unique clients for filter dropdown
+    const uniqueClients = useMemo(() => {
+        const clients = Array.from(new Set(bookings.map(b => b.owner_name)));
+        return clients.sort((a, b) => a.localeCompare(b));
+    }, [bookings]);
+
+    // Apply filters
+    const filteredBookings = useMemo(() => {
+        return bookings.filter(booking => {
+            // Client filter
+            if (filterClient && booking.owner_name !== filterClient) {
+                return false;
+            }
+
+            // Date from filter
+            if (filterDateFrom) {
+                const bookingDate = new Date(booking.start_time);
+                const fromDate = new Date(filterDateFrom);
+                fromDate.setHours(0, 0, 0, 0);
+                if (bookingDate < fromDate) {
+                    return false;
+                }
+            }
+
+            // Date to filter
+            if (filterDateTo) {
+                const bookingDate = new Date(booking.start_time);
+                const toDate = new Date(filterDateTo);
+                toDate.setHours(23, 59, 59, 999);
+                if (bookingDate > toDate) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [bookings, filterClient, filterDateFrom, filterDateTo]);
+
+    // Clear all filters
+    const clearFilters = () => {
+        setFilterClient('');
+        setFilterDateFrom('');
+        setFilterDateTo('');
+    };
+
+    const hasActiveFilters = filterClient || filterDateFrom || filterDateTo;
 
     const handleBookingSelect = (bookingId: number) => {
         setSelectedBookings(prev => {
@@ -288,7 +340,7 @@ export default function AdminPaymentManagement() {
     };
 
     const handleSelectAll = () => {
-        const selectableBookings = bookings.filter(b =>
+        const selectableBookings = filteredBookings.filter(b =>
             viewMode === 'awaiting_payment' ? b.status === 'completed' :
                 viewMode === 'all' ? ['confirmed', 'completed'].includes(b.status) :
                     false
@@ -422,6 +474,51 @@ export default function AdminPaymentManagement() {
             backgroundColor: "#6b7280",
             color: "#9ca3af",
             cursor: "not-allowed",
+        } as React.CSSProperties,
+        filtersContainer: {
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "16px",
+            marginBottom: "24px",
+            padding: "16px",
+            backgroundColor: "#1f2937",
+            borderRadius: "8px",
+            alignItems: "flex-end",
+        } as React.CSSProperties,
+        filterGroup: {
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px",
+        } as React.CSSProperties,
+        filterLabel: {
+            color: "#9ca3af",
+            fontSize: "0.85rem",
+            fontWeight: "500",
+        } as React.CSSProperties,
+        filterSelect: {
+            padding: "8px 12px",
+            backgroundColor: "#374151",
+            color: "#fff",
+            border: "1px solid #4b5563",
+            borderRadius: "4px",
+            minWidth: "180px",
+        } as React.CSSProperties,
+        filterInput: {
+            padding: "8px 12px",
+            backgroundColor: "#374151",
+            color: "#fff",
+            border: "1px solid #4b5563",
+            borderRadius: "4px",
+            minWidth: "150px",
+        } as React.CSSProperties,
+        clearFiltersButton: {
+            padding: "8px 16px",
+            backgroundColor: "#6b7280",
+            color: "#fff",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontWeight: "500",
         } as React.CSSProperties,
         table: {
             width: "100%",
@@ -620,6 +717,65 @@ export default function AdminPaymentManagement() {
                 ))}
             </div>
 
+            {/* Filters - show for awaiting_payment and all views */}
+            {(viewMode === 'awaiting_payment' || viewMode === 'all') && (
+                <div style={styles.filtersContainer}>
+                    {/* Client Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>Client</label>
+                        <select
+                            value={filterClient}
+                            onChange={(e) => setFilterClient(e.target.value)}
+                            style={styles.filterSelect}
+                        >
+                            <option value="">All Clients</option>
+                            {uniqueClients.map(client => (
+                                <option key={client} value={client}>{client}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Date From Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>From Date</label>
+                        <input
+                            type="date"
+                            value={filterDateFrom}
+                            onChange={(e) => setFilterDateFrom(e.target.value)}
+                            style={styles.filterInput}
+                        />
+                    </div>
+
+                    {/* Date To Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>To Date</label>
+                        <input
+                            type="date"
+                            value={filterDateTo}
+                            onChange={(e) => setFilterDateTo(e.target.value)}
+                            style={styles.filterInput}
+                        />
+                    </div>
+
+                    {/* Clear Filters Button */}
+                    {hasActiveFilters && (
+                        <button
+                            onClick={clearFilters}
+                            style={styles.clearFiltersButton}
+                        >
+                            Clear Filters
+                        </button>
+                    )}
+
+                    {/* Results count */}
+                    {hasActiveFilters && (
+                        <div style={{ color: "#9ca3af", fontSize: "0.9rem", alignSelf: "center" }}>
+                            Showing {filteredBookings.length} of {bookings.length} bookings
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Customer Summary - Send Invoice/Reminder */}
             {viewMode === 'awaiting_payment' && getCustomerSummaries().length > 0 && (
                 <div style={styles.customerSummaryCard}>
@@ -697,7 +853,7 @@ export default function AdminPaymentManagement() {
 
                 {(viewMode === 'all' || viewMode === 'awaiting_payment') && 
                  selectedBookings.size > 0 && 
-                 bookings.some(b => selectedBookings.has(b.id) && b.status === 'confirmed') && (
+                 filteredBookings.some(b => selectedBookings.has(b.id) && b.status === 'confirmed') && (
                     <button
                         onClick={openCompletedModal}
                         disabled={isUpdating}
@@ -712,7 +868,7 @@ export default function AdminPaymentManagement() {
             </div>
 
             {/* Bookings Table */}
-            {bookings.length > 0 ? (
+            {filteredBookings.length > 0 ? (
                 <table style={styles.table}>
                     <thead>
                         <tr>
@@ -720,8 +876,8 @@ export default function AdminPaymentManagement() {
                                 <input
                                     type="checkbox"
                                     onChange={handleSelectAll}
-                                    checked={selectedBookings.size > 0 && 
-                                             selectedBookings.size === bookings.filter(b =>
+                                    checked={selectedBookings.size > 0 &&
+                                             selectedBookings.size === filteredBookings.filter(b =>
                                                 viewMode === 'awaiting_payment' ? b.status === 'completed' :
                                                 viewMode === 'all' ? ['confirmed', 'completed'].includes(b.status) :
                                                 false
@@ -738,7 +894,7 @@ export default function AdminPaymentManagement() {
                         </tr>
                     </thead>
                     <tbody>
-                        {bookings.map((booking) => (
+                        {filteredBookings.map((booking) => (
                             <tr key={booking.id}>
                                 <td style={styles.td}>
                                     <input
