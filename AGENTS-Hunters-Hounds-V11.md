@@ -1414,6 +1414,47 @@ const filteredBookings = useMemo(() => {
 
 **For AI Agents**: V11.9 adds client-side filtering to the payments page. The filters are applied via `useMemo` hooks - `uniqueClients` extracts sorted unique client names from bookings, and `filteredBookings` applies all filter criteria. The table, select-all checkbox, and action button visibility all use `filteredBookings` instead of `bookings`. Filters work across all view modes (awaiting_payment, paid, all). The filter UI appears below the tabs and above the table.
 
+**Dynamic Dog Images - No Container Rebuild (V11.10):**
+
+Dog images are now served via an API route from a Docker volume mount, eliminating the need to rebuild the container when adding or updating dog photos.
+
+**Problem Solved:**
+Previously, dog images were stored in `/public/images/dogs/` which gets baked into the Docker image at build time. Any new or changed dog photos required a container rebuild.
+
+**Solution Architecture:**
+```
+Host:       /home/hunter-dev/dog-images/         (persistent storage)
+              ↓ (volume mount)
+Container:  /app/dog-images/                     (accessible inside container)
+              ↓ (API route reads from here)
+API:        /api/dog-images/[filename]           (serves images)
+              ↓ (frontend requests)
+Frontend:   <img src="/api/dog-images/photo.jpg">
+```
+
+**Files Created:**
+- `/app/api/dog-images/[filename]/route.ts` - API route that serves dog images from mounted volume with:
+  - Security: Directory traversal prevention
+  - Extension validation (.jpg, .jpeg, .png, .gif, .webp)
+  - 24-hour browser caching
+  - Proper content-type headers
+
+**Files Modified:**
+- `/app/components/AccountDetails.tsx` - Changed image src from `/images/dogs/` to `/api/dog-images/`
+- `/app/components/ReviewCard.tsx` - Changed image src from `/images/dogs/` to `/api/dog-images/`
+- `/app/components/CustomerDashboard.tsx` - Changed image src from `/images/dogs/` to `/api/dog-images/`
+- `/home/hunter-dev/production-stack/docker-compose.yml` - Added volume mount: `/home/hunter-dev/dog-images:/app/dog-images:ro`
+
+**Host Directory:**
+- `/home/hunter-dev/dog-images/` - Contains all dog profile photos
+
+**Workflow to Add/Update Dog Images:**
+1. Upload image via FileZilla to `/home/hunter-dev/dog-images/`
+2. Image is immediately available - no container rebuild needed
+3. Naming convention: `{dogname}_{ownerlastname}_{dogid}.jpg`
+
+**For AI Agents**: V11.10 moves dog image serving from Next.js static files to a dedicated API route. This bypasses Next.js standalone mode's static file handling which doesn't work well with volume mounts. The API route reads from `/app/dog-images/` which is mounted from the host at `/home/hunter-dev/dog-images/`. Frontend components now reference `/api/dog-images/${filename}` instead of `/images/dogs/${filename}`. The read-only mount (`:ro`) prevents the container from modifying images. When adding new features that display dog images, use the `/api/dog-images/` path.
+
 ---
 
 ## 🎉 V10 Achievements Summary

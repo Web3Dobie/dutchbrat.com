@@ -128,7 +128,7 @@ export default function CustomerDashboard() {
     const getDisplayPhoto = (dogs: Customer['dogs']): string | null => {
         const firstDogWithPhoto = dogs?.find(dog => dog.image_filename);
         return firstDogWithPhoto?.image_filename
-            ? `/images/dogs/${firstDogWithPhoto.image_filename}`
+            ? `/api/dog-images/${firstDogWithPhoto.image_filename}`
             : null;
     };
 

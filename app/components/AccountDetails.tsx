@@ -479,7 +479,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                         <div key={dog.id} style={styles.dogCard}>
                             {dog.image_filename && (
                                 <img
-                                    src={`/images/dog-walking/${dog.image_filename}`}
+                                    src={`/api/dog-images/${dog.image_filename}`}
                                     alt={dog.dog_name}
                                     style={{
                                         width: "60px",

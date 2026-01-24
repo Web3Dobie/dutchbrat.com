@@ -47,7 +47,7 @@ export default function ReviewCard({
                     <div className="flex-shrink-0">
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-blue-500">
                             <img
-                                src={`/images/dogs/${dogImages[0]}`}
+                                src={`/api/dog-images/${dogImages[0]}`}
                                 alt="Dog"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
