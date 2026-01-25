@@ -81,6 +81,9 @@ export default function AdminLayout({
                             <Link href="/dog-walking/admin/manage-reviews" style={styles.navLink}>
                                 Reviews
                             </Link>
+                            <Link href="/dog-walking/admin/newsletter" style={styles.navLink}>
+                                Newsletter
+                            </Link>
                         </div>
                     </div>
                 </nav>

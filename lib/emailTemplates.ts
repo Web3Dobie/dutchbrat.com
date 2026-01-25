@@ -818,4 +818,183 @@ export function generateChristmasEmail(data: ChristmasEmailData): string {
     `;
 }
 
+// ============================================================================
+// NEWSLETTER EMAIL TEMPLATE
+// ============================================================================
+
+export interface NewsletterContent {
+    title: string;
+    month: string;
+    welcomeMessage: string;
+    newPackMembers: {
+        dogId: number;
+        dogName: string;
+        breed: string;
+        ownerName: string;
+        imageFilename: string | null;
+        firstServiceDate: string;
+    }[];
+    packFarewells: string;
+    walkHighlights: {
+        text: string;
+        images: string[];
+    };
+    seasonalTips: string;
+    newFeatures: string;
+}
+
+/**
+ * Generate newsletter email HTML
+ * Uses {{UNSUBSCRIBE_URL}} placeholder which is replaced per-recipient
+ */
+export function generateNewsletterEmail(content: NewsletterContent): string {
+    const { title, month, welcomeMessage, newPackMembers, packFarewells, walkHighlights, seasonalTips, newFeatures } = content;
+
+    // Generate new pack members section
+    let newMembersHtml = '';
+    if (newPackMembers && newPackMembers.length > 0) {
+        const memberCards = newPackMembers.map(dog => `
+            <div style="display: inline-block; width: 150px; text-align: center; margin: 10px; vertical-align: top;">
+                ${dog.imageFilename ? `
+                    <img src="https://hunters-hounds.london/api/dog-images/${dog.imageFilename}"
+                         alt="${dog.dogName}"
+                         style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 8px;">
+                ` : `
+                    <div style="width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #60a5fa); margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">
+                        <span style="font-size: 36px;">🐕</span>
+                    </div>
+                `}
+                <div style="font-weight: 600; color: #1f2937; font-size: 14px;">${dog.dogName}</div>
+                <div style="color: #6b7280; font-size: 12px;">${dog.breed}</div>
+            </div>
+        `).join('');
+
+        newMembersHtml = `
+            <div style="margin: 30px 0; padding: 25px; background-color: #f0f9ff; border-radius: 12px;">
+                <h2 style="color: #1e40af; margin: 0 0 20px 0; font-size: 20px;">🐕 Welcome to the Pack!</h2>
+                <p style="color: #4b5563; margin: 0 0 20px 0;">
+                    We're excited to welcome ${newPackMembers.length === 1 ? 'a new member' : `${newPackMembers.length} new members`} to Hunter's Hounds this month!
+                </p>
+                <div style="text-align: center;">
+                    ${memberCards}
+                </div>
+            </div>
+        `;
+    }
+
+    // Generate pack farewells section
+    let farewellsHtml = '';
+    if (packFarewells && packFarewells.trim()) {
+        farewellsHtml = `
+            <div style="margin: 30px 0; padding: 25px; background-color: #fef3c7; border-radius: 12px;">
+                <h2 style="color: #92400e; margin: 0 0 15px 0; font-size: 20px;">👋 Pack Farewells</h2>
+                <p style="color: #78350f; line-height: 1.6; margin: 0; white-space: pre-line;">${packFarewells}</p>
+            </div>
+        `;
+    }
+
+    // Generate walk highlights section
+    let highlightsHtml = '';
+    if (walkHighlights && (walkHighlights.text || walkHighlights.images?.length > 0)) {
+        const imagesHtml = walkHighlights.images && walkHighlights.images.length > 0
+            ? `<div style="margin-top: 20px; text-align: center;">
+                ${walkHighlights.images.map(url => `
+                    <img src="${url}" alt="Walk highlight" style="max-width: 280px; height: auto; border-radius: 8px; margin: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                `).join('')}
+               </div>`
+            : '';
+
+        highlightsHtml = `
+            <div style="margin: 30px 0;">
+                <h2 style="color: #1f2937; margin: 0 0 15px 0; font-size: 20px;">📸 Walk Highlights</h2>
+                <p style="color: #4b5563; line-height: 1.6; margin: 0; white-space: pre-line;">${walkHighlights.text || ''}</p>
+                ${imagesHtml}
+            </div>
+        `;
+    }
+
+    // Generate seasonal tips section
+    let tipsHtml = '';
+    if (seasonalTips && seasonalTips.trim()) {
+        tipsHtml = `
+            <div style="margin: 30px 0; padding: 25px; background-color: #ecfdf5; border-radius: 12px;">
+                <h2 style="color: #065f46; margin: 0 0 15px 0; font-size: 20px;">🌿 Seasonal Tips</h2>
+                <p style="color: #047857; line-height: 1.6; margin: 0; white-space: pre-line;">${seasonalTips}</p>
+            </div>
+        `;
+    }
+
+    // Generate new features section
+    let featuresHtml = '';
+    if (newFeatures && newFeatures.trim()) {
+        featuresHtml = `
+            <div style="margin: 30px 0; padding: 25px; background-color: #f5f3ff; border-radius: 12px;">
+                <h2 style="color: #5b21b6; margin: 0 0 15px 0; font-size: 20px;">✨ What's New</h2>
+                <p style="color: #6d28d9; line-height: 1.6; margin: 0; white-space: pre-line;">${newFeatures}</p>
+            </div>
+        `;
+    }
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">🐕 Hunter's Hounds</h1>
+                <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 16px;">${month} Newsletter</p>
+            </div>
+
+            <!-- Content -->
+            <div style="padding: 30px;">
+
+                <!-- Welcome Message -->
+                <div style="margin-bottom: 30px;">
+                    <p style="color: #1f2937; line-height: 1.7; font-size: 16px; margin: 0; white-space: pre-line;">${welcomeMessage}</p>
+                </div>
+
+                ${newMembersHtml}
+                ${farewellsHtml}
+                ${highlightsHtml}
+                ${tipsHtml}
+                ${featuresHtml}
+
+                <!-- Signature -->
+                <div style="margin-top: 40px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Until next time,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 25px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                    <strong>Hunter's Hounds</strong><br>
+                    Professional Dog Walking & Pet Care<br>
+                    Phone: 07932749772 | Email: bookings@hunters-hounds.london
+                </p>
+                <p style="color: #9ca3af; font-size: 12px; margin: 15px 0 0 0;">
+                    <a href="{{UNSUBSCRIBE_URL}}" style="color: #9ca3af; text-decoration: underline;">
+                        Unsubscribe from Hunter's Pack newsletter
+                    </a>
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+}
+
 

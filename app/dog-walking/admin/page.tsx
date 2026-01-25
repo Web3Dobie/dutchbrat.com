@@ -249,6 +249,9 @@ export default function AdminDashboard() {
                 <Link href="/dog-walking/admin/manage-bookings" style={{ ...styles.actionButton, ...styles.bookingButton }}>
                     🗓️ Manage Bookings
                 </Link>
+                <Link href="/dog-walking/admin/newsletter" style={{ ...styles.actionButton, ...styles.bookingButton }}>
+                    📧 Newsletter Management
+                </Link>
             </div>
 
             {overview?.timestamp && (
