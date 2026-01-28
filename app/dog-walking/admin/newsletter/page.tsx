@@ -3,6 +3,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 
+interface WelcomeBlock {
+    type: "text" | "image";
+    content: string;
+    caption?: string;
+}
+
 interface NewPackMember {
     dog_id: number;
     dog_name: string;
@@ -17,7 +23,8 @@ interface NewPackMember {
 interface NewsletterContent {
     title: string;
     month: string;
-    welcomeMessage: string;
+    welcomeMessage?: string; // Legacy support
+    welcomeBlocks?: WelcomeBlock[];
     newPackMembers: {
         dogId: number;
         dogName: string;
@@ -67,7 +74,9 @@ export default function NewsletterPage() {
     // Form state
     const currentMonth = format(new Date(), "MMMM yyyy");
     const [title, setTitle] = useState(`${currentMonth} - Hunter's Pack News`);
-    const [welcomeMessage, setWelcomeMessage] = useState("");
+    const [welcomeBlocks, setWelcomeBlocks] = useState<WelcomeBlock[]>([
+        { type: "text", content: "" }
+    ]);
     const [packFarewells, setPackFarewells] = useState("");
     const [walkHighlightsText, setWalkHighlightsText] = useState("");
     const [walkHighlightImages, setWalkHighlightImages] = useState<string[]>(["", "", "", ""]);
@@ -116,6 +125,43 @@ export default function NewsletterPage() {
         }
     };
 
+    // Welcome block management
+    const addTextBlock = () => {
+        setWelcomeBlocks([...welcomeBlocks, { type: "text", content: "" }]);
+    };
+
+    const addImageBlock = () => {
+        setWelcomeBlocks([...welcomeBlocks, { type: "image", content: "", caption: "" }]);
+    };
+
+    const updateBlock = (index: number, updates: Partial<WelcomeBlock>) => {
+        const newBlocks = [...welcomeBlocks];
+        newBlocks[index] = { ...newBlocks[index], ...updates };
+        setWelcomeBlocks(newBlocks);
+    };
+
+    const removeBlock = (index: number) => {
+        if (welcomeBlocks.length === 1) {
+            // Keep at least one block
+            setWelcomeBlocks([{ type: "text", content: "" }]);
+            return;
+        }
+        setWelcomeBlocks(welcomeBlocks.filter((_, i) => i !== index));
+    };
+
+    const moveBlock = (index: number, direction: "up" | "down") => {
+        if (
+            (direction === "up" && index === 0) ||
+            (direction === "down" && index === welcomeBlocks.length - 1)
+        ) {
+            return;
+        }
+        const newBlocks = [...welcomeBlocks];
+        const targetIndex = direction === "up" ? index - 1 : index + 1;
+        [newBlocks[index], newBlocks[targetIndex]] = [newBlocks[targetIndex], newBlocks[index]];
+        setWelcomeBlocks(newBlocks);
+    };
+
     // Build content object from form state
     const buildContent = (): NewsletterContent => {
         const selectedMembers = newPackMembers
@@ -132,7 +178,7 @@ export default function NewsletterPage() {
         return {
             title,
             month: currentMonth,
-            welcomeMessage,
+            welcomeBlocks: welcomeBlocks.filter(b => b.content.trim() !== ""),
             newPackMembers: selectedMembers,
             packFarewells,
             walkHighlights: {
@@ -181,11 +227,24 @@ export default function NewsletterPage() {
 
     // Generate preview
     const handlePreview = async () => {
-        // Build preview HTML client-side (simplified version)
         const content = buildContent();
 
-        // For a proper preview, we'd call an API to generate the HTML
-        // For now, create a simplified preview
+        // Build welcome blocks HTML
+        const welcomeHtml = (content.welcomeBlocks || []).map(block => {
+            if (block.type === "text") {
+                return `<p style="white-space: pre-line; margin: 0 0 15px;">${block.content}</p>`;
+            } else {
+                return `
+                    <div style="text-align: center; margin: 20px 0;">
+                        <img src="/api/newsletter-images/${block.content}"
+                             alt="${block.caption || ''}"
+                             style="max-width: 100%; border-radius: 8px; border: 2px solid #e5e7eb;">
+                        ${block.caption ? `<p style="color: #6b7280; font-size: 14px; margin: 8px 0 0; font-style: italic;">${block.caption}</p>` : ''}
+                    </div>
+                `;
+            }
+        }).join("");
+
         const previewContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); padding: 20px; text-align: center; color: white; border-radius: 8px 8px 0 0;">
@@ -194,12 +253,27 @@ export default function NewsletterPage() {
                 </div>
                 <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none;">
                     <div style="margin-bottom: 20px;">
-                        <p style="white-space: pre-line;">${content.welcomeMessage || '<em>No welcome message</em>'}</p>
+                        ${welcomeHtml || '<em style="color: #9ca3af;">No welcome message</em>'}
                     </div>
                     ${content.newPackMembers.length > 0 ? `
                         <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 15px 0;">
                             <h3 style="color: #1e40af; margin-top: 0;">🐕 Welcome to the Pack!</h3>
-                            <p>New members: ${content.newPackMembers.map(m => m.dogName).join(', ')}</p>
+                            <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
+                                ${content.newPackMembers.map((m: any) => `
+                                    <div style="text-align: center;">
+                                        ${(m.imageFilename || m.image_filename) ? `
+                                            <img src="/api/dog-images/${m.imageFilename || m.image_filename}"
+                                                 style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6;">
+                                        ` : `
+                                            <div style="width: 150px; height: 150px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; font-size: 48px;">
+                                                🐕
+                                            </div>
+                                        `}
+                                        <p style="margin: 8px 0 2px; font-weight: bold;">${m.dogName || m.dog_name}</p>
+                                        <p style="margin: 0; color: #6b7280; font-size: 13px;">${m.breed || m.dog_breed}</p>
+                                    </div>
+                                `).join("")}
+                            </div>
                         </div>
                     ` : ''}
                     ${content.packFarewells ? `
@@ -212,6 +286,14 @@ export default function NewsletterPage() {
                         <div style="margin: 15px 0;">
                             <h3>📸 Walk Highlights</h3>
                             <p style="white-space: pre-line;">${content.walkHighlights.text}</p>
+                            ${content.walkHighlights.images.length > 0 ? `
+                                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                                    ${content.walkHighlights.images.map(img => `
+                                        <img src="/api/newsletter-images/${img}"
+                                             style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px;">
+                                    `).join("")}
+                                </div>
+                            ` : ''}
                         </div>
                     ` : ''}
                     ${content.seasonalTips ? `
@@ -327,11 +409,22 @@ export default function NewsletterPage() {
         }
     };
 
+    // Convert legacy welcomeMessage to welcomeBlocks
+    const convertLegacyContent = (content: NewsletterContent): WelcomeBlock[] => {
+        if (content.welcomeBlocks && content.welcomeBlocks.length > 0) {
+            return content.welcomeBlocks;
+        }
+        if (content.welcomeMessage) {
+            return [{ type: "text", content: content.welcomeMessage }];
+        }
+        return [{ type: "text", content: "" }];
+    };
+
     // Load a previous newsletter
     const handleLoadNewsletter = (newsletter: Newsletter) => {
         setCurrentNewsletterId(newsletter.id);
         setTitle(newsletter.content.title || newsletter.title);
-        setWelcomeMessage(newsletter.content.welcomeMessage || "");
+        setWelcomeBlocks(convertLegacyContent(newsletter.content));
         setPackFarewells(newsletter.content.packFarewells || "");
         setWalkHighlightsText(newsletter.content.walkHighlights?.text || "");
         setWalkHighlightImages([
@@ -346,7 +439,7 @@ export default function NewsletterPage() {
     const handleNewNewsletter = () => {
         setCurrentNewsletterId(null);
         setTitle(`${currentMonth} - Hunter's Pack News`);
-        setWelcomeMessage("");
+        setWelcomeBlocks([{ type: "text", content: "" }]);
         setPackFarewells("");
         setWalkHighlightsText("");
         setWalkHighlightImages(["", "", "", ""]);
@@ -455,6 +548,41 @@ export default function NewsletterPage() {
             borderRadius: "6px",
             marginBottom: "20px",
         } as React.CSSProperties,
+        blockContainer: {
+            backgroundColor: "#0f172a",
+            borderRadius: "8px",
+            padding: "12px",
+            marginBottom: "12px",
+            border: "1px solid #334155",
+        } as React.CSSProperties,
+        blockHeader: {
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "10px",
+        } as React.CSSProperties,
+        blockType: {
+            color: "#94a3b8",
+            fontSize: "12px",
+            fontWeight: "600",
+            textTransform: "uppercase" as const,
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+        } as React.CSSProperties,
+        blockControls: {
+            display: "flex",
+            gap: "4px",
+        } as React.CSSProperties,
+        iconButton: {
+            padding: "4px 8px",
+            borderRadius: "4px",
+            border: "none",
+            backgroundColor: "#334155",
+            color: "#94a3b8",
+            cursor: "pointer",
+            fontSize: "12px",
+        } as React.CSSProperties,
     };
 
     if (isLoading) {
@@ -514,15 +642,141 @@ export default function NewsletterPage() {
                         />
                     </div>
 
-                    {/* Welcome Message */}
+                    {/* Welcome Message - Block-based */}
                     <div style={styles.card}>
                         <label style={styles.sectionTitle}>👋 Welcome Message</label>
-                        <textarea
-                            value={welcomeMessage}
-                            onChange={e => setWelcomeMessage(e.target.value)}
-                            style={styles.textarea}
-                            placeholder="Happy New Year to all our wonderful pack members!&#10;&#10;January has been a fantastic month with lots of adventures..."
-                        />
+                        <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "15px" }}>
+                            Add text and images to create your welcome section. Images should be placed in /home/hunter-dev/newsletter-images/
+                        </p>
+
+                        {welcomeBlocks.map((block, index) => (
+                            <div key={index} style={styles.blockContainer}>
+                                <div style={styles.blockHeader}>
+                                    <span style={styles.blockType}>
+                                        {block.type === "text" ? "📝 Text Block" : "🖼️ Image Block"}
+                                    </span>
+                                    <div style={styles.blockControls}>
+                                        <button
+                                            onClick={() => moveBlock(index, "up")}
+                                            disabled={index === 0}
+                                            style={{
+                                                ...styles.iconButton,
+                                                opacity: index === 0 ? 0.5 : 1
+                                            }}
+                                            title="Move up"
+                                        >
+                                            ↑
+                                        </button>
+                                        <button
+                                            onClick={() => moveBlock(index, "down")}
+                                            disabled={index === welcomeBlocks.length - 1}
+                                            style={{
+                                                ...styles.iconButton,
+                                                opacity: index === welcomeBlocks.length - 1 ? 0.5 : 1
+                                            }}
+                                            title="Move down"
+                                        >
+                                            ↓
+                                        </button>
+                                        <button
+                                            onClick={() => removeBlock(index)}
+                                            style={{
+                                                ...styles.iconButton,
+                                                backgroundColor: "#7f1d1d",
+                                                color: "#fecaca"
+                                            }}
+                                            title="Remove block"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {block.type === "text" ? (
+                                    <textarea
+                                        value={block.content}
+                                        onChange={e => updateBlock(index, { content: e.target.value })}
+                                        style={{ ...styles.textarea, minHeight: "80px" }}
+                                        placeholder="Write your text here..."
+                                    />
+                                ) : (
+                                    <>
+                                        <div style={{ marginBottom: "8px" }}>
+                                            <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "4px" }}>
+                                                Image filename (e.g., hunter_snow_jan2025.jpg)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={block.content}
+                                                onChange={e => updateBlock(index, { content: e.target.value })}
+                                                style={styles.input}
+                                                placeholder="filename.jpg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "4px" }}>
+                                                Caption (optional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={block.caption || ""}
+                                                onChange={e => updateBlock(index, { caption: e.target.value })}
+                                                style={styles.input}
+                                                placeholder="Hunter enjoying the first snow of the year!"
+                                            />
+                                        </div>
+                                        {block.content && (
+                                            <div style={{ marginTop: "10px", textAlign: "center" }}>
+                                                <img
+                                                    src={`/api/newsletter-images/${block.content}`}
+                                                    alt={block.caption || "Preview"}
+                                                    style={{
+                                                        maxWidth: "100%",
+                                                        maxHeight: "150px",
+                                                        borderRadius: "6px",
+                                                        border: "1px solid #334155"
+                                                    }}
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).style.display = "none";
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        ))}
+
+                        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                            <button
+                                onClick={addTextBlock}
+                                style={{
+                                    ...styles.button,
+                                    ...styles.secondaryButton,
+                                    flex: 1,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "6px"
+                                }}
+                            >
+                                📝 Add Text Block
+                            </button>
+                            <button
+                                onClick={addImageBlock}
+                                style={{
+                                    ...styles.button,
+                                    ...styles.secondaryButton,
+                                    flex: 1,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "6px"
+                                }}
+                            >
+                                🖼️ Add Image Block
+                            </button>
+                        </div>
                     </div>
 
                     {/* New Pack Members */}
@@ -530,7 +784,7 @@ export default function NewsletterPage() {
                         <label style={styles.sectionTitle}>
                             🐕 New Pack Members
                             <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px", marginLeft: "8px" }}>
-                                (First service this month)
+                                (First service this month - photos will display at 150px)
                             </span>
                         </label>
                         {newPackMembers.length === 0 ? (
@@ -609,20 +863,20 @@ export default function NewsletterPage() {
                             placeholder="This month we explored Hampstead Heath and discovered some beautiful new trails..."
                         />
                         <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "8px" }}>
-                            Image URLs (up to 4)
+                            Image filenames from /newsletter-images/ (up to 4)
                         </label>
-                        {walkHighlightImages.map((url, idx) => (
+                        {walkHighlightImages.map((filename, idx) => (
                             <input
                                 key={idx}
                                 type="text"
-                                value={url}
+                                value={filename}
                                 onChange={e => {
                                     const newImages = [...walkHighlightImages];
                                     newImages[idx] = e.target.value;
                                     setWalkHighlightImages(newImages);
                                 }}
                                 style={{ ...styles.input, marginBottom: "8px" }}
-                                placeholder={`Image URL ${idx + 1}`}
+                                placeholder={`Image filename ${idx + 1} (e.g., walk_highlight_${idx + 1}.jpg)`}
                             />
                         ))}
                     </div>

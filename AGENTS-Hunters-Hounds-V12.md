@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V11.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V12.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V11 - Manual Review Request System** 🎉
+**Status**: **V12 - Hunter's Pack Monthly Newsletter** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -1454,6 +1454,144 @@ Frontend:   <img src="/api/dog-images/photo.jpg">
 3. Naming convention: `{dogname}_{ownerlastname}_{dogid}.jpg`
 
 **For AI Agents**: V11.10 moves dog image serving from Next.js static files to a dedicated API route. This bypasses Next.js standalone mode's static file handling which doesn't work well with volume mounts. The API route reads from `/app/dog-images/` which is mounted from the host at `/home/hunter-dev/dog-images/`. Frontend components now reference `/api/dog-images/${filename}` instead of `/images/dogs/${filename}`. The read-only mount (`:ro`) prevents the container from modifying images. When adding new features that display dog images, use the `/api/dog-images/` path.
+
+---
+
+## 🎉 V12 - Hunter's Pack Monthly Newsletter
+
+A complete integrated newsletter system for sending monthly updates to all clients, featuring pack updates, dog highlights, seasonal tips, and new feature announcements.
+
+### Newsletter Content Sections
+1. **Welcome Message** - Block-based content (text and images in any order)
+   - Add text blocks for paragraphs
+   - Add image blocks with filename + optional caption
+   - Reorder blocks with up/down arrows
+   - Images served from `/home/hunter-dev/newsletter-images/` via `/api/newsletter-images/`
+2. **New Pack Members** - Auto-detected dogs that had their FIRST service this month (150px circular photos)
+3. **Pack Farewells** - Manual entry for dogs that left the pack
+4. **Walk Highlights** - Photos and stories from recent walks (images from newsletter-images volume)
+5. **Seasonal Tips** - Dog care advice
+6. **New Features** - App/service updates
+
+### Newsletter Images Volume
+Newsletter images (walk photos, seasonal photos, etc.) are stored on the host and served via API:
+- **Host directory**: `/home/hunter-dev/newsletter-images/`
+- **Volume mount**: `/home/hunter-dev/newsletter-images:/app/newsletter-images:ro`
+- **API route**: `/api/newsletter-images/[filename]`
+- Same pattern as dog profile images (`/api/dog-images/`)
+
+### Database Schema
+
+**New columns in `owners` table:**
+```sql
+newsletter_subscribed BOOLEAN DEFAULT true
+newsletter_unsubscribe_token UUID DEFAULT gen_random_uuid()
+```
+
+**New tables:**
+```sql
+-- Store newsletter drafts and sent newsletters
+hunters_hounds.newsletters (
+    id, title, content_json, created_at, updated_at, sent_at, recipient_count
+)
+
+-- Track individual email sends
+hunters_hounds.newsletter_history (
+    id, newsletter_id, owner_id, sent_at, email_status
+)
+```
+
+### New Pack Members Detection
+Dogs are detected as "new to the pack" based on their FIRST booking date, not when the account was created:
+```sql
+SELECT d.*, MIN(b.start_time) as first_service_date
+FROM dogs d
+JOIN bookings b ON (b.dog_id_1 = d.id OR b.dog_id_2 = d.id)
+GROUP BY d.id
+HAVING MIN(b.start_time) >= DATE_TRUNC('month', CURRENT_DATE)
+```
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `/app/dog-walking/admin/newsletter/page.tsx` | Admin composer UI with preview |
+| `/app/api/dog-walking/admin/newsletter/route.ts` | GET (list) & POST (save draft) |
+| `/app/api/dog-walking/admin/newsletter/send/route.ts` | POST (send to subscribers) |
+| `/app/api/dog-walking/admin/newsletter/new-dogs/route.ts` | GET (first-service dogs) |
+| `/app/api/dog-walking/newsletter/unsubscribe/route.ts` | Public unsubscribe endpoint |
+| `/app/newsletter/unsubscribe/page.tsx` | Unsubscribe confirmation page |
+| `/app/api/newsletter-images/[filename]/route.ts` | Serve newsletter images from volume |
+| `/lib/emailTemplates.ts` | Added `generateNewsletterEmail()` |
+| `/sql/newsletter_schema.sql` | Database migration script |
+
+### Admin Composer Features
+- **Block-based welcome section**: Add text and image blocks in any order with reordering controls
+- **Section-based editor**: Welcome message, pack members, farewells, highlights, tips, features
+- **Auto-detection**: Checkboxes for dogs with first service this month
+- **Image support**:
+  - Welcome section: Inline images with filenames + optional captions
+  - Walk highlights: Up to 4 image filenames
+  - Pack members: 150px circular photos (auto-served from dog-images)
+- **Image preview**: Image blocks show thumbnails when filename entered
+- **Live preview**: Modal showing formatted email exactly as recipients see it
+- **Test email**: Send to single email before mass send
+- **Draft saving**: Save and resume editing
+- **Send tracking**: Records success/failure per recipient
+- **Previous newsletters**: Load and view past newsletters (auto-converts legacy welcomeMessage to blocks)
+
+### Subscription Model
+- **Opt-out by default**: All existing customers auto-subscribed (`newsletter_subscribed = true`)
+- **Unsubscribe link**: Every newsletter includes personalized unsubscribe link
+- **Token-based**: Each owner has unique `newsletter_unsubscribe_token` UUID
+- **Public endpoint**: `/newsletter/unsubscribe?token={uuid}` - no auth required
+
+### Email Template Structure
+```
+┌─────────────────────────────────────┐
+│  🐕 Hunter's Hounds                 │
+│     {Month} Newsletter              │
+├─────────────────────────────────────┤
+│  Welcome Message                    │
+├─────────────────────────────────────┤
+│  🐕 Welcome to the Pack!            │
+│  [Dog photos in circles]            │
+├─────────────────────────────────────┤
+│  👋 Pack Farewells                  │
+├─────────────────────────────────────┤
+│  📸 Walk Highlights                 │
+│  [Photos]                           │
+├─────────────────────────────────────┤
+│  🌿 Seasonal Tips                   │
+├─────────────────────────────────────┤
+│  ✨ What's New                      │
+├─────────────────────────────────────┤
+│  Signature                          │
+├─────────────────────────────────────┤
+│  [Unsubscribe link]                 │
+└─────────────────────────────────────┘
+```
+
+### Workflow
+1. Navigate to `/dog-walking/admin/newsletter`
+2. Fill in sections (new pack members auto-populated)
+3. Click **Preview** to see formatted email
+4. Edit content as needed, preview again
+5. **Save Draft** to store progress
+6. **Send Test** to verify with your email
+7. **Send to All** when satisfied
+
+### Technical Notes
+- Uses existing Resend email service
+- 100ms delay between sends to avoid rate limiting
+- Newsletter history tracks sent/failed status per recipient
+- Unsubscribe page uses Suspense boundary for `useSearchParams()` (Next.js requirement)
+- Dog images served via `/api/dog-images/` (V11.10 dynamic serving)
+- Newsletter images served via `/api/newsletter-images/` from mounted volume
+- Pack member photos increased to 150px circular (from 100px)
+- Welcome section uses block-based structure (`welcomeBlocks[]`) with backward compatibility for legacy `welcomeMessage` string
+
+**For AI Agents**: V12 adds a complete newsletter system. The admin composer at `/dog-walking/admin/newsletter` allows creating newsletters with auto-detected new pack members (based on first booking date, not account creation). Content is stored as JSONB in the `newsletters` table. The `generateNewsletterEmail()` function in `/lib/emailTemplates.ts` generates the HTML with `{{UNSUBSCRIBE_URL}}` placeholder replaced per-recipient. Subscription status is tracked via `owners.newsletter_subscribed` boolean with token-based unsubscribe. When sending, the system loops through all subscribed owners, sends via Resend, and records results in `newsletter_history`. The unsubscribe page at `/newsletter/unsubscribe` uses a Suspense boundary around the component that calls `useSearchParams()`. The welcome section supports block-based content (`welcomeBlocks[]`) with text and image blocks that can be reordered. Newsletter images are stored at `/home/hunter-dev/newsletter-images/` and served via `/api/newsletter-images/[filename]`. Pack member photos display at 150px circular. Legacy newsletters with single `welcomeMessage` string are auto-converted to blocks when loaded.
 
 ---
 

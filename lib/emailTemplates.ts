@@ -822,10 +822,17 @@ export function generateChristmasEmail(data: ChristmasEmailData): string {
 // NEWSLETTER EMAIL TEMPLATE
 // ============================================================================
 
+export interface WelcomeBlock {
+    type: "text" | "image";
+    content: string;
+    caption?: string;
+}
+
 export interface NewsletterContent {
     title: string;
     month: string;
-    welcomeMessage: string;
+    welcomeMessage?: string; // Legacy support
+    welcomeBlocks?: WelcomeBlock[]; // New block-based structure
     newPackMembers: {
         dogId: number;
         dogName: string;
@@ -848,24 +855,59 @@ export interface NewsletterContent {
  * Uses {{UNSUBSCRIBE_URL}} placeholder which is replaced per-recipient
  */
 export function generateNewsletterEmail(content: NewsletterContent): string {
-    const { title, month, welcomeMessage, newPackMembers, packFarewells, walkHighlights, seasonalTips, newFeatures } = content;
+    const { title, month, welcomeMessage, welcomeBlocks, packFarewells, walkHighlights, seasonalTips, newFeatures } = content;
 
-    // Generate new pack members section
+    // Normalize pack members to handle both camelCase and snake_case property names
+    // (for backward compatibility with newsletters saved before normalization)
+    const newPackMembers = (content.newPackMembers || []).map((dog: any) => ({
+        dogId: dog.dogId || dog.dog_id,
+        dogName: dog.dogName || dog.dog_name,
+        breed: dog.breed || dog.dog_breed,
+        ownerName: dog.ownerName || dog.owner_name,
+        imageFilename: dog.imageFilename || dog.image_filename,
+        firstServiceDate: dog.firstServiceDate || dog.first_service_date,
+    }));
+
+    // Generate welcome section from blocks or legacy message
+    let welcomeHtml = '';
+    if (welcomeBlocks && welcomeBlocks.length > 0) {
+        // New block-based welcome section
+        welcomeHtml = welcomeBlocks.map(block => {
+            if (block.type === "text") {
+                return `<p style="color: #1f2937; line-height: 1.7; font-size: 16px; margin: 0 0 15px 0; white-space: pre-line;">${block.content}</p>`;
+            } else {
+                // Image block
+                return `
+                    <div style="text-align: center; margin: 20px 0;">
+                        <img src="https://hunters-hounds.london/api/newsletter-images/${block.content}"
+                             alt="${block.caption || ''}"
+                             style="max-width: 100%; border-radius: 8px; border: 2px solid #e5e7eb;">
+                        ${block.caption ? `<p style="color: #6b7280; font-size: 14px; margin: 10px 0 0 0; font-style: italic;">${block.caption}</p>` : ''}
+                    </div>
+                `;
+            }
+        }).join('');
+    } else if (welcomeMessage) {
+        // Legacy single text welcome message
+        welcomeHtml = `<p style="color: #1f2937; line-height: 1.7; font-size: 16px; margin: 0; white-space: pre-line;">${welcomeMessage}</p>`;
+    }
+
+    // Generate new pack members section (150px circular photos)
     let newMembersHtml = '';
     if (newPackMembers && newPackMembers.length > 0) {
         const memberCards = newPackMembers.map(dog => `
-            <div style="display: inline-block; width: 150px; text-align: center; margin: 10px; vertical-align: top;">
+            <div style="display: inline-block; width: 180px; text-align: center; margin: 10px; vertical-align: top;">
                 ${dog.imageFilename ? `
                     <img src="https://hunters-hounds.london/api/dog-images/${dog.imageFilename}"
                          alt="${dog.dogName}"
-                         style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 8px;">
+                         style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 10px;">
                 ` : `
-                    <div style="width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #60a5fa); margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">
-                        <span style="font-size: 36px;">🐕</span>
+                    <div style="width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #60a5fa); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center;">
+                        <span style="font-size: 48px;">🐕</span>
                     </div>
                 `}
-                <div style="font-weight: 600; color: #1f2937; font-size: 14px;">${dog.dogName}</div>
-                <div style="color: #6b7280; font-size: 12px;">${dog.breed}</div>
+                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${dog.dogName}</div>
+                <div style="color: #6b7280; font-size: 13px;">${dog.breed}</div>
             </div>
         `).join('');
 
@@ -898,8 +940,8 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
     if (walkHighlights && (walkHighlights.text || walkHighlights.images?.length > 0)) {
         const imagesHtml = walkHighlights.images && walkHighlights.images.length > 0
             ? `<div style="margin-top: 20px; text-align: center;">
-                ${walkHighlights.images.map(url => `
-                    <img src="${url}" alt="Walk highlight" style="max-width: 280px; height: auto; border-radius: 8px; margin: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                ${walkHighlights.images.map(filename => `
+                    <img src="https://hunters-hounds.london/api/newsletter-images/${filename}" alt="Walk highlight" style="max-width: 280px; height: auto; border-radius: 8px; margin: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                 `).join('')}
                </div>`
             : '';
@@ -957,7 +999,7 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
 
                 <!-- Welcome Message -->
                 <div style="margin-bottom: 30px;">
-                    <p style="color: #1f2937; line-height: 1.7; font-size: 16px; margin: 0; white-space: pre-line;">${welcomeMessage}</p>
+                    ${welcomeHtml}
                 </div>
 
                 ${newMembersHtml}
