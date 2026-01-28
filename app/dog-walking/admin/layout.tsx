@@ -84,6 +84,9 @@ export default function AdminLayout({
                             <Link href="/dog-walking/admin/newsletter" style={styles.navLink}>
                                 Newsletter
                             </Link>
+                            <Link href="/dog-walking/admin/client-media" style={styles.navLink}>
+                                Client Media
+                            </Link>
                         </div>
                     </div>
                 </nav>

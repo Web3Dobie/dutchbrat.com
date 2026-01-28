@@ -23,6 +23,8 @@ interface Client {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Extended travel time (30 min instead of 15 min)
+    extended_travel_time?: boolean;
     // Payment preference
     payment_preference?: string | null;
     dogs: Dog[];
@@ -53,6 +55,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         vet_info: client.vet_info || '',
         pet_insurance: client.pet_insurance || '',
         photo_sharing_consent: client.photo_sharing_consent || false,
+        extended_travel_time: client.extended_travel_time || false,
         payment_preference: client.payment_preference || 'per_service',
         dogs: [...client.dogs]
     });
@@ -151,6 +154,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                     vet_info: formData.vet_info,
                     pet_insurance: formData.pet_insurance,
                     photo_sharing_consent: formData.photo_sharing_consent,
+                    extended_travel_time: formData.extended_travel_time,
                     payment_preference: formData.payment_preference,
                     dogs: formData.dogs
                 })
@@ -459,6 +463,42 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                 color: formData.photo_sharing_consent ? "#10b981" : "#9ca3af"
                             }}>
                                 {formData.photo_sharing_consent ? "✅ Allowed" : "❌ Not allowed"}
+                            </span>
+                        </label>
+                    </div>
+
+                    {/* Extended Travel Time Section */}
+                    <div style={styles.section}>
+                        <h3 style={styles.sectionTitle}>Travel Time</h3>
+                        <label style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                            cursor: "pointer",
+                            padding: "12px",
+                            backgroundColor: "#374151",
+                            border: "1px solid #4b5563",
+                            borderRadius: "6px"
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={formData.extended_travel_time}
+                                onChange={(e) => setFormData(prev => ({ ...prev, extended_travel_time: e.target.checked }))}
+                                style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    cursor: "pointer"
+                                }}
+                            />
+                            <span style={{ color: "#d1d5db" }}>
+                                Extended travel time (30 min instead of 15 min) - for clients outside catchment area
+                            </span>
+                            <span style={{
+                                marginLeft: "auto",
+                                fontSize: "14px",
+                                color: formData.extended_travel_time ? "#f59e0b" : "#9ca3af"
+                            }}>
+                                {formData.extended_travel_time ? "30 min buffer" : "15 min buffer"}
                             </span>
                         </label>
                     </div>
