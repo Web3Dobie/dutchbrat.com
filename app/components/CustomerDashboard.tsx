@@ -6,6 +6,7 @@ import DashboardMain from "./DashboardMain";
 import BookingManager from "./BookingManager";
 import AccountDetails from "./AccountDetails";
 import SecondaryAddresses from "./SecondaryAddresses";
+import MyMedia from "./MyMedia";
 
 // --- Types ---
 interface Customer {
@@ -32,7 +33,7 @@ interface Customer {
     photo_sharing_consent?: boolean;
 }
 
-type DashboardView = "auth" | "main" | "booking" | "account" | "addresses";
+type DashboardView = "auth" | "main" | "booking" | "account" | "addresses" | "media";
 
 export default function CustomerDashboard() {
     // --- State ---
@@ -106,6 +107,11 @@ export default function CustomerDashboard() {
     // NEW: Addresses handler
     const handleAddressesView = () => {
         setView("addresses");
+    };
+
+    // NEW: Media handler
+    const handleMediaView = () => {
+        setView("media");
     };
 
     const handleCustomerUpdated = (updatedCustomer: Customer) => {
@@ -268,7 +274,8 @@ export default function CustomerDashboard() {
                     onLogout={handleLogout}
                     onBookingSelect={handleBookingSelect}
                     onAccountView={handleAccountView}
-                    onAddressesView={handleAddressesView} // NEW: Pass handler
+                    onAddressesView={handleAddressesView}
+                    onMediaView={handleMediaView}
                 />
             )}
 
@@ -292,6 +299,14 @@ export default function CustomerDashboard() {
             {/* NEW: Secondary Addresses View */}
             {view === "addresses" && customer && (
                 <SecondaryAddresses
+                    customer={customer}
+                    onBack={handleBackToDashboard}
+                />
+            )}
+
+            {/* NEW: My Media View */}
+            {view === "media" && customer && (
+                <MyMedia
                     customer={customer}
                     onBack={handleBackToDashboard}
                 />

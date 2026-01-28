@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     const dateQuery = searchParams.get("date"); // e.g., "2023-10-31"
     const serviceType = searchParams.get("service_type"); // NEW: Get service type
     const excludeBookingId = searchParams.get("exclude_booking_id"); // For rescheduling: exclude original booking
+    const ownerId = searchParams.get("owner_id"); // For extended travel time lookup
 
     if (!dateQuery) {
         return NextResponse.json(
@@ -58,21 +59,38 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+        // Determine travel buffer based on client's extended_travel_time preference
+        let travelBufferMinutes = TRAVEL_BUFFER_MINUTES; // default 15 min
+
         // If exclude_booking_id provided, look up its Google Calendar event ID
         let excludedEventId: string | null = null;
-        if (excludeBookingId) {
-            const client = await pool.connect();
-            try {
-                const result = await client.query(
+
+        // Use a single DB connection for both queries
+        const dbClient = await pool.connect();
+        try {
+            // Look up owner's extended_travel_time preference if owner_id provided
+            if (ownerId) {
+                const ownerResult = await dbClient.query(
+                    'SELECT extended_travel_time FROM hunters_hounds.owners WHERE id = $1',
+                    [parseInt(ownerId)]
+                );
+                if (ownerResult.rows[0]?.extended_travel_time === true) {
+                    travelBufferMinutes = 30; // Extended travel time for clients outside catchment area
+                }
+            }
+
+            // Look up excluded event ID for rescheduling
+            if (excludeBookingId) {
+                const result = await dbClient.query(
                     'SELECT google_event_id FROM hunters_hounds.bookings WHERE id = $1',
                     [parseInt(excludeBookingId)]
                 );
                 if (result.rows.length > 0 && result.rows[0].google_event_id) {
                     excludedEventId = result.rows[0].google_event_id;
                 }
-            } finally {
-                client.release();
             }
+        } finally {
+            dbClient.release();
         }
         // 1. Get the target date using the TZDate constructor
         const targetDate = new TZDate(dateQuery, TIMEZONE);
@@ -153,14 +171,14 @@ export async function GET(request: NextRequest) {
                 // Check if event ends at the end of the workday
                 const isLastBooking = end.getTime() === workDayEnd.getTime();
 
-                // Conditionally apply buffers
+                // Conditionally apply buffers (using dynamic travel buffer based on client preference)
                 const paddedStart = isFirstBooking
                     ? start // Don't add *before* buffer
-                    : new Date(start.getTime() - TRAVEL_BUFFER_MINUTES * 60000);
+                    : new Date(start.getTime() - travelBufferMinutes * 60000);
 
                 const paddedEnd = isLastBooking
                     ? end // Don't add *after* buffer
-                    : new Date(end.getTime() + TRAVEL_BUFFER_MINUTES * 60000);
+                    : new Date(end.getTime() + travelBufferMinutes * 60000);
 
                 return {
                     start: paddedStart,

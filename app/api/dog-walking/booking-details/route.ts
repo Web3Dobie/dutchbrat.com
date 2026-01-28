@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     try {
         // Fetch detailed booking information with customer and dog details
         const query = `
-            SELECT 
+            SELECT
                 b.id,
                 b.service_type,
                 b.start_time,
@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
                 b.created_at,
                 b.updated_at,
                 -- Owner information
+                b.owner_id,
                 o.owner_name,
                 o.phone as owner_phone,
                 o.email as owner_email,
@@ -71,10 +72,10 @@ export async function GET(request: NextRequest) {
                 WHERE b2.id = $1
             ) dogs ON dogs.booking_id = b.id
             WHERE b.id = $1
-            GROUP BY 
-                b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, 
+            GROUP BY
+                b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes,
                 b.status, b.price_pounds, b.google_event_id, b.created_at, b.updated_at,
-                o.owner_name, o.phone, o.email, o.address;
+                b.owner_id, o.owner_name, o.phone, o.email, o.address;
         `;
 
         const result = await client.query(query, [bookingIdNum]);
@@ -99,6 +100,7 @@ export async function GET(request: NextRequest) {
             google_event_id: row.google_event_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            owner_id: row.owner_id,
             owner_name: row.owner_name,
             owner_phone: row.owner_phone,
             owner_email: row.owner_email,

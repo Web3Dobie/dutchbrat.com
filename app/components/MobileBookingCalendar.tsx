@@ -94,7 +94,12 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
 
         const serviceType = serviceTypeMap[selectedServiceId as Exclude<ServiceId, 'sitting'>];
         console.log("API Call Debug:", { selectedServiceId, serviceType, formattedDate, selectedDuration });
-        const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}`;
+
+        // Build URL with optional owner_id for extended travel time lookup
+        let url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}`;
+        if (currentUser?.owner_id) {
+            url += `&owner_id=${currentUser.owner_id}`;
+        }
 
         setIsLoading(true);
         setError(null);

@@ -47,9 +47,10 @@ interface DashboardMainProps {
     onBookingSelect: (bookingId: number) => void;
     onAccountView: () => void;
     onAddressesView: () => void;
+    onMediaView: () => void;
 }
 
-export default function DashboardMain({ customer, onLogout, onBookingSelect, onAccountView, onAddressesView }: DashboardMainProps) {
+export default function DashboardMain({ customer, onLogout, onBookingSelect, onAccountView, onAddressesView, onMediaView }: DashboardMainProps) {
     // --- State ---
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -293,11 +294,13 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     };
 
     // --- NEW: Tab Change Handler ---
-    const handleTabChange = (tab: 'bookings' | 'account' | 'addresses') => {
+    const handleTabChange = (tab: 'bookings' | 'account' | 'addresses' | 'media') => {
         if (tab === 'account') {
             onAccountView();
         } else if (tab === 'addresses') {
             onAddressesView();
+        } else if (tab === 'media') {
+            onMediaView();
         } else {
             setActiveTab(tab);
         }
@@ -493,6 +496,14 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     onClick={() => handleTabChange('addresses')}
                 >
                     📍 Secondary Addresses
+                </button>
+                <button
+                    style={{
+                        ...styles.tab,
+                    }}
+                    onClick={() => handleTabChange('media')}
+                >
+                    📷 My Media
                 </button>
             </div>
 

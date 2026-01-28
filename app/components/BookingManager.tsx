@@ -26,6 +26,7 @@ interface BookingDetails {
     price_pounds: number | null;
     created_at: string;
     dogs: Dog[];
+    owner_id: number;
     owner_name: string;
     owner_phone: string;
     owner_email: string;
@@ -131,7 +132,8 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
             
             const serviceType = serviceTypeMap[booking.service_type] || booking.service_type;
             // Include booking ID to exclude its calendar event when rescheduling
-            const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}&exclude_booking_id=${booking.id}`;
+            // Include owner_id for extended travel time calculation
+            const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}&exclude_booking_id=${booking.id}&owner_id=${booking.owner_id}`;
             
             const response = await fetch(url);
             
