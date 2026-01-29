@@ -215,11 +215,12 @@ export default function MyMedia({ customer, onBack }: MyMediaProps) {
     };
 
     // --- Media URL Helper ---
+    // Uses nginx-media for direct file serving (same as memorial site)
     const getMediaUrl = (item: MediaItem, useThumbnail: boolean = false) => {
         if (useThumbnail && item.thumbnail_path) {
-            return `/api/dog-walking/client-media/${item.thumbnail_path}`;
+            return `/client-media/${item.thumbnail_path}`;
         }
-        return `/api/dog-walking/client-media/${item.file_path}`;
+        return `/client-media/${item.file_path}`;
     };
 
     // --- Render ---
@@ -305,19 +306,28 @@ export default function MyMedia({ customer, onBack }: MyMediaProps) {
                                     />
                                 ) : (
                                     <>
-                                        {/* Video thumbnail - use poster frame or placeholder */}
-                                        <div style={{
-                                            width: "100%",
-                                            height: "100%",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            backgroundColor: "#1f2937"
-                                        }}>
-                                            <span style={{ fontSize: "48px" }}>🎥</span>
-                                        </div>
+                                        {/* Video thumbnail - use generated thumbnail or placeholder */}
+                                        {item.thumbnail_path ? (
+                                            <img
+                                                src={getMediaUrl(item, true)}
+                                                alt=""
+                                                style={styles.thumbnail as React.CSSProperties}
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div style={{
+                                                width: "100%",
+                                                height: "100%",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                backgroundColor: "#1f2937"
+                                            }}>
+                                                <span style={{ fontSize: "48px" }}>🎥</span>
+                                            </div>
+                                        )}
                                         <div style={styles.videoIndicator as React.CSSProperties}>
-                                            Video
+                                            ▶ Video
                                         </div>
                                     </>
                                 )}

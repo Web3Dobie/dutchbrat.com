@@ -2,8 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Pool } from "pg";
 import { promises as fs } from "fs";
 import path from "path";
+import { exec } from "child_process";
+import { promisify } from "util";
 import ExifReader from "exifreader";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
+
+const execAsync = promisify(exec);
 
 // Database connection
 const pool = new Pool({
@@ -17,11 +21,66 @@ const pool = new Pool({
 
 const CLIENT_MEDIA_DIR = "/app/client-media";
 const ORIGINALS_DIR = path.join(CLIENT_MEDIA_DIR, "originals");
+const OPTIMIZED_MARKER_DIR = path.join(CLIENT_MEDIA_DIR, ".optimized");
 
 // Supported file extensions
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"];
 const VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".m4v"];
 const ALL_EXTENSIONS = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS];
+
+// Check if video has been optimized (marker file exists)
+async function isVideoOptimized(filename: string): Promise<boolean> {
+    try {
+        await fs.access(path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Mark video as optimized
+async function markVideoOptimized(filename: string): Promise<void> {
+    await fs.mkdir(OPTIMIZED_MARKER_DIR, { recursive: true });
+    await fs.writeFile(
+        path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`),
+        new Date().toISOString()
+    );
+}
+
+// Optimize video with faststart for streaming (moves moov atom to beginning)
+async function optimizeVideoForStreaming(filePath: string, filename: string): Promise<boolean> {
+    try {
+        // Check if already optimized
+        if (await isVideoOptimized(filename)) {
+            console.log(`Video already optimized: ${filename}`);
+            return true;
+        }
+
+        const tempPath = `${filePath}.temp.mp4`;
+
+        // Apply faststart optimization (remux only, no re-encoding)
+        const command = `ffmpeg -i "${filePath}" -c copy -movflags +faststart "${tempPath}" -y`;
+        console.log(`Optimizing video for streaming: ${filename}`);
+
+        await execAsync(command);
+
+        // Replace original with optimized version
+        await fs.rename(tempPath, filePath);
+
+        // Mark as optimized
+        await markVideoOptimized(filename);
+
+        console.log(`Video optimized successfully: ${filename}`);
+        return true;
+    } catch (error) {
+        console.error(`Failed to optimize video ${filename}:`, error);
+        // Clean up temp file if it exists
+        try {
+            await fs.unlink(`${filePath}.temp.mp4`);
+        } catch {}
+        return false;
+    }
+}
 
 interface ScannedFile {
     filename: string;
@@ -113,6 +172,7 @@ export async function POST(request: NextRequest) {
         // Scan originals directory
         const files = await fs.readdir(ORIGINALS_DIR);
         const pendingFiles: ScannedFile[] = [];
+        let videosOptimized = 0;
 
         for (const filename of files) {
             const ext = path.extname(filename).toLowerCase();
@@ -139,6 +199,17 @@ export async function POST(request: NextRequest) {
 
                 const mediaType = VIDEO_EXTENSIONS.includes(ext) ? "video" : "image";
 
+                // Optimize videos for streaming (faststart)
+                if (mediaType === "video") {
+                    const optimized = await optimizeVideoForStreaming(filePath, filename);
+                    if (optimized) {
+                        videosOptimized++;
+                    }
+                }
+
+                // Re-read stats after optimization (file size may have changed slightly)
+                const finalStats = await fs.stat(filePath);
+
                 // Try to extract date from EXIF (for images) or filename
                 let takenAt: Date | null = null;
                 if (mediaType === "image") {
@@ -152,7 +223,7 @@ export async function POST(request: NextRequest) {
                     filename,
                     filePath: `originals/${filename}`,
                     mediaType,
-                    fileSize: stats.size,
+                    fileSize: finalStats.size,
                     takenAt,
                 });
             } catch (err) {
@@ -173,7 +244,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             pending: pendingFiles,
-            total: pendingFiles.length
+            total: pendingFiles.length,
+            videosOptimized
         });
 
     } catch (error) {

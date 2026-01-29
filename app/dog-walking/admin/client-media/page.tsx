@@ -202,6 +202,9 @@ export default function ClientMediaPage() {
                 if (data.total === 0) {
                     setSuccessMessage("No new files to assign");
                     setTimeout(() => setSuccessMessage(null), 3000);
+                } else if (data.videosOptimized > 0) {
+                    setSuccessMessage(`Found ${data.total} files (${data.videosOptimized} videos optimized for streaming)`);
+                    setTimeout(() => setSuccessMessage(null), 5000);
                 }
             } else {
                 throw new Error(data.error);
@@ -314,8 +317,15 @@ export default function ClientMediaPage() {
             const data = await response.json();
 
             if (data.success) {
-                setSuccessMessage(`Generated ${data.generated} thumbnails (${data.failed} failed)`);
-                setTimeout(() => setSuccessMessage(null), 5000);
+                let msg = `Generated ${data.generated} thumbnails`;
+                if (data.failed > 0) {
+                    msg += ` (${data.failed} failed)`;
+                    if (data.errors && data.errors.length > 0) {
+                        msg += `: ${data.errors.join(", ")}`;
+                    }
+                }
+                setSuccessMessage(msg);
+                setTimeout(() => setSuccessMessage(null), 8000);
                 // Refresh media list
                 if (activeSection === "assigned") {
                     fetchAssignedMedia();
@@ -440,7 +450,7 @@ export default function ClientMediaPage() {
                                     }}>
                                         {file.mediaType === "image" ? (
                                             <img
-                                                src={`/api/dog-walking/client-media/${file.filePath}`}
+                                                src={`/client-media/${file.filePath}`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
@@ -542,9 +552,15 @@ export default function ClientMediaPage() {
                                         justifyContent: "center",
                                         overflow: "hidden"
                                     }}>
-                                        {media.media_type === "image" ? (
+                                        {media.thumbnail_path ? (
                                             <img
-                                                src={`/api/dog-walking/client-media/${media.thumbnail_path || media.file_path}`}
+                                                src={`/client-media/${media.thumbnail_path}`}
+                                                alt=""
+                                                style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                                            />
+                                        ) : media.media_type === "image" ? (
+                                            <img
+                                                src={`/client-media/${media.file_path}`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
