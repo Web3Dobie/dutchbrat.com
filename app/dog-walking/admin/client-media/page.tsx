@@ -450,7 +450,7 @@ export default function ClientMediaPage() {
                                     }}>
                                         {file.mediaType === "image" ? (
                                             <img
-                                                src={`/client-media/${file.filePath}`}
+                                                src={`/client-media/${file.filePath}?v=2`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
@@ -554,13 +554,13 @@ export default function ClientMediaPage() {
                                     }}>
                                         {media.thumbnail_path ? (
                                             <img
-                                                src={`/client-media/${media.thumbnail_path}`}
+                                                src={`/client-media/${media.thumbnail_path}?v=2`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
                                         ) : media.media_type === "image" ? (
                                             <img
-                                                src={`/client-media/${media.file_path}`}
+                                                src={`/client-media/${media.file_path}?v=2`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />

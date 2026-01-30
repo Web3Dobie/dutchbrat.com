@@ -216,9 +216,10 @@ export default function MyMedia({ customer, onBack }: MyMediaProps) {
 
     // --- Media URL Helper ---
     // Uses nginx-media for direct file serving (same as memorial site)
+    // Cache buster v2: forces refresh of thumbnails after rotation fix
     const getMediaUrl = (item: MediaItem, useThumbnail: boolean = false) => {
         if (useThumbnail && item.thumbnail_path) {
-            return `/client-media/${item.thumbnail_path}`;
+            return `/client-media/${item.thumbnail_path}?v=2`;
         }
         return `/client-media/${item.file_path}`;
     };

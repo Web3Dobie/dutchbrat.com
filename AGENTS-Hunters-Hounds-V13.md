@@ -1675,6 +1675,14 @@ CREATE INDEX idx_client_media_taken_at ON hunters_hounds.client_media(taken_at);
 **Image Thumbnails:**
 - Uses Sharp to resize to 300x300 (cover fit, center position)
 - Outputs as JPEG with 80% quality
+- **Two-step rotation fix**: Phone photos often have EXIF orientation 6 (portrait). Sharp doesn't auto-rotate when resizing, so thumbnails must be:
+  1. Generated first (without rotation)
+  2. Then rotated 90° clockwise as a separate Sharp operation
+- This two-step approach is required because single-step `.rotate()` before `.resize()` doesn't work correctly
+
+**Cache Busting:**
+- Thumbnail URLs include `?v=2` query parameter to bust browser cache when thumbnails are regenerated
+- Increment version number in `MyMedia.tsx` and `admin/client-media/page.tsx` if thumbnails need refreshing
 
 **Video Thumbnails:**
 - Uses FFmpeg to extract frame at 1 second (or 10% into video)

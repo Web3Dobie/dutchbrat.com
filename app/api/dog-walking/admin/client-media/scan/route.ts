@@ -163,16 +163,38 @@ export async function POST(request: NextRequest) {
             });
         }
 
+        // FIRST PASS: Optimize ALL videos in originals directory (regardless of assignment)
+        const allFiles = await fs.readdir(ORIGINALS_DIR);
+        let videosOptimized = 0;
+
+        for (const filename of allFiles) {
+            const ext = path.extname(filename).toLowerCase();
+            if (!VIDEO_EXTENSIONS.includes(ext)) continue;
+
+            const filePath = path.join(ORIGINALS_DIR, filename);
+            try {
+                const stats = await fs.stat(filePath);
+                if (stats.isDirectory()) continue;
+
+                if (!(await isVideoOptimized(filename))) {
+                    const optimized = await optimizeVideoForStreaming(filePath, filename);
+                    if (optimized) videosOptimized++;
+                }
+            } catch (err) {
+                console.warn(`Could not optimize video ${filename}:`, err);
+            }
+        }
+
+        // SECOND PASS: Process pending files for assignment
         // Get list of files already in database
         const existingResult = await client.query(
             "SELECT filename FROM hunters_hounds.client_media"
         );
         const existingFilenames = new Set(existingResult.rows.map(r => r.filename));
 
-        // Scan originals directory
+        // Scan originals directory for pending files
         const files = await fs.readdir(ORIGINALS_DIR);
         const pendingFiles: ScannedFile[] = [];
-        let videosOptimized = 0;
 
         for (const filename of files) {
             const ext = path.extname(filename).toLowerCase();
@@ -199,17 +221,6 @@ export async function POST(request: NextRequest) {
 
                 const mediaType = VIDEO_EXTENSIONS.includes(ext) ? "video" : "image";
 
-                // Optimize videos for streaming (faststart)
-                if (mediaType === "video") {
-                    const optimized = await optimizeVideoForStreaming(filePath, filename);
-                    if (optimized) {
-                        videosOptimized++;
-                    }
-                }
-
-                // Re-read stats after optimization (file size may have changed slightly)
-                const finalStats = await fs.stat(filePath);
-
                 // Try to extract date from EXIF (for images) or filename
                 let takenAt: Date | null = null;
                 if (mediaType === "image") {
@@ -223,7 +234,7 @@ export async function POST(request: NextRequest) {
                     filename,
                     filePath: `originals/${filename}`,
                     mediaType,
-                    fileSize: finalStats.size,
+                    fileSize: stats.size,
                     takenAt,
                 });
             } catch (err) {

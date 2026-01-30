@@ -132,12 +132,21 @@ export async function POST(request: NextRequest) {
 
                 if (row.media_type === "image") {
                     // Generate image thumbnail using Sharp
+                    // Step 1: Generate thumbnail without rotation
                     await sharp(originalPath)
                         .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
                             fit: "cover",
                             position: "center"
                         })
                         .jpeg({ quality: 80 })
+                        .toFile(thumbPath);
+
+                    // Step 2: Rotate the generated thumbnail 90° clockwise
+                    // This corrects phone portrait orientation (EXIF orientation 6)
+                    const rotatedBuffer = await sharp(thumbPath)
+                        .rotate(90)
+                        .toBuffer();
+                    await sharp(rotatedBuffer)
                         .toFile(thumbPath);
 
                     console.log(`Generated image thumbnail for: ${row.filename}`);
