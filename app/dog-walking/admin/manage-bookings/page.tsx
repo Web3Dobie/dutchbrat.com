@@ -18,6 +18,10 @@ interface EditableBooking {
     phone: string;
     email: string;
     dog_names: string[];
+    // Series fields
+    series_id?: number | null;
+    series_index?: number | null;
+    recurrence_pattern?: string | null;
 }
 
 interface BookingsResponse {
@@ -42,6 +46,7 @@ export default function ManageBookings() {
     const [filterDateTo, setFilterDateTo] = useState<string>('');
     const [filterService, setFilterService] = useState<string>('');
     const [filterStatus, setFilterStatus] = useState<string>('');
+    const [filterBookingType, setFilterBookingType] = useState<string>(''); // 'single', 'recurring', or ''
 
     // Effects
     useEffect(() => {
@@ -277,9 +282,17 @@ export default function ManageBookings() {
                 return false;
             }
 
+            // Booking type filter (single vs recurring)
+            if (filterBookingType === 'single' && booking.series_id) {
+                return false;
+            }
+            if (filterBookingType === 'recurring' && !booking.series_id) {
+                return false;
+            }
+
             return true;
         });
-    }, [bookings, filterClient, filterDateFrom, filterDateTo, filterService, filterStatus]);
+    }, [bookings, filterClient, filterDateFrom, filterDateTo, filterService, filterStatus, filterBookingType]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -288,9 +301,10 @@ export default function ManageBookings() {
         setFilterDateTo('');
         setFilterService('');
         setFilterStatus('');
+        setFilterBookingType('');
     };
 
-    const hasActiveFilters = filterClient || filterDateFrom || filterDateTo || filterService || filterStatus;
+    const hasActiveFilters = filterClient || filterDateFrom || filterDateTo || filterService || filterStatus || filterBookingType;
 
     // Separate and sort bookings
     const now = new Date();
@@ -438,9 +452,29 @@ export default function ManageBookings() {
                                         </div>
                                     </td>
                                     <td style={styles.td}>
-                                        {getServiceDisplayName(booking.service_type)}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            {getServiceDisplayName(booking.service_type)}
+                                            {booking.series_id && (
+                                                <span style={{
+                                                    backgroundColor: '#7c3aed',
+                                                    color: '#fff',
+                                                    fontSize: '0.6rem',
+                                                    fontWeight: '600',
+                                                    padding: '2px 4px',
+                                                    borderRadius: '3px',
+                                                    textTransform: 'uppercase',
+                                                }}>
+                                                    #{booking.series_id}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div style={{ color: "#9ca3af", fontSize: "0.875rem" }}>
                                             {booking.duration_minutes} min
+                                            {booking.series_index && (
+                                                <span style={{ marginLeft: '8px', color: '#a78bfa' }}>
+                                                    ({booking.series_index} of series)
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td style={styles.td}>
@@ -754,6 +788,20 @@ export default function ManageBookings() {
                             {uniqueStatuses.map(status => (
                                 <option key={status} value={status}>{getStatusDisplayName(status)}</option>
                             ))}
+                        </select>
+                    </div>
+
+                    {/* Booking Type Filter */}
+                    <div style={styles.filterGroup}>
+                        <label style={styles.filterLabel}>Type</label>
+                        <select
+                            value={filterBookingType}
+                            onChange={(e) => setFilterBookingType(e.target.value)}
+                            style={styles.filterSelect}
+                        >
+                            <option value="">All Types</option>
+                            <option value="single">Single</option>
+                            <option value="recurring">Recurring</option>
                         </select>
                     </div>
 

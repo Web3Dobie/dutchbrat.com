@@ -39,6 +39,12 @@ interface Booking {
     dog_names: string[];
     created_at: string;
     walk_summary?: string | null;
+    // Series fields for recurring bookings
+    series_id?: number | null;
+    series_index?: number | null;
+    recurrence_pattern?: string | null;
+    series_status?: string | null;
+    is_recurring?: boolean;
 }
 
 interface DashboardMainProps {
@@ -335,9 +341,24 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     {/* Header row */}
                     <div className="flex justify-between items-start mb-2">
                         <div>
-                            <h3 className="text-white text-lg font-semibold mb-1">
-                                {getServiceDisplayName(booking.service_type)}
-                            </h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                <h3 className="text-white text-lg font-semibold" style={{ margin: 0 }}>
+                                    {getServiceDisplayName(booking.service_type)}
+                                </h3>
+                                {booking.is_recurring && (
+                                    <span style={{
+                                        backgroundColor: '#7c3aed',
+                                        color: '#fff',
+                                        fontSize: '0.65rem',
+                                        fontWeight: '600',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        textTransform: 'uppercase',
+                                    }}>
+                                        Recurring
+                                    </span>
+                                )}
+                            </div>
                             <p className="text-gray-300 text-sm">
                                 {booking.dog_names?.join(' & ') || 'Unknown dogs'}
                             </p>
@@ -520,6 +541,12 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             className="inline-block px-4 py-2 text-sm font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 mr-2 mt-2 no-underline"
                         >
                             📅 Book New Service
+                        </a>
+                        <a
+                            href="/dog-walking/dashboard/book-recurring"
+                            className="inline-block px-4 py-2 text-sm font-semibold rounded bg-purple-600 text-white hover:bg-purple-700 transition-all duration-200 mr-2 mt-2 no-underline"
+                        >
+                            🔄 Book Recurring
                         </a>
                         <button
                             onClick={onLogout}

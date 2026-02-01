@@ -36,6 +36,10 @@ interface Client {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Extended travel time (30 min instead of 15 min)
+    extended_travel_time?: boolean;
+    // Payment preference
+    payment_preference?: string | null;
     dogs: Dog[];
 }
 
@@ -92,17 +96,19 @@ export async function GET(request: NextRequest) {
 
         // Main query to get clients with their dogs - FIXED: Removed DISTINCT
         const mainQuery = `
-            SELECT 
+            SELECT
                 o.id,
                 o.owner_name,
                 o.phone,
                 o.email,
                 o.address,
                 o.created_at,
+                o.extended_travel_time,
+                o.payment_preference,
                 COALESCE(
                     json_agg(
-                        CASE 
-                            WHEN d.id IS NOT NULL 
+                        CASE
+                            WHEN d.id IS NOT NULL
                             THEN json_build_object(
                                 'id', d.id,
                                 'dog_name', d.dog_name,
@@ -119,7 +125,7 @@ export async function GET(request: NextRequest) {
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             ${searchCondition}
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.extended_travel_time, o.payment_preference
             ORDER BY ${orderBy}
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
@@ -152,6 +158,8 @@ export async function GET(request: NextRequest) {
             email: row.email,
             address: row.address,
             created_at: row.created_at,
+            extended_travel_time: row.extended_travel_time || false,
+            payment_preference: row.payment_preference || 'per_service',
             dogs: Array.isArray(row.dogs) ? row.dogs : []
         }));
 

@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const client = await pool.connect();
 
     try {
-        // Fetch all bookings for the customer with dog information AND walk_summary
+        // Fetch all bookings for the customer with dog information, walk_summary, and series info
         const query = `
             SELECT
                 b.id,
@@ -46,10 +46,15 @@ export async function GET(request: NextRequest) {
                 b.price_pounds,
                 b.walk_summary,
                 b.created_at,
+                b.series_id,
+                b.series_index,
+                bs.recurrence_pattern,
+                bs.status AS series_status,
                 ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names
             FROM hunters_hounds.bookings b
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
+            LEFT JOIN hunters_hounds.booking_series bs ON b.series_id = bs.id
             WHERE b.owner_id = $1
             ORDER BY
                 CASE
@@ -79,9 +84,15 @@ export async function GET(request: NextRequest) {
             duration_minutes: row.duration_minutes,
             status: row.status,
             price_pounds: row.price_pounds ? parseFloat(row.price_pounds) : null,
-            walk_summary: row.walk_summary, // NEW: Include walk summary
+            walk_summary: row.walk_summary,
             dog_names: row.dog_names || [],
-            created_at: row.created_at
+            created_at: row.created_at,
+            // Series fields for recurring bookings
+            series_id: row.series_id,
+            series_index: row.series_index,
+            recurrence_pattern: row.recurrence_pattern,
+            series_status: row.series_status,
+            is_recurring: !!row.series_id,
         }));
 
         return NextResponse.json({

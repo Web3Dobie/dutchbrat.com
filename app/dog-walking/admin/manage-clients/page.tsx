@@ -25,6 +25,10 @@ interface Client {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Extended travel time (30 min instead of 15 min)
+    extended_travel_time?: boolean;
+    // Payment preference
+    payment_preference?: string | null;
     dogs: Dog[];
 }
 

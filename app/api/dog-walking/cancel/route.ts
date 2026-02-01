@@ -28,6 +28,7 @@ const calendar = google.calendar({ version: "v3", auth });
 interface CancelRequest {
     bookingId?: number;           // For dashboard cancellations
     cancellation_token?: string; // For email link cancellations
+    cancel_series?: 'single' | 'series' | 'future'; // For recurring bookings
 }
 
 interface BookingRow {
@@ -36,6 +37,8 @@ interface BookingRow {
     start_time: string;
     end_time: string;
     service_type: string;
+    series_id: number | null;
+    series_index: number | null;
     owner_name: string;
     phone: string;
     email: string;
@@ -66,8 +69,9 @@ export async function POST(request: NextRequest) {
         if (data.cancellation_token) {
             // Email-based cancellation using token
             const selectByTokenQuery = `
-                SELECT 
+                SELECT
                     b.id, b.google_event_id, b.start_time, b.end_time, b.service_type,
+                    b.series_id, b.series_index,
                     o.owner_name, o.phone, o.email,
                     d1.dog_name AS dog_name_1, d2.dog_name AS dog_name_2
                 FROM hunters_hounds.bookings b
@@ -81,8 +85,9 @@ export async function POST(request: NextRequest) {
         } else {
             // Dashboard-based cancellation using booking ID (keep original query)
             const selectByIdQuery = `
-                SELECT 
+                SELECT
                     b.id, b.google_event_id, b.start_time, b.end_time, b.service_type,
+                    b.series_id, b.series_index,
                     o.owner_name, o.phone, o.email,
                     d1.dog_name AS dog_name_1, d2.dog_name AS dog_name_2
                 FROM hunters_hounds.bookings b

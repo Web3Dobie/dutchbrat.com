@@ -854,6 +854,194 @@ export interface NewsletterContent {
  * Generate newsletter email HTML
  * Uses {{UNSUBSCRIBE_URL}} placeholder which is replaced per-recipient
  */
+// ============================================================================
+// RECURRING BOOKING EMAIL TEMPLATE
+// ============================================================================
+
+export interface RecurringBookingEmailData {
+    ownerName: string;
+    dogNames: string;
+    serviceType: string;
+    patternDescription: string; // "Every week", "Every 2 weeks", "Custom: Mon, Wed, Fri"
+    preferredTime: string; // "10:00"
+    startDate: string;
+    endDate: string;
+    confirmedBookings: Array<{
+        date: string;
+        time: string;
+        cancelUrl: string;
+    }>;
+    skippedDates: Array<{
+        date: string;
+        reason: string;
+    }>;
+    totalBookings: number;
+    totalPrice: number | null;
+    seriesId: number;
+    dashboardUrl: string;
+}
+
+export function generateRecurringBookingEmail(data: RecurringBookingEmailData): { subject: string; html: string } {
+    const {
+        ownerName,
+        dogNames,
+        serviceType,
+        patternDescription,
+        preferredTime,
+        startDate,
+        endDate,
+        confirmedBookings,
+        skippedDates,
+        totalBookings,
+        totalPrice,
+        seriesId,
+        dashboardUrl,
+    } = data;
+
+    const subject = `Hunter's Hounds Recurring Booking Confirmed - ${totalBookings} ${getServiceDisplayName(serviceType)}s`;
+
+    // Build the bookings table
+    const bookingsTableRows = confirmedBookings.map((booking, index) => `
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${index + 1}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; color: #1f2937; font-weight: 500;">${booking.date}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; color: #4b5563;">${booking.time}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+                <a href="${booking.cancelUrl}" style="color: #ef4444; font-size: 12px; text-decoration: none;">Cancel</a>
+            </td>
+        </tr>
+    `).join('');
+
+    // Build skipped dates section
+    const skippedSection = skippedDates.length > 0 ? `
+        <div style="margin: 25px 0; padding: 20px; background-color: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <h3 style="color: #92400e; margin: 0 0 15px 0; font-size: 16px;">Skipped Dates</h3>
+            <p style="color: #92400e; margin: 0 0 10px 0; font-size: 14px;">
+                The following dates could not be booked:
+            </p>
+            <ul style="margin: 0; padding-left: 20px; color: #92400e;">
+                ${skippedDates.map(s => `<li style="margin: 4px 0;">${s.date} - ${s.reason}</li>`).join('')}
+            </ul>
+        </div>
+    ` : '';
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Recurring Booking Confirmation - Hunter's Hounds</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Hunter's Hounds</h1>
+                <p style="color: #e9d5ff; margin: 10px 0 0 0; font-size: 16px;">Recurring Booking Confirmed</p>
+                <div style="margin-top: 15px; font-size: 24px;">🔄 🐕 📅</div>
+            </div>
+
+            <!-- Main content -->
+            <div style="padding: 40px 30px;">
+
+                <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">
+                    Great news, ${ownerName}!
+                </h2>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
+                    Your recurring booking for <strong>${dogNames}</strong> has been confirmed!
+                    We've scheduled <strong>${totalBookings} ${getServiceDisplayName(serviceType)}</strong> appointments for you.
+                </p>
+
+                <!-- Series Summary -->
+                <div style="background-color: #f0fdf4; border-radius: 8px; padding: 20px; margin: 25px 0; border: 1px solid #bbf7d0;">
+                    <h3 style="color: #166534; margin: 0 0 15px 0; font-size: 18px;">Booking Summary</h3>
+                    <table style="width: 100%; color: #166534;">
+                        <tr>
+                            <td style="padding: 4px 0;"><strong>Pattern:</strong></td>
+                            <td style="padding: 4px 0;">${patternDescription} at ${preferredTime}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 0;"><strong>Period:</strong></td>
+                            <td style="padding: 4px 0;">${startDate} to ${endDate}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 0;"><strong>Total Bookings:</strong></td>
+                            <td style="padding: 4px 0;">${totalBookings} appointments</td>
+                        </tr>
+                        ${totalPrice ? `
+                        <tr>
+                            <td style="padding: 4px 0;"><strong>Total Price:</strong></td>
+                            <td style="padding: 4px 0; font-weight: bold; color: #065f46;">£${totalPrice.toFixed(2)}</td>
+                        </tr>
+                        ` : ''}
+                    </table>
+                </div>
+
+                <!-- Bookings Table -->
+                <h3 style="color: #1f2937; margin: 30px 0 15px 0; font-size: 18px;">Your Scheduled Appointments</h3>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; background-color: #f9fafb; border-radius: 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background-color: #374151;">
+                                <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold; width: 40px;">#</th>
+                                <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold;">Date</th>
+                                <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold;">Time</th>
+                                <th style="padding: 12px; text-align: left; color: #fff; font-weight: bold; width: 60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${bookingsTableRows}
+                        </tbody>
+                    </table>
+                </div>
+
+                ${skippedSection}
+
+                <!-- Call to action -->
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${dashboardUrl}"
+                       style="display: inline-block; background-color: #3b82f6; color: #ffffff; padding: 14px 32px;
+                              text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                        Manage Your Bookings
+                    </a>
+                </div>
+
+                <!-- Series info -->
+                <p style="color: #6b7280; font-size: 13px; text-align: center; margin: 20px 0;">
+                    Series Reference: #${seriesId}
+                </p>
+
+                <!-- Personal signature -->
+                <div style="margin-top: 30px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Looking forward to seeing ${dogNames} regularly!<br><br>
+                        Warm regards,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                    Hunter's Hounds - Professional Dog Walking Service<br>
+                    Phone: 07932749772 | Email: bookings@hunters-hounds.london
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+
+    return { subject, html };
+}
+
 export function generateNewsletterEmail(content: NewsletterContent): string {
     const { title, month, welcomeMessage, welcomeBlocks, packFarewells, walkHighlights, seasonalTips, newFeatures } = content;
 

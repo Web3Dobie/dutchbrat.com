@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
         try {
             // Get all bookings that are NOT 'completed & paid' (editable bookings)
+            // Includes series information for recurring bookings
             const query = `
                 SELECT
                     b.id,
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
                     b.end_time,
                     b.duration_minutes,
                     b.created_at,
+                    b.series_id,
+                    b.series_index,
+                    bs.recurrence_pattern,
                     o.owner_name,
                     o.phone,
                     o.email,
@@ -40,6 +44,7 @@ export async function GET(request: NextRequest) {
                 JOIN hunters_hounds.owners o ON b.owner_id = o.id
                 LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
                 LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
+                LEFT JOIN hunters_hounds.booking_series bs ON b.series_id = bs.id
                 WHERE b.status != 'completed & paid'
                 ORDER BY b.start_time ASC;
             `;
