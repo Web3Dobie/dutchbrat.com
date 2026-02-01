@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V13.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V14.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V13 - My Media (Client Photos & Videos)** 🎉
+**Status**: **V14 - Recurring Bookings** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -44,6 +44,7 @@ export function useClientDomainDetection() {
 ⭐ hunters-hounds.london/reviews          → Public customer reviews page with average rating
 ⭐ hunters-hounds.london/review/[token]   → Token-based review submission form
 📸 hunters-hounds.london/my-account (Media tab) → V13: Customer's photos and videos from walks
+🔄 hunters-hounds.london/dog-walking/dashboard/book-recurring → V14: Recurring booking flow
 📧 hunters-hounds.london/contact          → Contact information (optional)
 ```
 
@@ -106,6 +107,12 @@ export function useClientDomainDetection() {
 
 # NEW V10: Customer Session Routes
 🔗 /api/dog-walking/customer-session    → GET: Check session, POST: Set session, DELETE: Clear session
+
+# NEW V14: Recurring Booking API Routes
+🔗 /api/dog-walking/recurring/check-availability  → POST: Check availability for all dates in pattern
+🔗 /api/dog-walking/recurring/book                → POST: Create booking series + individual bookings
+🔗 /api/dog-walking/recurring/[seriesId]          → GET: Fetch series details and associated bookings
+🔗 /api/dog-walking/recurring/[seriesId]/cancel   → POST: Cancel (single, series, or future bookings)
 ```
 
 ## 🔐 Admin Panel Authentication
@@ -2400,3 +2407,250 @@ interface ReviewCardProps {
 ### **Review System Summary**
 
 **For AI Agents**: Hunter's Hounds includes a complete customer review system with manual admin-controlled review requests (V11). When bookings are marked as "completed & paid", only the status is updated - no email is sent. Admin can then go to the Manage Reviews page "Request Review" tab to see eligible bookings (completed & paid with no review request yet). Clicking "Request Review" creates a review record with a unique UUID token and sends a review request email via the `/api/dog-walking/admin/request-review` endpoint. The email uses a purple color scheme (distinct from other emails) and includes the walk summary if present. Customers can click the link to access a secure review form (no login required) where they see their dog's image, service details, and can submit a 1-5 star rating with written feedback. Submitted reviews immediately appear on the public `/reviews` page showing the average rating, individual reviews with dog images, and admin responses. The admin panel at `/dog-walking/admin/manage-reviews` has two tabs: "Submitted Reviews" for managing responses and "Request Review" for sending new review requests. Database table `hunters_hounds.reviews` stores review data with token-based security, and all admin endpoints are protected by authentication. This manual approach prevents recurring payment customers from being spammed with review request emails.
+
+---
+
+## 🔄 V14: Recurring Bookings System
+
+### **Feature Overview**
+
+**Purpose**: Enable customers and admins to create recurring dog walking bookings with intelligent conflict handling, alternative time suggestions, and series management.
+
+**Key Capabilities:**
+- **Recurrence Patterns**: Weekly, bi-weekly, and custom days (Mon/Wed/Fri etc)
+- **Duration**: Schedule up to 12 weeks ahead
+- **Conflict Handling**: Partial booking - book available dates, skip conflicts, show alternatives
+- **Access**: Both customers AND admin can create recurring bookings
+
+### **Customer-Facing Page**
+
+```
+📅 hunters-hounds.london/dog-walking/dashboard/book-recurring → Recurring booking flow
+```
+
+**4-Step Booking Flow:**
+1. **Service & Dog Selection** - Choose dogs, service type, walk duration
+2. **Recurrence Configuration** - Pattern (weekly/biweekly/custom), preferred time, weeks ahead
+3. **Availability Review** - Visual grid showing available/conflict/blocked dates with alternatives
+4. **Confirmation** - Success message with series reference and email confirmation
+
+### **API Routes**
+
+```
+# Recurring Booking API Routes
+🔗 /api/dog-walking/recurring/check-availability  → POST: Check availability for all dates in pattern
+🔗 /api/dog-walking/recurring/book                → POST: Create series and individual bookings
+🔗 /api/dog-walking/recurring/[seriesId]          → GET: Fetch series details and bookings
+🔗 /api/dog-walking/recurring/[seriesId]/cancel   → POST: Cancel with options (single/series/future)
+```
+
+### **Database Schema**
+
+**NEW: booking_series Table:**
+```sql
+CREATE TABLE hunters_hounds.booking_series (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER NOT NULL REFERENCES hunters_hounds.owners(id),
+    dog_id_1 INTEGER NOT NULL REFERENCES hunters_hounds.dogs(id),
+    dog_id_2 INTEGER REFERENCES hunters_hounds.dogs(id),
+    service_type VARCHAR(100) NOT NULL,
+    duration_minutes INTEGER,
+    secondary_address_id INTEGER REFERENCES hunters_hounds.secondary_addresses(id),
+
+    -- Recurrence pattern configuration
+    recurrence_pattern VARCHAR(20) NOT NULL, -- 'weekly', 'biweekly', 'custom'
+    days_of_week INTEGER[], -- For custom: [1,3,5] = Mon,Wed,Fri (ISO weekday)
+    preferred_time TIME NOT NULL,
+
+    -- Series date range and stats
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    total_requested INTEGER NOT NULL DEFAULT 0,
+    total_booked INTEGER NOT NULL DEFAULT 0,
+    total_skipped INTEGER NOT NULL DEFAULT 0,
+
+    -- Series status management
+    status VARCHAR(20) DEFAULT 'active', -- 'active', 'paused', 'cancelled', 'completed'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
+);
+```
+
+**MODIFIED: bookings Table (new columns):**
+```sql
+ALTER TABLE hunters_hounds.bookings
+ADD COLUMN series_id INTEGER REFERENCES hunters_hounds.booking_series(id),
+ADD COLUMN series_index INTEGER;
+
+CREATE INDEX idx_bookings_series_id ON hunters_hounds.bookings(series_id);
+```
+
+### **Check Availability API**
+
+**Endpoint**: `POST /api/dog-walking/recurring/check-availability`
+
+**Request:**
+```typescript
+interface CheckAvailabilityRequest {
+    owner_id: number;
+    service_type: string;
+    duration_minutes: number;
+    recurrence_pattern: 'weekly' | 'biweekly' | 'custom';
+    days_of_week?: number[]; // ISO weekday: 1=Mon, 7=Sun
+    preferred_time: string; // HH:mm format
+    start_date: string; // YYYY-MM-DD
+    weeks_ahead: number; // Max 12
+}
+```
+
+**Response:**
+```typescript
+interface CheckAvailabilityResponse {
+    success: boolean;
+    summary: {
+        total_requested: number;
+        available: number;
+        conflicts: number;
+        blocked: number;
+    };
+    available_dates: Array<{
+        date: string;
+        displayDate: string;
+        time: string;
+        status: 'available';
+    }>;
+    conflicting_dates: Array<{
+        date: string;
+        displayDate: string;
+        requestedTime: string;
+        status: 'conflict';
+        reason: string;
+        alternatives: Array<{ time: string; displayTime: string }>;
+    }>;
+    blocked_dates: Array<{
+        date: string;
+        displayDate: string;
+        status: 'blocked';
+        reason: string;
+    }>;
+}
+```
+
+### **Book Recurring API**
+
+**Endpoint**: `POST /api/dog-walking/recurring/book`
+
+**Request:**
+```typescript
+interface RecurringBookRequest {
+    owner_id: number;
+    dog_id_1: number;
+    dog_id_2?: number;
+    service_type: string;
+    duration_minutes: number;
+    secondary_address_id?: number;
+    recurrence_pattern: 'weekly' | 'biweekly' | 'custom';
+    days_of_week?: number[];
+    preferred_time: string;
+    start_date: string;
+    end_date: string;
+    confirmed_dates: Array<{ date: string; time: string }>;
+    skipped_dates: Array<{ date: string; displayDate: string; reason: string }>;
+    notes?: string;
+}
+```
+
+**Actions Performed:**
+1. Create `booking_series` record
+2. Create individual booking records with `series_id` and `series_index`
+3. Create Google Calendar events for each booking
+4. Send single confirmation email with all dates
+5. Send Telegram notification
+
+### **Cancellation Options**
+
+**Endpoint**: `POST /api/dog-walking/recurring/[seriesId]/cancel`
+
+**Cancel Types:**
+- `single` - Cancel one specific booking (requires `booking_id`)
+- `series` - Cancel all remaining bookings in the series
+- `future` - Cancel this booking and all future ones (requires `booking_id`)
+
+```typescript
+interface CancelRequest {
+    cancel_type: 'single' | 'series' | 'future';
+    booking_id?: number; // Required for 'single' and 'future'
+}
+```
+
+### **UI Components**
+
+**RecurringBookingForm.tsx:**
+- Dog selection (1-2 dogs)
+- Service type selection (Solo Walk, Quick Walk)
+- Duration selection:
+  - Solo Walk: 1 hour or 2 hours
+  - Quick Walk: Fixed at 30 minutes (no selection shown)
+- Pattern selection (Weekly, Every 2 Weeks, Custom Days)
+- Custom days checkboxes (Mon-Fri)
+- Time selection dropdown
+- Weeks ahead selection (4-12 weeks)
+- Start date picker
+- Booking summary display
+
+**RecurringAvailabilityGrid.tsx:**
+- Summary cards (Available, Conflicts, Blocked, To Book)
+- Available dates list with green indicator
+- Conflicting dates with alternative time buttons
+- Blocked dates with reason
+- Skip button for conflicts
+- Confirm & Book button
+
+### **Dashboard Integration**
+
+**Customer Dashboard (DashboardMain.tsx):**
+- "Book Recurring" button added to Quick Actions
+- Recurring badge displayed on bookings that are part of a series
+- Series ID visible on booking cards
+
+**Admin Manage Bookings:**
+- New filter: "All | Single | Recurring"
+- Series badge with series ID on recurring bookings
+- Series index shown (e.g., "3 of series")
+
+### **Email Template**
+
+**generateRecurringBookingEmail()** in `lib/emailTemplates.ts`:
+- Purple color scheme (distinct from other booking emails)
+- Pattern summary ("Every week at 10:00")
+- Table of all booked dates with individual cancel links
+- Skipped dates section with reasons
+- Total booking count and price
+- Series reference number
+- Dashboard link
+
+### **File Structure**
+
+```
+# New Files
+/sql/create_booking_series.sql                              → Database migration
+/app/api/dog-walking/recurring/check-availability/route.ts  → Availability check
+/app/api/dog-walking/recurring/book/route.ts                → Create series
+/app/api/dog-walking/recurring/[seriesId]/route.ts          → Get series details
+/app/api/dog-walking/recurring/[seriesId]/cancel/route.ts   → Cancel options
+/app/dog-walking/dashboard/book-recurring/page.tsx          → Customer booking page
+/app/components/RecurringBookingForm.tsx                    → Configuration form
+/app/components/RecurringAvailabilityGrid.tsx               → Availability review
+
+# Modified Files
+/lib/emailTemplates.ts                                      → Added recurring email template
+/app/api/dog-walking/customer-bookings/route.ts             → Added series fields
+/app/api/dog-walking/cancel/route.ts                        → Series awareness
+/app/api/dog-walking/admin/bookings/editable/route.ts       → Added series fields
+/app/components/DashboardMain.tsx                           → Recurring badge + button
+/app/dog-walking/admin/manage-bookings/page.tsx             → Type filter + series display
+```
+
+### **Recurring Bookings Summary**
+
+**For AI Agents**: Hunter's Hounds V14 includes a complete recurring booking system. Customers access it via the "Book Recurring" button on their dashboard at `/dog-walking/dashboard/book-recurring`. The flow allows selecting dogs, service type, duration (30-90 min), and recurrence pattern (weekly, bi-weekly, or custom days like Mon/Wed/Fri). After configuration, the system checks availability for all target dates up to 12 weeks ahead via `/api/dog-walking/recurring/check-availability`. Dates are categorized as available (green), conflicting with alternatives (yellow), or blocked (red for weekends/fully booked). Users can accept alternative times or skip conflicting dates. On confirmation, the system creates a `booking_series` record and individual bookings linked via `series_id`. Each booking gets its own Google Calendar event with series reference in the description. A single purple-themed confirmation email lists all booked dates with individual cancel links. The admin panel at `/dog-walking/admin/manage-bookings` can filter by booking type (Single/Recurring) and shows series badges. Cancellation supports three modes: single (one booking), series (all remaining), or future (this + remaining). Database migration is in `/sql/create_booking_series.sql`.

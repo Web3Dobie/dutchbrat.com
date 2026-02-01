@@ -45,11 +45,13 @@ const TIME_SLOTS = [
     '17:00', '17:30', '18:00', '18:30', '19:00',
 ];
 
-const DURATION_OPTIONS = [
+const SOLO_WALK_DURATIONS = [
+    { value: 60, label: '1 hour' },
+    { value: 120, label: '2 hours' },
+];
+
+const QUICK_WALK_DURATIONS = [
     { value: 30, label: '30 minutes' },
-    { value: 45, label: '45 minutes' },
-    { value: 60, label: '60 minutes' },
-    { value: 90, label: '90 minutes' },
 ];
 
 const WEEKS_OPTIONS = [
@@ -265,7 +267,16 @@ export default function RecurringBookingForm({ dogs, onSubmit, isLoading }: Recu
                     <label style={styles.label}>Service Type</label>
                     <select
                         value={serviceType}
-                        onChange={(e) => setServiceType(e.target.value)}
+                        onChange={(e) => {
+                            const newServiceType = e.target.value;
+                            setServiceType(newServiceType);
+                            // Set appropriate default duration when service type changes
+                            if (newServiceType === 'Quick Walk (30 min)') {
+                                setDuration(30);
+                            } else {
+                                setDuration(60); // Default to 1 hour for Solo Walk
+                            }
+                        }}
                         style={styles.select}
                     >
                         <option value="Solo Walk">Solo Walk</option>
@@ -273,26 +284,28 @@ export default function RecurringBookingForm({ dogs, onSubmit, isLoading }: Recu
                     </select>
                 </div>
 
-                {/* Duration */}
-                <div style={styles.section}>
-                    <label style={styles.label}>Walk Duration</label>
-                    <div style={styles.radioGroup}>
-                        {DURATION_OPTIONS.map(opt => (
-                            <div
-                                key={opt.value}
-                                onClick={() => setDuration(opt.value)}
-                                style={{
-                                    ...styles.radioButton,
-                                    ...(duration === opt.value ? styles.radioButtonActive : {}),
-                                }}
-                            >
-                                <span style={{ color: duration === opt.value ? '#fff' : '#9ca3af' }}>
-                                    {opt.label}
-                                </span>
-                            </div>
-                        ))}
+                {/* Duration - only show for Solo Walk since Quick Walk is fixed at 30 min */}
+                {serviceType === 'Solo Walk' && (
+                    <div style={styles.section}>
+                        <label style={styles.label}>Walk Duration</label>
+                        <div style={styles.radioGroup}>
+                            {SOLO_WALK_DURATIONS.map(opt => (
+                                <div
+                                    key={opt.value}
+                                    onClick={() => setDuration(opt.value)}
+                                    style={{
+                                        ...styles.radioButton,
+                                        ...(duration === opt.value ? styles.radioButtonActive : {}),
+                                    }}
+                                >
+                                    <span style={{ color: duration === opt.value ? '#fff' : '#9ca3af' }}>
+                                        {opt.label}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Recurrence Pattern */}
                 <div style={styles.section}>
@@ -372,7 +385,7 @@ export default function RecurringBookingForm({ dogs, onSubmit, isLoading }: Recu
                             </select>
                         </div>
                         <div>
-                            <label style={styles.label}>Duration</label>
+                            <label style={styles.label}>Schedule For</label>
                             <select
                                 value={weeksAhead}
                                 onChange={(e) => setWeeksAhead(parseInt(e.target.value))}
@@ -411,7 +424,7 @@ export default function RecurringBookingForm({ dogs, onSubmit, isLoading }: Recu
                             <strong style={{ color: '#d1d5db' }}>Period:</strong> {format(new Date(startDate), 'd MMM yyyy')} to {format(endDate, 'd MMM yyyy')}
                         </p>
                         <p style={{ margin: '0' }}>
-                            <strong style={{ color: '#d1d5db' }}>Walk Duration:</strong> {duration} minutes
+                            <strong style={{ color: '#d1d5db' }}>Walk Duration:</strong> {duration === 30 ? '30 minutes' : duration === 60 ? '1 hour' : '2 hours'}
                         </p>
                     </div>
                 </div>

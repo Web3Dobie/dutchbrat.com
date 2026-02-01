@@ -231,6 +231,11 @@ export default function RecurringAvailabilityGrid({
 
     const totalToBook = totalAvailable + resolvedAlternatives;
 
+    // Sort all dates chronologically
+    const sortedAvailableDates = [...availableDates].sort((a, b) => a.date.localeCompare(b.date));
+    const sortedConflictingDates = [...conflictingDates].sort((a, b) => a.date.localeCompare(b.date));
+    const sortedBlockedDates = [...blockedDates].sort((a, b) => a.date.localeCompare(b.date));
+
     return (
         <div style={styles.container}>
             {/* Header */}
@@ -276,20 +281,20 @@ export default function RecurringAvailabilityGrid({
             </div>
 
             {/* Available Dates */}
-            {availableDates.length > 0 && (
+            {sortedAvailableDates.length > 0 && (
                 <div style={styles.section}>
                     <h3 style={styles.sectionTitle}>
                         <span style={{ color: '#10b981' }}>&#10003;</span>
-                        Available ({availableDates.length})
+                        Available ({sortedAvailableDates.length})
                     </h3>
-                    {availableDates.map(date => (
+                    {sortedAvailableDates.map(date => (
                         <div key={date.date} style={{ ...styles.dateCard, ...styles.availableCard }}>
                             <div>
                                 <span style={{ color: '#fff', fontWeight: '500' }}>{date.displayDate}</span>
                                 <span style={{ color: '#9ca3af', marginLeft: '12px' }}>{date.time}</span>
                             </div>
                             <span style={{ color: '#10b981', fontSize: '0.75rem', fontWeight: '600' }}>
-                                CONFIRMED
+                                AVAILABLE
                             </span>
                         </div>
                     ))}
@@ -297,13 +302,13 @@ export default function RecurringAvailabilityGrid({
             )}
 
             {/* Conflicting Dates */}
-            {conflictingDates.length > 0 && (
+            {sortedConflictingDates.length > 0 && (
                 <div style={styles.section}>
                     <h3 style={styles.sectionTitle}>
                         <span style={{ color: '#f59e0b' }}>&#9888;</span>
-                        Conflicts - Choose Alternatives ({conflictingDates.length})
+                        Conflicts - Choose Alternatives ({sortedConflictingDates.length})
                     </h3>
-                    {conflictingDates.map(conflict => {
+                    {sortedConflictingDates.map(conflict => {
                         const choice = conflictChoices[conflict.date];
                         const isResolved = choice?.action === 'alternative' || choice?.action === 'skip';
 
@@ -362,13 +367,13 @@ export default function RecurringAvailabilityGrid({
             )}
 
             {/* Blocked Dates */}
-            {blockedDates.length > 0 && (
+            {sortedBlockedDates.length > 0 && (
                 <div style={styles.section}>
                     <h3 style={styles.sectionTitle}>
                         <span style={{ color: '#ef4444' }}>&#10005;</span>
-                        Blocked ({blockedDates.length})
+                        Blocked ({sortedBlockedDates.length})
                     </h3>
-                    {blockedDates.map(date => (
+                    {sortedBlockedDates.map(date => (
                         <div key={date.date} style={{ ...styles.dateCard, ...styles.blockedCard }}>
                             <div>
                                 <span style={{ color: '#d1d5db', fontWeight: '500' }}>{date.displayDate}</span>

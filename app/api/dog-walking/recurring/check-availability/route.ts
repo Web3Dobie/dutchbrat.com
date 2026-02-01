@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
                         requestedTime: preferred_time,
                         status: 'conflict',
                         reason: 'Requested time not available',
-                        alternatives: alternatives.slice(0, 3) // Max 3 alternatives
+                        alternatives: alternatives // Show all available alternatives
                     });
                 } else {
                     blockedDates.push({
