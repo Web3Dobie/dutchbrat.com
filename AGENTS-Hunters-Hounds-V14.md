@@ -96,7 +96,8 @@ export function useClientDomainDetection() {
 🔗 /api/dog-walking/admin/client-media            → GET: List assigned media (filter by owner_id)
 🔗 /api/dog-walking/admin/client-media            → POST: Assign file to client
 🔗 /api/dog-walking/admin/client-media/[id]       → DELETE: Remove media assignment
-🔗 /api/dog-walking/admin/client-media/thumbnails → POST: Generate thumbnails for images and videos
+🔗 /api/dog-walking/admin/client-media/thumbnails  → POST: Generate thumbnails for images and videos
+🔗 /api/dog-walking/admin/client-media/reoptimize → POST: Re-optimize videos (moov atom), DELETE: Clear markers
 🔗 /api/dog-walking/client-media/[...path]        → GET: Serve media files (with video streaming support)
 🔗 /api/dog-walking/customer-media                → GET: Fetch logged-in customer's media
 
@@ -1623,14 +1624,19 @@ A complete media sharing system where customers can view photos and videos from 
 ### Storage Architecture
 ```
 Host:       /home/hunter-dev/client-media/
-              ├── originals/           # Uploaded files (via FTP)
+              ├── originals/           # Uploaded files (via FTP) - READ ONLY
               │   └── *.jpg, *.mp4, etc.
-              └── thumbnails/          # Generated thumbnails
-                  └── thumb_*.jpg
+              ├── optimized/           # Optimized videos (moov atom moved)
+              │   └── *.mp4            # Auto-served instead of originals
+              ├── thumbnails/          # Generated thumbnails
+              │   └── thumb_*.jpg
+              └── .optimized/          # Marker files to track processed videos
+                  └── *.optimized
               ↓ (volume mount)
 Container:  /app/client-media/
               ↓ (API route serves files)
 API:        /api/dog-walking/client-media/[...path]
+              → For videos: checks /optimized/ first, falls back to /originals/
 ```
 
 **Docker Volume Mount** (docker-compose.yml):
@@ -1670,6 +1676,7 @@ CREATE INDEX idx_client_media_taken_at ON hunters_hounds.client_media(taken_at);
 - **Filename Date Parsing**: Fallback for filenames like `IMG_20250128_123456.jpg`
 - **Assign to Clients**: Dropdown to assign each file to a customer
 - **Generate Thumbnails**: Creates 300x300 thumbnails for both images AND videos
+- **Re-optimize Videos**: Moves moov atom to beginning for instant video playback
 - **View Assigned Media**: Filter by client, see all assignments
 - **Remove Assignment**: Unassigns file (keeps file on disk)
 
@@ -1727,6 +1734,51 @@ This enables:
 - Progressive video loading
 - Proper playback in all browsers
 
+### Video Optimization (Moov Atom)
+
+**Problem**: Videos recorded on phones typically have the "moov atom" (metadata) at the END of the file. Browsers need this metadata to start playback, so they must download the entire video before playing - causing long load times.
+
+**Solution**: The scan process automatically moves the moov atom to the BEGINNING of each video using FFmpeg's `faststart` flag. This enables instant video playback.
+
+**How it works:**
+```typescript
+// Uses FFmpeg to remux video with faststart (no re-encoding)
+const command = `ffmpeg -i "${filePath}" -c copy -movflags +faststart "${tempPath}" -y`;
+await execAsync(command);
+await fs.copyFile(tempPath, optimizedPath);  // Save to /optimized/ directory (originals are read-only)
+```
+
+**Key Implementation Details:**
+- **Separate optimized directory**: Optimized videos stored in `/optimized/` (originals remain untouched since FTP uploads may be read-only)
+- **Automatic fallback**: Serving route checks `/optimized/` first, falls back to `/originals/` if not found
+- **Temp files in /tmp**: FFmpeg writes temp files to `/tmp` during processing
+- **Marker files**: `.optimized` directory tracks which videos have been processed to avoid re-processing
+- **No re-encoding**: Uses `-c copy` for fast remuxing without quality loss
+- **Automatic on scan**: Videos are optimized during the scan process for new files
+
+**Re-optimize Existing Videos:**
+
+For videos that were assigned before optimization was working (or if optimization failed), use the re-optimize feature:
+
+**Admin UI**: Click "🎬 Re-optimize Videos" button in Client Media Management
+
+**API Endpoints:**
+```
+POST /api/dog-walking/admin/client-media/reoptimize
+  → Processes all unoptimized videos in database
+  → Returns: { optimized, alreadyOptimized, failed, errors }
+
+DELETE /api/dog-walking/admin/client-media/reoptimize
+  → Clears all .optimized marker files
+  → Use this to force re-processing of all videos
+```
+
+**Troubleshooting:**
+- If videos still won't play, check browser console for errors
+- Verify the video file isn't corrupted
+- Check container logs for FFmpeg errors
+- Try clearing optimization markers and re-running
+
 ### Customer Dashboard - My Media Tab
 
 **Component**: `/app/components/MyMedia.tsx`
@@ -1754,6 +1806,7 @@ This enables:
 | `/app/api/dog-walking/admin/client-media/route.ts` | GET (list) & POST (assign) media |
 | `/app/api/dog-walking/admin/client-media/[id]/route.ts` | DELETE media assignment |
 | `/app/api/dog-walking/admin/client-media/thumbnails/route.ts` | Generate thumbnails (images + videos) |
+| `/app/api/dog-walking/admin/client-media/reoptimize/route.ts` | Re-optimize videos for streaming (moov atom) |
 | `/app/api/dog-walking/client-media/[...path]/route.ts` | Serve media files with video streaming |
 | `/app/api/dog-walking/customer-media/route.ts` | Fetch customer's media grouped by month |
 | `/app/components/MyMedia.tsx` | Customer gallery component |
@@ -1770,11 +1823,12 @@ This enables:
 ```
 1. Upload photos/videos via FTP to /home/hunter-dev/client-media/originals/
 2. Go to Admin → Client Media Management
-3. Click "Scan for New Files" → see pending files with previews
+3. Click "Scan for New Files" → scans folder, auto-optimizes videos for streaming
 4. Select client from dropdown, optionally set date
 5. Click "Assign to Client" for each file
 6. Click "Generate Thumbnails" → creates thumbnails for all assigned media
-7. Customer logs in → sees "My Media" tab → views their photos/videos by month
+7. (If needed) Click "Re-optimize Videos" → fixes videos that failed initial optimization
+8. Customer logs in → sees "My Media" tab → views their photos/videos by month
 ```
 
 ### Customer Experience
@@ -1794,7 +1848,8 @@ This enables:
 
 **Solution**:
 1. **Direct nginx serving**: Videos served via `nginx-media` container, bypassing Next.js
-2. **Video optimization**: Apply `ffmpeg -movflags +faststart` to enable immediate streaming
+2. **Video optimization**: Apply `ffmpeg -movflags +faststart` to move moov atom to file beginning
+3. **Range request support**: API route handles HTTP Range headers for proper seeking/streaming
 
 **nginx-media volume mount** (docker-compose.yml):
 ```yaml

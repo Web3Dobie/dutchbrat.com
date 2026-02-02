@@ -73,7 +73,7 @@ async function generateVideoThumbnail(
         await fs.access(tempFramePath);
 
         // Resize the extracted frame using Sharp
-        await sharp(tempFramePath)
+        await sharp(tempFramePath, { failOn: 'none' })
             .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
                 fit: "cover",
                 position: "center"
@@ -132,8 +132,9 @@ export async function POST(request: NextRequest) {
 
                 if (row.media_type === "image") {
                     // Generate image thumbnail using Sharp
+                    // failOn: 'none' tolerates corrupt JPEG data from WhatsApp images
                     // Step 1: Generate thumbnail without rotation
-                    await sharp(originalPath)
+                    await sharp(originalPath, { failOn: 'none' })
                         .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
                             fit: "cover",
                             position: "center"
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest) {
 
                     // Step 2: Rotate the generated thumbnail 90° clockwise
                     // This corrects phone portrait orientation (EXIF orientation 6)
-                    const rotatedBuffer = await sharp(thumbPath)
+                    const rotatedBuffer = await sharp(thumbPath, { failOn: 'none' })
                         .rotate(90)
                         .toBuffer();
                     await sharp(rotatedBuffer)

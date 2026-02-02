@@ -41,6 +41,7 @@ export default function ClientMediaPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [isGeneratingThumbnails, setIsGeneratingThumbnails] = useState(false);
+    const [isReoptimizing, setIsReoptimizing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -340,6 +341,40 @@ export default function ClientMediaPage() {
         }
     };
 
+    const handleReoptimizeVideos = async () => {
+        setIsReoptimizing(true);
+        setError(null);
+
+        try {
+            const response = await fetch("/api/dog-walking/admin/client-media/reoptimize", {
+                method: "POST",
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                let msg = `Optimized ${data.optimized} videos for streaming`;
+                if (data.alreadyOptimized > 0) {
+                    msg += ` (${data.alreadyOptimized} already optimized)`;
+                }
+                if (data.failed > 0) {
+                    msg += ` - ${data.failed} failed`;
+                    if (data.errors && data.errors.length > 0) {
+                        console.error("Video optimization errors:", data.errors);
+                    }
+                }
+                setSuccessMessage(msg);
+                setTimeout(() => setSuccessMessage(null), 8000);
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err: any) {
+            setError(err.message || "Failed to re-optimize videos");
+        } finally {
+            setIsReoptimizing(false);
+        }
+    };
+
     const formatFileSize = (bytes: number) => {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -395,6 +430,13 @@ export default function ClientMediaPage() {
                         disabled={isGeneratingThumbnails}
                     >
                         {isGeneratingThumbnails ? "Generating..." : "🖼️ Generate Thumbnails"}
+                    </button>
+                    <button
+                        style={{ ...styles.button, ...styles.secondaryButton }}
+                        onClick={handleReoptimizeVideos}
+                        disabled={isReoptimizing}
+                    >
+                        {isReoptimizing ? "Optimizing..." : "🎬 Re-optimize Videos"}
                     </button>
                 </div>
                 <p style={{ color: "#9ca3af", marginTop: "12px", marginBottom: 0, fontSize: "14px" }}>

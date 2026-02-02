@@ -21,6 +21,7 @@ const pool = new Pool({
 
 const CLIENT_MEDIA_DIR = "/app/client-media";
 const ORIGINALS_DIR = path.join(CLIENT_MEDIA_DIR, "originals");
+const OPTIMIZED_DIR = path.join(CLIENT_MEDIA_DIR, "optimized");
 const OPTIMIZED_MARKER_DIR = path.join(CLIENT_MEDIA_DIR, ".optimized");
 
 // Supported file extensions
@@ -48,7 +49,11 @@ async function markVideoOptimized(filename: string): Promise<void> {
 }
 
 // Optimize video with faststart for streaming (moves moov atom to beginning)
+// Stores optimized version in /optimized/ directory (originals are read-only)
 async function optimizeVideoForStreaming(filePath: string, filename: string): Promise<boolean> {
+    const tempPath = `/tmp/${filename}.temp.mp4`;
+    const optimizedPath = path.join(OPTIMIZED_DIR, filename);
+
     try {
         // Check if already optimized
         if (await isVideoOptimized(filename)) {
@@ -56,7 +61,8 @@ async function optimizeVideoForStreaming(filePath: string, filename: string): Pr
             return true;
         }
 
-        const tempPath = `${filePath}.temp.mp4`;
+        // Ensure optimized directory exists
+        await fs.mkdir(OPTIMIZED_DIR, { recursive: true });
 
         // Apply faststart optimization (remux only, no re-encoding)
         const command = `ffmpeg -i "${filePath}" -c copy -movflags +faststart "${tempPath}" -y`;
@@ -64,19 +70,20 @@ async function optimizeVideoForStreaming(filePath: string, filename: string): Pr
 
         await execAsync(command);
 
-        // Replace original with optimized version
-        await fs.rename(tempPath, filePath);
+        // Move optimized version to /optimized/ directory
+        await fs.copyFile(tempPath, optimizedPath);
+        await fs.unlink(tempPath);
 
         // Mark as optimized
         await markVideoOptimized(filename);
 
-        console.log(`Video optimized successfully: ${filename}`);
+        console.log(`Video optimized successfully: ${filename} -> optimized/${filename}`);
         return true;
     } catch (error) {
         console.error(`Failed to optimize video ${filename}:`, error);
         // Clean up temp file if it exists
         try {
-            await fs.unlink(`${filePath}.temp.mp4`);
+            await fs.unlink(tempPath);
         } catch {}
         return false;
     }

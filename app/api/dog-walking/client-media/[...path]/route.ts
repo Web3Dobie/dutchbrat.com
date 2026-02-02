@@ -5,6 +5,7 @@ import path from 'path'
 
 // Client media mounted from host via docker volume
 const CLIENT_MEDIA_DIR = "/app/client-media";
+const OPTIMIZED_DIR = path.join(CLIENT_MEDIA_DIR, "optimized");
 
 // Supported file extensions with MIME types
 function getContentType(ext: string): string {
@@ -58,6 +59,8 @@ export async function GET(
 
         // Check if file exists and get stats
         let stats
+        let actualPath = resolvedPath
+
         try {
             stats = await fs.stat(resolvedPath)
         } catch {
@@ -65,24 +68,71 @@ export async function GET(
         }
 
         const contentType = getContentType(ext)
-        const fileSize = stats.size
-        const fileBuffer = await fs.readFile(resolvedPath)
 
-        // For videos, force HTTP/1.1 to avoid HTTP/2 issues
+        // For videos, prefer optimized version if it exists
         if (isVideoFile(ext)) {
+            const filename = path.basename(resolvedPath)
+            const optimizedPath = path.join(OPTIMIZED_DIR, filename)
+            try {
+                const optimizedStats = await fs.stat(optimizedPath)
+                // Use optimized version
+                actualPath = optimizedPath
+                stats = optimizedStats
+                console.log(`Serving optimized video: ${filename}`)
+            } catch {
+                // No optimized version, use original
+                console.log(`Serving original video (no optimized version): ${filename}`)
+            }
+        }
+
+        const fileSize = stats.size
+
+        // For videos, support range requests for proper streaming
+        if (isVideoFile(ext)) {
+            const rangeHeader = request.headers.get('range')
+
+            if (rangeHeader) {
+                // Parse range header
+                const match = rangeHeader.match(/bytes=(\d+)-(\d*)/)
+                if (match) {
+                    const start = parseInt(match[1], 10)
+                    const end = match[2] ? parseInt(match[2], 10) : fileSize - 1
+                    const chunkSize = end - start + 1
+
+                    // Read the requested chunk
+                    const fileHandle = await fs.open(actualPath, 'r')
+                    const buffer = Buffer.alloc(chunkSize)
+                    await fileHandle.read(buffer, 0, chunkSize, start)
+                    await fileHandle.close()
+
+                    return new NextResponse(new Uint8Array(buffer), {
+                        status: 206,
+                        headers: {
+                            'Content-Type': contentType,
+                            'Content-Length': chunkSize.toString(),
+                            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                            'Accept-Ranges': 'bytes',
+                            'Cache-Control': 'public, max-age=86400',
+                        },
+                    })
+                }
+            }
+
+            // No range requested - return full file with Accept-Ranges header
+            const fileBuffer = await fs.readFile(actualPath)
             return new NextResponse(new Uint8Array(fileBuffer), {
                 status: 200,
                 headers: {
                     'Content-Type': contentType,
                     'Content-Length': fileSize.toString(),
+                    'Accept-Ranges': 'bytes',
                     'Cache-Control': 'public, max-age=86400',
-                    'Connection': 'close',
-                    'Upgrade': 'http/1.1',
                 },
             })
         }
 
         // Handle images
+        const fileBuffer = await fs.readFile(actualPath)
         return new NextResponse(new Uint8Array(fileBuffer), {
             status: 200,
             headers: {
