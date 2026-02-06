@@ -248,7 +248,8 @@ if (isHuntersHoundsDomain()) {
 **Enhanced Business Constraints:**
 - **Operating Hours**:
   - **Dog Walking Services**: Monday-Friday, 8:00-20:00
-  - **Dog Sitting**: Monday-Friday, 00:00-23:59 (24-hour availability)
+  - **Dog Sitting (single-day)**: Monday-Friday, 00:00-23:59 (24-hour availability)
+  - **Dog Sitting (multi-day)**: Any day - weekends allowed for multi-day bookings (e.g., Fri-Mon, Sat-Sun)
 - **Maximum Dogs**: 2 dogs per walk/sitting
 - **Service Areas**: Highbury Fields & Clissold Park areas (EXPANDED with secondary addresses)
 - **Time Buffers**: 15-minute buffer between appointments
@@ -270,11 +271,13 @@ The booking system uses intelligent conflict detection that allows walks and 6+ 
 
 **Sitting Availability API** (`/api/dog-walking/sitting-availability`):
 
-| Existing Booking | Can Book Sitting? | Conditions |
-|------------------|-------------------|------------|
+| Scenario | Can Book Sitting? | Conditions |
+|----------|-------------------|------------|
 | Walks scheduled | **YES** | Must be 6+ hours minimum |
 | Multi-day sitting | **NO** | No overlapping sittings allowed |
 | Single-day sitting | **NO** | No overlapping sittings allowed |
+| Weekend (single-day) | **NO** | Single-day sitting only Mon-Fri |
+| Weekend (multi-day) | **YES** | Multi-day sitting spanning weekends allowed |
 
 **API Response Enhancement:**
 The sitting availability API returns a `hasWalks` flag when walks exist on the selected day:

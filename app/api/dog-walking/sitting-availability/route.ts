@@ -12,6 +12,7 @@ import {
     differenceInDays,
     parseISO,
     isSameDay,
+    getDay,
 } from "date-fns";
 import {
     TZDate
@@ -64,6 +65,21 @@ async function getBusyEvents(startDate: Date, endDate: Date) {
 // Function to check single day availability
 async function checkSingleDayAvailability(date: string): Promise<AvailabilityResult> {
     const targetDate = new TZDate(date, TIMEZONE);
+
+    // Block single-day sitting on weekends (Saturday = 6, Sunday = 0)
+    // Multi-day sitting spanning weekends is still allowed
+    const dayOfWeek = getDay(targetDate);
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (isWeekend) {
+        return {
+            available: false,
+            type: 'single',
+            availableRanges: [],
+            message: "Single-day dog sitting is not available on weekends. Please book multi-day sitting for weekend care (e.g., Friday to Monday)."
+        };
+    }
+
     const dayStart = startOfDay(targetDate);
     const dayEnd = endOfDay(targetDate);
 
