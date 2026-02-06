@@ -216,14 +216,14 @@ export default function MyMedia({ customer, onBack }: MyMediaProps) {
 
     // --- Media URL Helper ---
     // Uses nginx-media for direct file serving (same as memorial site)
-    // Cache buster v3: forces refresh of thumbnails and videos after optimization changes
+    // Cache buster v4: forces refresh after thumbnail EXIF rotation fix
     const getMediaUrl = (item: MediaItem, useThumbnail: boolean = false) => {
         if (useThumbnail && item.thumbnail_path) {
-            return `/client-media/${item.thumbnail_path}?v=3`;
+            return `/client-media/${item.thumbnail_path}?v=4`;
         }
         // Add cache buster for videos to bypass CDN cache after re-encoding
         if (item.media_type === 'video') {
-            return `/client-media/${item.file_path}?v=3`;
+            return `/client-media/${item.file_path}?v=4`;
         }
         return `/client-media/${item.file_path}`;
     };

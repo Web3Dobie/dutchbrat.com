@@ -1,7 +1,18 @@
 import { Resend } from "resend";
 import { Pool } from "pg";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy-load Resend client to avoid module-level errors
+let _resend: Resend | null = null;
+
+function getResend(): Resend {
+    if (!_resend) {
+        if (!process.env.RESEND_API_KEY) {
+            throw new Error('RESEND_API_KEY environment variable is not set');
+        }
+        _resend = new Resend(process.env.RESEND_API_KEY);
+    }
+    return _resend;
+}
 
 // Database connection for email lookups
 const pool = new Pool({
@@ -113,7 +124,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     }
 
     try {
-        await resend.emails.send({
+        await getResend().emails.send({
             from: options.from || defaultFrom,
             to: options.to,
             bcc: bccList,

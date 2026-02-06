@@ -20,7 +20,7 @@ export async function GET() {
             SELECT 
                 (SELECT COUNT(*) FROM hunters_hounds.owners) as total_customers,
                 (SELECT COUNT(*) FROM hunters_hounds.dogs) as total_dogs,
-                (SELECT COUNT(*) FROM hunters_hounds.bookings WHERE status = 'active') as active_bookings,
+                (SELECT COUNT(*) FROM hunters_hounds.bookings WHERE status = 'confirmed') as active_bookings,
                 (SELECT COUNT(*) FROM hunters_hounds.bookings WHERE status = 'cancelled') as cancelled_bookings;
         `;
 

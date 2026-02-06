@@ -242,7 +242,7 @@ export default function ClientMediaPage() {
         }
     };
 
-    const handleAssign = async (filename: string) => {
+    const handleAssign = async (filename: string, extractedDate: string | null) => {
         if (!assignClientId) {
             setError("Please select a client");
             return;
@@ -251,6 +251,9 @@ export default function ClientMediaPage() {
         setAssigningFile(filename);
         setError(null);
 
+        // Use manually entered date, or fall back to extracted date from EXIF/filename
+        const dateToUse = assignDate || extractedDate || null;
+
         try {
             const response = await fetch("/api/dog-walking/admin/client-media", {
                 method: "POST",
@@ -258,7 +261,7 @@ export default function ClientMediaPage() {
                 body: JSON.stringify({
                     filename,
                     owner_id: assignClientId,
-                    taken_at: assignDate || null,
+                    taken_at: dateToUse,
                 }),
             });
 
@@ -492,7 +495,7 @@ export default function ClientMediaPage() {
                                     }}>
                                         {file.mediaType === "image" ? (
                                             <img
-                                                src={`/client-media/${file.filePath}?v=2`}
+                                                src={`/client-media/${file.filePath}?v=4`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
@@ -505,9 +508,17 @@ export default function ClientMediaPage() {
                                     <p style={{ color: "#fff", fontSize: "13px", margin: "0 0 4px 0", wordBreak: "break-all" }}>
                                         {file.filename}
                                     </p>
-                                    <p style={{ color: "#9ca3af", fontSize: "12px", margin: "0 0 8px 0" }}>
+                                    <p style={{ color: "#9ca3af", fontSize: "12px", margin: "0 0 4px 0" }}>
                                         {file.mediaType} • {formatFileSize(file.fileSize)}
-                                        {file.takenAt && ` • ${format(new Date(file.takenAt), "MMM d, yyyy")}`}
+                                    </p>
+                                    <p style={{
+                                        fontSize: "12px",
+                                        margin: "0 0 8px 0",
+                                        color: file.takenAt ? "#10b981" : "#f59e0b"
+                                    }}>
+                                        📅 {file.takenAt
+                                            ? format(new Date(file.takenAt), "dd/MM/yyyy")
+                                            : "dd/mm/yyyy (enter manually)"}
                                     </p>
 
                                     {/* Assignment Form */}
@@ -535,7 +546,7 @@ export default function ClientMediaPage() {
 
                                         <button
                                             style={{ ...styles.button, ...styles.successButton, width: "100%" }}
-                                            onClick={() => handleAssign(file.filename)}
+                                            onClick={() => handleAssign(file.filename, file.takenAt)}
                                             disabled={assigningFile === file.filename || !assignClientId}
                                         >
                                             {assigningFile === file.filename ? "Assigning..." : "Assign to Client"}
@@ -596,13 +607,13 @@ export default function ClientMediaPage() {
                                     }}>
                                         {media.thumbnail_path ? (
                                             <img
-                                                src={`/client-media/${media.thumbnail_path}?v=2`}
+                                                src={`/client-media/${media.thumbnail_path}?v=4`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
                                         ) : media.media_type === "image" ? (
                                             <img
-                                                src={`/client-media/${media.file_path}?v=2`}
+                                                src={`/client-media/${media.file_path}?v=4`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />

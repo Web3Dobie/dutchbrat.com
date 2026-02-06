@@ -205,7 +205,7 @@ export default function AdminDashboard() {
                         </div>
                         <div style={styles.statItem}>
                             <div style={styles.statNumber}>{overview?.stats.active_bookings}</div>
-                            <div style={styles.statLabel}>Active Bookings</div>
+                            <div style={styles.statLabel}>Confirmed Bookings</div>
                         </div>
                         <div style={styles.statItem}>
                             <div style={styles.statNumber}>{overview?.stats.cancelled_bookings}</div>
