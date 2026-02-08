@@ -40,6 +40,12 @@ export default function ManageBookings() {
     const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
     const [updatingPrice, setUpdatingPrice] = useState<number | null>(null);
 
+    // Reschedule State
+    const [reschedulingBooking, setReschedulingBooking] = useState<EditableBooking | null>(null);
+    const [rescheduleDate, setRescheduleDate] = useState<string>('');
+    const [rescheduleTime, setRescheduleTime] = useState<string>('');
+    const [rescheduling, setRescheduling] = useState(false);
+
     // Filter State
     const [filterClient, setFilterClient] = useState<string>('');
     const [filterDateFrom, setFilterDateFrom] = useState<string>('');
@@ -148,6 +154,70 @@ export default function ManageBookings() {
         } finally {
             setUpdatingStatus(null);
         }
+    };
+
+    const handleRescheduleClick = (booking: EditableBooking) => {
+        setReschedulingBooking(booking);
+        // Set initial date/time to current booking time
+        const startDate = new Date(booking.start_time);
+        const dateStr = startDate.toISOString().split('T')[0];
+        const timeStr = startDate.toTimeString().slice(0, 5);
+        setRescheduleDate(dateStr);
+        setRescheduleTime(timeStr);
+        setError(null);
+    };
+
+    const handleRescheduleSubmit = async () => {
+        if (!reschedulingBooking || !rescheduleDate || !rescheduleTime) {
+            setError("Please select both date and time");
+            return;
+        }
+
+        try {
+            setRescheduling(true);
+            setError(null);
+
+            // Combine date and time into ISO string
+            const newStartTime = new Date(`${rescheduleDate}T${rescheduleTime}:00`).toISOString();
+
+            const response = await fetch('/api/dog-walking/reschedule-booking', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    booking_id: reschedulingBooking.id,
+                    new_start_time: newStartTime,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to reschedule booking");
+            }
+
+            // Refresh bookings list
+            await fetchBookings();
+
+            // Close modal
+            setReschedulingBooking(null);
+            setRescheduleDate('');
+            setRescheduleTime('');
+
+        } catch (err: any) {
+            console.error("Failed to reschedule booking:", err);
+            setError(err.message || "Could not reschedule booking. Please try again.");
+        } finally {
+            setRescheduling(false);
+        }
+    };
+
+    const handleRescheduleCancel = () => {
+        setReschedulingBooking(null);
+        setRescheduleDate('');
+        setRescheduleTime('');
+        setError(null);
     };
 
     // Helper Functions
@@ -435,6 +505,7 @@ export default function ManageBookings() {
                                 <th style={styles.th}>Dogs</th>
                                 <th style={styles.th}>Price</th>
                                 <th style={styles.th}>Status</th>
+                                <th style={styles.th}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -485,6 +556,25 @@ export default function ManageBookings() {
                                     </td>
                                     <td style={styles.td}>
                                         {renderStatusCell(booking)}
+                                    </td>
+                                    <td style={styles.td}>
+                                        <button
+                                            onClick={() => handleRescheduleClick(booking)}
+                                            style={{
+                                                padding: "6px 12px",
+                                                backgroundColor: "#3b82f6",
+                                                color: "#fff",
+                                                border: "none",
+                                                borderRadius: "4px",
+                                                cursor: "pointer",
+                                                fontSize: "0.875rem",
+                                                fontWeight: "500",
+                                            }}
+                                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#2563eb"}
+                                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#3b82f6"}
+                                        >
+                                            Reschedule
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -642,6 +732,59 @@ export default function ManageBookings() {
             fontSize: "0.875rem",
             fontWeight: "bold",
             cursor: "pointer",
+        } as React.CSSProperties,
+        modalOverlay: {
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+        } as React.CSSProperties,
+        modal: {
+            backgroundColor: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: "8px",
+            padding: "24px",
+            maxWidth: "500px",
+            width: "90%",
+            maxHeight: "90vh",
+            overflow: "auto",
+        } as React.CSSProperties,
+        modalTitle: {
+            fontSize: "1.5rem",
+            fontWeight: "bold",
+            color: "#d1d5db",
+            marginBottom: "20px",
+        } as React.CSSProperties,
+        modalLabel: {
+            display: "block",
+            color: "#d1d5db",
+            fontSize: "0.875rem",
+            fontWeight: "500",
+            marginBottom: "6px",
+        } as React.CSSProperties,
+        modalInput: {
+            width: "100%",
+            padding: "10px",
+            backgroundColor: "#111827",
+            color: "#fff",
+            border: "1px solid #374151",
+            borderRadius: "6px",
+            fontSize: "1rem",
+        } as React.CSSProperties,
+        modalButton: {
+            padding: "10px 20px",
+            border: "none",
+            borderRadius: "6px",
+            fontSize: "1rem",
+            fontWeight: "600",
+            cursor: "pointer",
+            color: "#fff",
         } as React.CSSProperties,
     };
 
@@ -854,6 +997,72 @@ export default function ManageBookings() {
             ) : (
                 <div style={styles.noData}>
                     No editable bookings found. All bookings are either completed & paid.
+                </div>
+            )}
+
+            {/* Reschedule Modal */}
+            {reschedulingBooking && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.modal}>
+                        <h2 style={styles.modalTitle}>Reschedule Booking</h2>
+
+                        <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#374151", borderRadius: "6px" }}>
+                            <div style={{ color: "#d1d5db", marginBottom: "4px" }}>
+                                <strong>{reschedulingBooking.owner_name}</strong> - {reschedulingBooking.dog_names.join(", ")}
+                            </div>
+                            <div style={{ color: "#9ca3af", fontSize: "0.875rem" }}>
+                                {getServiceDisplayName(reschedulingBooking.service_type)} ({reschedulingBooking.duration_minutes} min)
+                            </div>
+                            <div style={{ color: "#9ca3af", fontSize: "0.875rem", marginTop: "4px" }}>
+                                Current: {formatDate(reschedulingBooking.start_time)}
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: "16px" }}>
+                            <label style={styles.modalLabel}>New Date</label>
+                            <input
+                                type="date"
+                                value={rescheduleDate}
+                                onChange={(e) => setRescheduleDate(e.target.value)}
+                                style={styles.modalInput}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: "24px" }}>
+                            <label style={styles.modalLabel}>New Time</label>
+                            <input
+                                type="time"
+                                value={rescheduleTime}
+                                onChange={(e) => setRescheduleTime(e.target.value)}
+                                style={styles.modalInput}
+                            />
+                        </div>
+
+                        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                            <button
+                                onClick={handleRescheduleCancel}
+                                disabled={rescheduling}
+                                style={{
+                                    ...styles.modalButton,
+                                    backgroundColor: "#6b7280",
+                                    opacity: rescheduling ? 0.5 : 1,
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRescheduleSubmit}
+                                disabled={rescheduling}
+                                style={{
+                                    ...styles.modalButton,
+                                    backgroundColor: "#3b82f6",
+                                    opacity: rescheduling ? 0.5 : 1,
+                                }}
+                            >
+                                {rescheduling ? "Rescheduling..." : "Confirm Reschedule"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
