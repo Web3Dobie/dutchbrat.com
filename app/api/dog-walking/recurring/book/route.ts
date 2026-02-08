@@ -7,6 +7,7 @@ import { sendEmail } from "@/lib/emailService";
 import { getSoloWalkPrice, getServicePrice } from "@/lib/pricing";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
 import { generateRecurringBookingEmail } from "@/lib/emailTemplates";
+import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -226,36 +227,28 @@ export async function POST(request: NextRequest) {
 
             const bookingId = bookingResult.rows[0].id;
 
-            // Create Google Calendar event
-            const eventTitle = `${service_type} - ${dogNames}`;
-            const eventDescription = `
-Recurring Booking (Series #${seriesId}, Booking ${i + 1} of ${confirmed_dates.length})
-
-Owner: ${owner.owner_name}
-Dog(s): ${dogNames}
-Service: ${service_type}
-Duration: ${duration_minutes} minutes
-${pricePerBooking ? `Price: £${pricePerBooking.toFixed(2)}` : ''}
-Location: ${addressLabel}
-Address: ${eventAddress}
-Phone: ${owner.phone}
-Email: ${owner.email}
-Start: ${format(startDateTime, "EEEE, MMMM d 'at' HH:mm")}
-End: ${format(endDateTime, "EEEE, MMMM d 'at' HH:mm")}
-            `;
-
-            const event = {
-                summary: eventTitle,
-                description: eventDescription,
-                start: {
-                    dateTime: startDateTime.toISOString(),
-                    timeZone: TIMEZONE,
-                },
-                end: {
-                    dateTime: endDateTime.toISOString(),
-                    timeZone: TIMEZONE,
-                },
+            // Generate standardized calendar event using shared utility
+            const calendarEventData: CalendarEventData = {
+                service_type,
+                dogNames,
+                ownerName: owner.owner_name,
+                phone: owner.phone,
+                email: owner.email,
+                address: eventAddress,
+                addressLabel,
+                duration_minutes,
+                booking_type: 'single',
+                start_time: startDateTime,
+                end_time: endDateTime,
+                price: pricePerBooking ?? undefined,
+                status: 'confirmed',
+                isRecurring: true,
+                seriesId,
+                seriesIndex: i + 1,
+                seriesTotal: confirmed_dates.length,
             };
+
+            const event = generateCalendarEvent(calendarEventData, startDateTime, endDateTime, TIMEZONE);
 
             const calendarResponse = await calendar.events.insert({
                 calendarId: process.env.GOOGLE_CALENDAR_ID,

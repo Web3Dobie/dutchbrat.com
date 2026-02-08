@@ -294,10 +294,15 @@ async function getDateAvailability(
         if (event.start?.date && event.end?.date) {
             // All-day event detected - check if it's a Hunter's Hounds business event
             const description = event.description || '';
+            const summary = event.summary || '';
 
-            // Allow walks during Multi-Day and Single-Day Sitting events
-            if (description.includes('Multi-Day Dog Sitting')) return false;
-            if (description.includes('Single-Day Dog Sitting')) return false;
+            // Allow walks during Dog Sitting events (check both summary and description)
+            // Standardized format: summary includes "Dog Sitting" and description has "Booking Type: Multi-Day"
+            // Legacy format: summary includes "Multi-Day Dog Sitting" or description has "Multi-day booking"
+            if (summary.includes('Multi-Day Dog Sitting')) return false;
+            if (summary.includes('Dog Sitting')) return false;
+            if (description.includes('Multi-day booking')) return false;
+            if (description.includes('Booking Type: Multi-Day')) return false;
 
             // Any other all-day event is a blocking event (vacation, personal time, etc.)
             return true;
@@ -322,11 +327,32 @@ async function getDateAvailability(
         .filter((event) => {
             // Skip multi-day and long single-day sitting (allow walks during these)
             const description = event.description || '';
-            if (description.includes('Multi-Day Dog Sitting')) return false;
-            if (description.includes('Single-Day Dog Sitting')) {
-                const durationMatch = description.match(/Duration:\s*(\d+)\s*hours?/i);
-                if (durationMatch && parseInt(durationMatch[1], 10) >= 6) return false;
+            const summary = event.summary || '';
+
+            // Multi-day sitting: standardized and legacy format checks
+            // Standardized: "Booking Type: Multi-Day" in description
+            // Legacy: "Multi-Day Dog Sitting" in summary or "Multi-day booking" in description
+            if (summary.includes('Multi-Day Dog Sitting')) return false;
+            if (description.includes('Multi-day booking')) return false;
+            if (description.includes('Booking Type: Multi-Day')) return false;
+
+            // Single-day long sitting (6+ hours): has "Dog Sitting" in summary and duration in description
+            if (summary.includes('Dog Sitting')) {
+                // Check duration from description
+                // Standardized format: "Duration: 6 hours" or "Duration: 360 minutes"
+                // Legacy format: same pattern
+                const minutesMatch = description.match(/Duration:\s*(\d+)\s*minutes/i);
+                const hoursMatch = description.match(/Duration:\s*(\d+)\s*hours?/i);
+
+                if (minutesMatch) {
+                    const minutes = parseInt(minutesMatch[1], 10);
+                    if (minutes >= 360) return false; // 6+ hours
+                } else if (hoursMatch) {
+                    const hours = parseInt(hoursMatch[1], 10);
+                    if (hours >= 6) return false;
+                }
             }
+
             return true;
         })
         .map((event) => {

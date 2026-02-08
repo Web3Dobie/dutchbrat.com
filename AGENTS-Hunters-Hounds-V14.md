@@ -2712,3 +2712,155 @@ interface CancelRequest {
 ### **Recurring Bookings Summary**
 
 **For AI Agents**: Hunter's Hounds V14 includes a complete recurring booking system. Customers access it via the "Book Recurring" button on their dashboard at `/dog-walking/dashboard/book-recurring`. The flow allows selecting dogs, service type, duration (30-90 min), and recurrence pattern (weekly, bi-weekly, or custom days like Mon/Wed/Fri). After configuration, the system checks availability for all target dates up to 12 weeks ahead via `/api/dog-walking/recurring/check-availability`. Dates are categorized as available (green), conflicting with alternatives (yellow), or blocked (red for weekends/fully booked). Users can accept alternative times or skip conflicting dates. On confirmation, the system creates a `booking_series` record and individual bookings linked via `series_id`. Each booking gets its own Google Calendar event with series reference in the description. A single purple-themed confirmation email lists all booked dates with individual cancel links. The admin panel at `/dog-walking/admin/manage-bookings` can filter by booking type (Single/Recurring) and shows series badges. Cancellation supports three modes: single (one booking), series (all remaining), or future (this + remaining). Database migration is in `/sql/create_booking_series.sql`.
+---
+
+## 🔧 V14.1: Calendar Event Standardization & Bug Fixes
+
+### **Bug Fixes**
+
+**Recurring Booking Availability Check (Fixed 2026-02-08):**
+
+Two critical bugs were discovered and fixed in the recurring booking availability checker:
+
+1. **All-Day Calendar Blocks Not Respected**
+   - **Problem**: When blocking out date ranges on Google Calendar using all-day events (e.g., vacation, personal time), the recurring booking system ignored these blocks and allowed bookings during blocked periods.
+   - **Root Cause**: The availability check only looked at events with `dateTime` properties. All-day calendar blocks use `date` properties instead, so they were completely ignored.
+   - **Fix**: Added detection for all-day events that distinguishes between business events (Dog Sitting) and blocking events (vacation, personal time). Non-business all-day events now properly block availability.
+
+2. **Multi-Day Sitting Bookings Blocking Walks**
+   - **Problem**: Multi-day dog sitting bookings (e.g., March 27 - April 20) were blocking other services via the recurring API route, even though walks should be allowed during sitting bookings.
+   - **Root Cause**: Calendar event descriptions didn't match the text patterns being checked. The code looked for "Multi-Day Dog Sitting" in the description, but it actually appeared in the summary (title). The description contained "Multi-day booking" instead.
+   - **Fix**: Updated filters to check both `summary` and `description` fields for the correct text patterns.
+
+**Files Fixed:**
+- `/app/api/dog-walking/recurring/check-availability/route.ts` (lines 292-357)
+
+### **Calendar Event Standardization**
+
+To prevent similar issues in the future, all booking channels were standardized to use consistent calendar event formats.
+
+**Problem Identified:**
+Each booking route (customer, admin, recurring, reschedule) was manually building calendar event summaries and descriptions with different formats, making filtering/searching unreliable.
+
+**Solution Implemented:**
+Created a shared utility function that generates standardized calendar events across all booking channels.
+
+### **New Shared Utility**
+
+**File:** `/lib/calendarEvents.ts`
+
+**Functions:**
+```typescript
+generateCalendarEventSummary(data: CalendarEventData): string
+generateCalendarEventDescription(data: CalendarEventData): string
+generateCalendarEvent(data: CalendarEventData, startDateTime: Date, endDateTime: Date): object
+```
+
+**Standardized Format:**
+
+**Summary (Title):**
+```
+[SERVICE] - [DOGS] [(DURATION)] [SERIES_BADGE]
+```
+Examples:
+- `Solo Walk (60min) - Max & Luna`
+- `Multi-Day Dog Sitting - Buddy (14 days)`
+- `Quick Walk - Charlie [Series #42-3/12]`
+
+**Description:**
+```
+[BOOKING_TYPE_HEADER]
+[HISTORICAL/RESCHEDULED BADGES]
+
+Owner: [NAME]
+Dog(s): [NAMES]
+Service: [SERVICE]
+Duration: [TIME/DAYS]
+Price: £[AMOUNT]
+
+Location: [LABEL]
+Address: [FULL_ADDRESS]
+Phone: [PHONE]
+Email: [EMAIL]
+
+Start: [DATE TIME]
+End: [DATE TIME]
+
+Notes: [NOTES]
+Status: [STATUS]
+
+Booking Type: [Single Day/Multi-Day/Recurring]
+```
+
+**Key Features:**
+- Consistent format across all booking channels
+- Includes series information for recurring bookings
+- Supports historical booking flag
+- Includes rescheduled-from information
+- Clear "Booking Type" label for filtering
+
+### **Updated Routes**
+
+All booking routes now use the shared utility:
+
+1. **Customer Booking** - `/app/api/dog-walking/book/route.ts`
+   - Replaced manual event creation with `generateCalendarEvent()`
+   - Handles Solo Walk, Quick Walk, Meet & Greet, Dog Sitting
+
+2. **Admin Create Booking** - `/app/api/dog-walking/admin/create-booking/route.ts`
+   - Standardized format with historical booking flag
+   - Includes notes field when provided
+
+3. **Recurring Booking** - `/app/api/dog-walking/recurring/book/route.ts`
+   - Series ID, index, and total included in summary and description
+   - Consistent with other channels
+
+4. **Reschedule Booking** - `/app/api/dog-walking/reschedule-booking/route.ts`
+   - Includes "RESCHEDULED FROM" information in description
+   - Uses `calendar.events.update()` with standardized format
+
+### **Availability Filter Updates**
+
+The recurring availability checker now recognizes **both** standardized and legacy formats:
+
+**All-Day Events Check:**
+- ✅ New: `"Booking Type: Multi-Day"` in description
+- ✅ Legacy: `"Multi-day booking"` in description
+- ✅ Both: `"Dog Sitting"` in summary
+
+**Timed Events Check:**
+- ✅ New: `"Booking Type: Multi-Day"` in description
+- ✅ Legacy: `"Multi-day booking"` in description
+- ✅ Duration parsing: `"Duration: 360 minutes"` or `"Duration: 6 hours"`
+
+**Backward Compatibility:**
+Existing calendar events continue to work with legacy format checks, while new bookings use the standardized format.
+
+### **Benefits**
+
+1. **Consistency**: All calendar events follow the same format
+2. **Maintainability**: Change format in one place, applies everywhere
+3. **Reliability**: Filtering/searching works across all booking types
+4. **Future-Proof**: New features can rely on consistent patterns
+5. **Debugging**: Easier to identify booking source from calendar
+
+### **Files Created**
+
+```
+/lib/calendarEvents.ts → Shared calendar event generation utility
+```
+
+### **Files Modified**
+
+```
+/app/api/dog-walking/book/route.ts                          → Uses shared utility
+/app/api/dog-walking/admin/create-booking/route.ts          → Uses shared utility
+/app/api/dog-walking/recurring/book/route.ts                → Uses shared utility
+/app/api/dog-walking/reschedule-booking/route.ts            → Uses shared utility
+/app/api/dog-walking/recurring/check-availability/route.ts  → Updated filters for new format
+```
+
+### **V14.1 Summary**
+
+**For AI Agents**: Hunter's Hounds V14.1 fixes critical bugs in the recurring booking availability checker and standardizes calendar event formatting across all booking channels. The availability checker now properly detects and respects all-day calendar blocks (vacation, personal time) while allowing walks during multi-day sitting bookings. All booking routes (customer, admin, recurring, reschedule) now use a shared utility (`/lib/calendarEvents.ts`) that generates consistent Google Calendar events with standardized summaries and descriptions. The format includes clear "Booking Type" labels (Single Day, Multi-Day, Recurring) and consistent structure for owner, dogs, service, duration, price, location, and status. The availability filters support both the new standardized format and legacy formats for backward compatibility. This prevents future issues with calendar event filtering and makes the system more maintainable and reliable for new features.
+

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { google } from "googleapis";
-import { format, isPast, addMinutes } from "date-fns";
+import { format, isPast, addMinutes, differenceInDays } from "date-fns";
 import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
 import { sendTelegramNotification } from "@/lib/telegram";
@@ -9,6 +9,7 @@ import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
+import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -182,36 +183,34 @@ export async function POST(request: NextRequest) {
                         ? `${customer.dog_name_1} & ${customer.dog_name_2}`
                         : customer.dog_name_1;
 
-                    const eventTitle = booking_type === 'multi_day'
-                        ? `${serviceDisplayName} - ${dogNames} (Multi-day)`
-                        : `${serviceDisplayName} - ${dogNames}`;
+                    // Calculate duration for calendar event
+                    let calculatedDurationMinutes = data.duration_minutes;
+                    let calculatedDurationDays: number | undefined;
 
-                    const eventDescription = `
-${isHistorical ? 'HISTORICAL BOOKING' : 'BOOKING CONFIRMATION'}
+                    if (booking_type === 'multi_day') {
+                        calculatedDurationDays = differenceInDays(endTime, startTime) + 1;
+                    }
 
-Owner: ${customer.owner_name}
-Dog(s): ${dogNames}
-Service: ${serviceDisplayName}
-${booking_type === 'single' ? `Duration: ${data.duration_minutes} minutes` : 'Multi-day booking'}
-Address: ${customer.address}
-Phone: ${customer.phone}
-Email: ${customer.email}
-${data.notes ? `Notes: ${data.notes}` : ''}
-Status: ${status.toUpperCase()}
-                    `.trim();
-
-                    const event = {
-                        summary: eventTitle,
-                        description: eventDescription,
-                        start: {
-                            dateTime: startTime.toISOString(),
-                            timeZone: "Europe/London"
-                        },
-                        end: {
-                            dateTime: endTime.toISOString(),
-                            timeZone: "Europe/London"
-                        },
+                    // Generate standardized calendar event using shared utility
+                    const calendarEventData: CalendarEventData = {
+                        service_type: serviceDisplayName,
+                        dogNames,
+                        ownerName: customer.owner_name,
+                        phone: customer.phone,
+                        email: customer.email,
+                        address: customer.address,
+                        duration_minutes: calculatedDurationMinutes,
+                        duration_days: calculatedDurationDays,
+                        booking_type: booking_type,
+                        start_time: startTime,
+                        end_time: endTime,
+                        price: finalPrice !== null ? finalPrice : undefined,
+                        notes: data.notes,
+                        status: status,
+                        isHistorical: isHistorical,
                     };
+
+                    const event = generateCalendarEvent(calendarEventData, startTime, endTime);
 
                     const calendarResponse = await calendar.events.insert({
                         calendarId: process.env.GOOGLE_CALENDAR_ID,

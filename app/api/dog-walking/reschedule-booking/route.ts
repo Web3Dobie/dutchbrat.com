@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
+import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 
 // Database Connection
 const pool = new Pool({
@@ -204,31 +205,30 @@ export async function POST(request: NextRequest) {
 
         if (booking.google_event_id) {
             try {
+                // Generate standardized calendar event using shared utility
+                const calendarEventData: CalendarEventData = {
+                    service_type: serviceDisplayName,
+                    dogNames,
+                    ownerName: booking.owner_name,
+                    phone: booking.phone,
+                    email: booking.email,
+                    address: booking.address,
+                    duration_minutes: booking.duration_minutes,
+                    booking_type: 'single',
+                    start_time: newStartTime,
+                    end_time: newEndTime,
+                    price: booking.price_pounds ? parseFloat(booking.price_pounds) : undefined,
+                    status: 'confirmed',
+                    isRescheduled: true,
+                    oldStartTime: new Date(booking.old_start_time),
+                };
+
+                const event = generateCalendarEvent(calendarEventData, newStartTime, newEndTime);
+
                 await calendar.events.update({
                     calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
                     eventId: booking.google_event_id,
-                    requestBody: {
-                        summary: `${serviceDisplayName} - ${booking.owner_name}`,
-                        description: `
-Customer: ${booking.owner_name}
-Phone: ${booking.phone}
-Address: ${booking.address}
-Dogs: ${dogNames}
-Service: ${serviceDisplayName}
-${booking.price_pounds ? `Price: £${parseFloat(booking.price_pounds).toFixed(2)}` : ''}
-
-** RESCHEDULED FROM ${format(new Date(booking.old_start_time), "MMM d, yyyy 'at' h:mm a")} **
-                        `.trim(),
-                        start: {
-                            dateTime: newStartTime.toISOString(),
-                            timeZone: "Europe/London",
-                        },
-                        end: {
-                            dateTime: newEndTime.toISOString(),
-                            timeZone: "Europe/London",
-                        },
-                        location: booking.address,
-                    },
+                    requestBody: event,
                 });
                 console.log("Google Calendar event updated:", booking.google_event_id);
             } catch (calendarError) {

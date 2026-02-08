@@ -11,6 +11,7 @@ import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
 import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
+import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 
 // --- Database Connection ---
 const pool = new Pool({
@@ -258,78 +259,45 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            let eventTitle, eventDescription;
+            // Calculate duration for calendar event
+            let calculatedDurationMinutes = duration_minutes;
+            let calculatedDurationDays: number | undefined;
+            let calendarBookingType: 'single' | 'multi_day' = 'single';
 
             if (booking_type === 'multi_day') {
-                const numDays = differenceInDays(new Date(end_time), new Date(start_time)) + 1;
-                eventTitle = `${service_type} - ${dogNames} (${numDays} days)`;
-                eventDescription = `
-Multi-Day Dog Sitting
-Owner: ${owner_name}
-Dog(s): ${dogNames}
-Duration: ${numDays} days
-Location: ${addressLabel}
-Address: ${eventAddress}
-Phone: ${phone}
-Email: ${email}
-Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
-End: ${format(new Date(end_time), "EEEE, MMMM d 'at' HH:mm")}
-Booking Type: Multi-Day
-                `;
+                calculatedDurationDays = differenceInDays(new Date(end_time), new Date(start_time)) + 1;
+                calendarBookingType = 'multi_day';
             } else if (booking_type === 'single_day_sitting') {
-                // Single-day sitting uses end_time (duration calculated from times)
+                // Single-day sitting: calculate minutes from hours
                 const numHours = differenceInHours(new Date(end_time), new Date(start_time));
-                eventTitle = `${service_type} - ${dogNames} (${numHours}h)`;
-                eventDescription = `
-Single-Day Dog Sitting
-Owner: ${owner_name}
-Dog(s): ${dogNames}
-Duration: ${numHours} hours
-Location: ${addressLabel}
-Address: ${eventAddress}
-Phone: ${phone}
-Email: ${email}
-Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
-End: ${format(new Date(end_time), "EEEE, MMMM d 'at' HH:mm")}
-Booking Type: Single-Day Sitting
-                `;
-            } else {
-                eventTitle = `${service_type} - ${dogNames}`;
-
-                // Calculate end time for single day walks/greets for event
-                const walkEndTime = new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000).toISOString();
-
-                eventDescription = `
-Owner: ${owner_name}
-Dog(s): ${dogNames}
-Service: ${service_type}
-Duration: ${duration_minutes} minutes
-${finalPrice ? `Price: £${finalPrice.toFixed(2)}` : ''}
-Location: ${addressLabel}
-Address: ${eventAddress}
-Phone: ${phone}
-Email: ${email}
-Booking Type: Single Day
-Start: ${format(new Date(start_time), "EEEE, MMMM d 'at' HH:mm")}
-End: ${format(new Date(walkEndTime), "EEEE, MMMM d 'at' HH:mm")}
-                `;
+                calculatedDurationMinutes = numHours * 60;
+                calendarBookingType = 'single';
             }
 
-            const event = {
-                summary: eventTitle,
-                description: eventDescription,
-                start: {
-                    dateTime: start_time,
-                    timeZone: "Europe/London"
-                },
-                end: {
-                    // Use end_time for sitting bookings, calculate from duration for walks
-                    dateTime: (booking_type === 'multi_day' || booking_type === 'single_day_sitting')
-                        ? end_time
-                        : new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000).toISOString(),
-                    timeZone: "Europe/London"
-                },
+            // Calculate end time
+            const endDateTime = (booking_type === 'multi_day' || booking_type === 'single_day_sitting')
+                ? new Date(end_time)
+                : new Date(new Date(start_time).getTime() + (duration_minutes || 0) * 60000);
+
+            // Generate standardized calendar event using shared utility
+            const calendarEventData: CalendarEventData = {
+                service_type,
+                dogNames,
+                ownerName: owner_name,
+                phone,
+                email,
+                address: eventAddress,
+                addressLabel,
+                duration_minutes: calculatedDurationMinutes,
+                duration_days: calculatedDurationDays,
+                booking_type: calendarBookingType,
+                start_time: new Date(start_time),
+                end_time: endDateTime,
+                price: finalPrice !== null ? finalPrice : undefined,
+                status: 'confirmed',
             };
+
+            const event = generateCalendarEvent(calendarEventData, new Date(start_time), endDateTime);
 
             const calendarResponse = await calendar.events.insert({
                 calendarId: process.env.GOOGLE_CALENDAR_ID,
