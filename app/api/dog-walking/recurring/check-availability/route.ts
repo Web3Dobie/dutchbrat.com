@@ -289,13 +289,34 @@ async function getDateAvailability(
 
     const busyEvents = res.data.items || [];
 
+    // Check for all-day blocking events (non-Hunter's Hounds events)
+    const hasAllDayBlock = busyEvents.some((event) => {
+        if (event.start?.date && event.end?.date) {
+            // All-day event detected - check if it's a Hunter's Hounds business event
+            const description = event.description || '';
+
+            // Allow walks during Multi-Day and Single-Day Sitting events
+            if (description.includes('Multi-Day Dog Sitting')) return false;
+            if (description.includes('Single-Day Dog Sitting')) return false;
+
+            // Any other all-day event is a blocking event (vacation, personal time, etc.)
+            return true;
+        }
+        return false;
+    });
+
+    // If there's an all-day block on this date, return no availability
+    if (hasAllDayBlock) {
+        return [];
+    }
+
     // Define working hours
     const workDayStart = new TZDate(targetDate, TIMEZONE);
     workDayStart.setHours(WORKING_HOURS_START, 0, 0, 0);
     const workDayEnd = new TZDate(targetDate, TIMEZONE);
     workDayEnd.setHours(WORKING_HOURS_END, 0, 0, 0);
 
-    // Process and pad busy events
+    // Process and pad busy events (only timed events)
     const paddedBusyTimes: TimeRange[] = busyEvents
         .filter((event) => event.start?.dateTime && event.end?.dateTime)
         .filter((event) => {
