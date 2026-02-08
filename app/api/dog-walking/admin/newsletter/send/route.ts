@@ -68,10 +68,13 @@ export async function POST(request: NextRequest) {
         // Test mode: send to single email
         if (test_email) {
             try {
+                // Replace unsubscribe placeholder with a harmless link for test emails
+                const testHtml = emailHtml.replace('{{UNSUBSCRIBE_URL}}', '#');
+
                 await sendEmail({
                     to: test_email,
                     subject: `[TEST] ${newsletter.title}`,
-                    html: emailHtml,
+                    html: testHtml,
                 });
 
                 return NextResponse.json({
@@ -120,11 +123,25 @@ export async function POST(request: NextRequest) {
                     unsubscribeUrl
                 );
 
-                await sendEmail({
-                    to: subscriber.email,
-                    subject: newsletter.title,
-                    html: personalizedHtml,
-                });
+                // Retry up to 3 times on rate-limit errors
+                let sent = false;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        await sendEmail({
+                            to: subscriber.email,
+                            subject: newsletter.title,
+                            html: personalizedHtml,
+                        });
+                        sent = true;
+                        break;
+                    } catch (err: any) {
+                        if (err.message?.includes('Too many requests') && attempt < 2) {
+                            await new Promise(resolve => setTimeout(resolve, 1500 * (attempt + 1)));
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
 
                 // Record in history
                 await client.query(`
@@ -135,8 +152,8 @@ export async function POST(request: NextRequest) {
 
                 successCount++;
 
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Delay between sends to stay under Resend rate limit (2 req/sec)
+                await new Promise(resolve => setTimeout(resolve, 600));
 
             } catch (emailError: any) {
                 failCount++;

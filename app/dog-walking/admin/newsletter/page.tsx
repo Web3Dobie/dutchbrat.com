@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 
 interface WelcomeBlock {
@@ -40,6 +40,12 @@ interface NewsletterContent {
     };
     seasonalTips: string;
     newFeatures: string;
+    // Notion fields
+    source?: "editor" | "notion";
+    notionPageId?: string;
+    notionBlocks?: any[];
+    notionHtml?: string;
+    includeNewPackMembers?: boolean;
 }
 
 interface Newsletter {
@@ -51,6 +57,14 @@ interface Newsletter {
     sent_at: string | null;
     recipient_count: number;
     status: "draft" | "sent";
+}
+
+interface NotionPage {
+    id: string;
+    title: string;
+    status: string;
+    month: string | null;
+    last_edited: string;
 }
 
 export default function NewsletterPage() {
@@ -83,27 +97,34 @@ export default function NewsletterPage() {
     const [seasonalTips, setSeasonalTips] = useState("");
     const [newFeatures, setNewFeatures] = useState("");
 
+    // New Pack Members month selector
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+
+    // Notion state
+    const [importMode, setImportMode] = useState<"editor" | "notion">("editor");
+    const [showNotionImport, setShowNotionImport] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const [notionPages, setNotionPages] = useState<NotionPage[]>([]);
+    const [isLoadingNotionPages, setIsLoadingNotionPages] = useState(false);
+    const [notionHtml, setNotionHtml] = useState("");
+    const [notionBlocks, setNotionBlocks] = useState<any[]>([]);
+    const [notionPageId, setNotionPageId] = useState("");
+    const [includeNewPackMembers, setIncludeNewPackMembers] = useState(true);
+    const [notionImageCount, setNotionImageCount] = useState(0);
+
     // Fetch initial data
     useEffect(() => {
         fetchData();
     }, []);
 
-    const fetchData = async () => {
-        setIsLoading(true);
-        try {
-            // Fetch newsletters and subscriber count
-            const newsletterRes = await fetch("/api/dog-walking/admin/newsletter", {
-                credentials: "include"
-            });
-            if (newsletterRes.ok) {
-                const data = await newsletterRes.json();
-                setNewsletters(data.newsletters || []);
-                setSubscriberCount(data.subscriber_count || 0);
-            }
+    // Re-fetch new dogs when month changes
+    useEffect(() => {
+        fetchNewDogs(selectedYear, selectedMonth);
+    }, [selectedYear, selectedMonth]);
 
-            // Fetch new pack members for current month
-            const year = new Date().getFullYear();
-            const month = new Date().getMonth() + 1;
+    const fetchNewDogs = async (year: number, month: number) => {
+        try {
             const newDogsRes = await fetch(
                 `/api/dog-walking/admin/newsletter/new-dogs?year=${year}&month=${month}`,
                 { credentials: "include" }
@@ -118,11 +139,105 @@ export default function NewsletterPage() {
                 );
             }
         } catch (err) {
+            console.error("Failed to fetch new dogs:", err);
+        }
+    };
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        try {
+            // Fetch newsletters and subscriber count
+            const newsletterRes = await fetch("/api/dog-walking/admin/newsletter", {
+                credentials: "include"
+            });
+            if (newsletterRes.ok) {
+                const data = await newsletterRes.json();
+                setNewsletters(data.newsletters || []);
+                setSubscriberCount(data.subscriber_count || 0);
+            }
+
+            // Fetch new pack members for selected month
+            await fetchNewDogs(selectedYear, selectedMonth);
+        } catch (err) {
             console.error("Failed to fetch data:", err);
             setError("Failed to load data");
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Notion import functions
+    const fetchNotionPages = async () => {
+        setIsLoadingNotionPages(true);
+        try {
+            const res = await fetch("/api/dog-walking/admin/newsletter/notion-pages", {
+                credentials: "include"
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setNotionPages(data.pages || []);
+            } else {
+                const data = await res.json();
+                setError(data.error || "Failed to load Notion pages");
+            }
+        } catch (err) {
+            console.error("Failed to fetch Notion pages:", err);
+            setError("Failed to load Notion pages");
+        } finally {
+            setIsLoadingNotionPages(false);
+        }
+    };
+
+    const handleOpenNotionImport = () => {
+        setShowNotionImport(true);
+        fetchNotionPages();
+    };
+
+    const handleImportNotionPage = async (pageId: string) => {
+        setIsImporting(true);
+        setError(null);
+        setShowNotionImport(false);
+
+        try {
+            const res = await fetch("/api/dog-walking/admin/newsletter/import-notion", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ notion_page_id: pageId })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to import from Notion");
+            }
+
+            setImportMode("notion");
+            setTitle(data.title || title);
+            setNotionHtml(data.notionHtml);
+            setNotionBlocks(data.blocks);
+            setNotionPageId(data.notion_page_id);
+            setNotionImageCount(data.image_count || 0);
+            setSuccessMessage(`Imported "${data.title}" from Notion (${data.blocks.length} blocks, ${data.image_count} images)`);
+            setTimeout(() => setSuccessMessage(null), 5000);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const handleReimport = async () => {
+        if (notionPageId) {
+            await handleImportNotionPage(notionPageId);
+        }
+    };
+
+    const handleSwitchToEditor = () => {
+        setImportMode("editor");
+        setNotionHtml("");
+        setNotionBlocks([]);
+        setNotionPageId("");
     };
 
     // Welcome block management
@@ -142,7 +257,6 @@ export default function NewsletterPage() {
 
     const removeBlock = (index: number) => {
         if (welcomeBlocks.length === 1) {
-            // Keep at least one block
             setWelcomeBlocks([{ type: "text", content: "" }]);
             return;
         }
@@ -164,6 +278,12 @@ export default function NewsletterPage() {
 
     // Build content object from form state
     const buildContent = (): NewsletterContent => {
+        const monthNames = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+        const contentMonth = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
+
         const selectedMembers = newPackMembers
             .filter(m => m.selected)
             .map(m => ({
@@ -175,9 +295,27 @@ export default function NewsletterPage() {
                 firstServiceDate: m.first_service_date
             }));
 
+        if (importMode === "notion") {
+            return {
+                title,
+                month: contentMonth,
+                source: "notion",
+                notionPageId,
+                notionBlocks,
+                notionHtml,
+                includeNewPackMembers,
+                newPackMembers: includeNewPackMembers ? selectedMembers : [],
+                // These fields are required by the interface but unused in Notion mode
+                packFarewells: "",
+                walkHighlights: { text: "", images: [] },
+                seasonalTips: "",
+                newFeatures: "",
+            };
+        }
+
         return {
             title,
-            month: currentMonth,
+            month: contentMonth,
             welcomeBlocks: welcomeBlocks.filter(b => b.content.trim() !== ""),
             newPackMembers: selectedMembers,
             packFarewells,
@@ -229,7 +367,65 @@ export default function NewsletterPage() {
     const handlePreview = async () => {
         const content = buildContent();
 
-        // Build welcome blocks HTML
+        if (importMode === "notion" && notionHtml) {
+            // Notion mode preview
+            const selectedMembers = newPackMembers
+                .filter(m => m.selected)
+                .map(m => ({
+                    dogName: m.dog_name,
+                    breed: m.breed,
+                    imageFilename: m.image_filename,
+                }));
+
+            let newMembersPreview = "";
+            if (includeNewPackMembers && selectedMembers.length > 0) {
+                newMembersPreview = `
+                    <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <h3 style="color: #1e40af; margin-top: 0;">🐕 Welcome to the Pack!</h3>
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
+                            ${selectedMembers.map(m => `
+                                <div style="text-align: center;">
+                                    ${m.imageFilename ? `
+                                        <img src="/api/dog-images/${m.imageFilename}"
+                                             style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6;">
+                                    ` : `
+                                        <div style="width: 150px; height: 150px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; font-size: 48px;">
+                                            🐕
+                                        </div>
+                                    `}
+                                    <p style="margin: 8px 0 2px; font-weight: bold;">${m.dogName}</p>
+                                    <p style="margin: 0; color: #6b7280; font-size: 13px;">${m.breed}</p>
+                                </div>
+                            `).join("")}
+                        </div>
+                    </div>
+                `;
+            }
+
+            const previewContent = `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #fff;">
+                    <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); padding: 20px; text-align: center; color: white; border-radius: 8px 8px 0 0;">
+                        <h1 style="margin: 0;">🐕 Hunter's Hounds</h1>
+                        <p style="margin: 5px 0 0;">${content.month} Newsletter</p>
+                    </div>
+                    <div style="padding: 20px 30px; border: 1px solid #e5e7eb; border-top: none;">
+                        ${notionHtml}
+                        ${newMembersPreview}
+                    </div>
+                    <div style="background: #f9fafb; padding: 15px; text-align: center; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                        <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                            <a href="#" style="color: #9ca3af;">Unsubscribe from Hunter's Pack newsletter</a>
+                        </p>
+                    </div>
+                </div>
+            `;
+
+            setPreviewHtml(previewContent);
+            setShowPreview(true);
+            return;
+        }
+
+        // Editor mode preview (existing logic)
         const welcomeHtml = (content.welcomeBlocks || []).map(block => {
             if (block.type === "text") {
                 return `<p style="white-space: pre-line; margin: 0 0 15px;">${block.content}</p>`;
@@ -424,20 +620,36 @@ export default function NewsletterPage() {
     const handleLoadNewsletter = (newsletter: Newsletter) => {
         setCurrentNewsletterId(newsletter.id);
         setTitle(newsletter.content.title || newsletter.title);
-        setWelcomeBlocks(convertLegacyContent(newsletter.content));
-        setPackFarewells(newsletter.content.packFarewells || "");
-        setWalkHighlightsText(newsletter.content.walkHighlights?.text || "");
-        setWalkHighlightImages([
-            ...(newsletter.content.walkHighlights?.images || []),
-            "", "", "", ""
-        ].slice(0, 4));
-        setSeasonalTips(newsletter.content.seasonalTips || "");
-        setNewFeatures(newsletter.content.newFeatures || "");
+
+        if (newsletter.content.source === "notion") {
+            // Restore Notion mode
+            setImportMode("notion");
+            setNotionHtml(newsletter.content.notionHtml || "");
+            setNotionBlocks(newsletter.content.notionBlocks || []);
+            setNotionPageId(newsletter.content.notionPageId || "");
+            setIncludeNewPackMembers(newsletter.content.includeNewPackMembers !== false);
+        } else {
+            // Restore editor mode
+            setImportMode("editor");
+            setNotionHtml("");
+            setNotionBlocks([]);
+            setNotionPageId("");
+            setWelcomeBlocks(convertLegacyContent(newsletter.content));
+            setPackFarewells(newsletter.content.packFarewells || "");
+            setWalkHighlightsText(newsletter.content.walkHighlights?.text || "");
+            setWalkHighlightImages([
+                ...(newsletter.content.walkHighlights?.images || []),
+                "", "", "", ""
+            ].slice(0, 4));
+            setSeasonalTips(newsletter.content.seasonalTips || "");
+            setNewFeatures(newsletter.content.newFeatures || "");
+        }
     };
 
     // Clear form for new newsletter
     const handleNewNewsletter = () => {
         setCurrentNewsletterId(null);
+        setImportMode("editor");
         setTitle(`${currentMonth} - Hunter's Pack News`);
         setWelcomeBlocks([{ type: "text", content: "" }]);
         setPackFarewells("");
@@ -445,6 +657,12 @@ export default function NewsletterPage() {
         setWalkHighlightImages(["", "", "", ""]);
         setSeasonalTips("");
         setNewFeatures("");
+        setNotionHtml("");
+        setNotionBlocks([]);
+        setNotionPageId("");
+        setIncludeNewPackMembers(true);
+        setSelectedYear(new Date().getFullYear());
+        setSelectedMonth(new Date().getMonth() + 1);
         setNewPackMembers(prev => prev.map(m => ({ ...m, selected: true })));
     };
 
@@ -530,6 +748,10 @@ export default function NewsletterPage() {
             backgroundColor: "#059669",
             color: "#fff",
         } as React.CSSProperties,
+        notionButton: {
+            backgroundColor: "#7c3aed",
+            color: "#fff",
+        } as React.CSSProperties,
         sidebar: {
             position: "sticky" as const,
             top: "20px",
@@ -608,6 +830,13 @@ export default function NewsletterPage() {
                         New Newsletter
                     </button>
                     <button
+                        onClick={handleOpenNotionImport}
+                        disabled={isImporting}
+                        style={{ ...styles.button, ...styles.notionButton }}
+                    >
+                        {isImporting ? "Importing..." : "Import from Notion"}
+                    </button>
+                    <button
                         onClick={handlePreview}
                         style={{ ...styles.button, ...styles.secondaryButton }}
                     >
@@ -642,266 +871,450 @@ export default function NewsletterPage() {
                         />
                     </div>
 
-                    {/* Welcome Message - Block-based */}
-                    <div style={styles.card}>
-                        <label style={styles.sectionTitle}>👋 Welcome Message</label>
-                        <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "15px" }}>
-                            Add text and images to create your welcome section. Images should be placed in /home/hunter-dev/newsletter-images/
-                        </p>
-
-                        {welcomeBlocks.map((block, index) => (
-                            <div key={index} style={styles.blockContainer}>
-                                <div style={styles.blockHeader}>
-                                    <span style={styles.blockType}>
-                                        {block.type === "text" ? "📝 Text Block" : "🖼️ Image Block"}
-                                    </span>
-                                    <div style={styles.blockControls}>
+                    {importMode === "notion" ? (
+                        <>
+                            {/* Notion Content Preview */}
+                            <div style={styles.card}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                                    <label style={{ ...styles.sectionTitle, marginBottom: 0 }}>
+                                        <span style={{
+                                            display: "inline-block",
+                                            width: "8px",
+                                            height: "8px",
+                                            borderRadius: "50%",
+                                            backgroundColor: "#7c3aed",
+                                            marginRight: "8px",
+                                        }} />
+                                        Imported from Notion
+                                    </label>
+                                    <div style={{ display: "flex", gap: "8px" }}>
                                         <button
-                                            onClick={() => moveBlock(index, "up")}
-                                            disabled={index === 0}
+                                            onClick={handleReimport}
+                                            disabled={isImporting}
                                             style={{
-                                                ...styles.iconButton,
-                                                opacity: index === 0 ? 0.5 : 1
+                                                ...styles.button,
+                                                ...styles.notionButton,
+                                                padding: "6px 14px",
+                                                fontSize: "13px",
+                                                opacity: isImporting ? 0.5 : 1,
                                             }}
-                                            title="Move up"
                                         >
-                                            ↑
+                                            {isImporting ? "Importing..." : "Re-import"}
                                         </button>
                                         <button
-                                            onClick={() => moveBlock(index, "down")}
-                                            disabled={index === welcomeBlocks.length - 1}
+                                            onClick={handleSwitchToEditor}
                                             style={{
-                                                ...styles.iconButton,
-                                                opacity: index === welcomeBlocks.length - 1 ? 0.5 : 1
+                                                ...styles.button,
+                                                ...styles.secondaryButton,
+                                                padding: "6px 14px",
+                                                fontSize: "13px",
                                             }}
-                                            title="Move down"
                                         >
-                                            ↓
-                                        </button>
-                                        <button
-                                            onClick={() => removeBlock(index)}
-                                            style={{
-                                                ...styles.iconButton,
-                                                backgroundColor: "#7f1d1d",
-                                                color: "#fecaca"
-                                            }}
-                                            title="Remove block"
-                                        >
-                                            ×
+                                            Use Editor
                                         </button>
                                     </div>
                                 </div>
+                                <p style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "15px" }}>
+                                    {notionBlocks.length} blocks, {notionImageCount} images imported
+                                </p>
+                                <div
+                                    style={{
+                                        backgroundColor: "#fff",
+                                        borderRadius: "8px",
+                                        padding: "20px 24px",
+                                        maxHeight: "600px",
+                                        overflowY: "auto",
+                                    }}
+                                    dangerouslySetInnerHTML={{ __html: notionHtml }}
+                                />
+                            </div>
 
-                                {block.type === "text" ? (
-                                    <textarea
-                                        value={block.content}
-                                        onChange={e => updateBlock(index, { content: e.target.value })}
-                                        style={{ ...styles.textarea, minHeight: "80px" }}
-                                        placeholder="Write your text here..."
+                            {/* New Pack Members Toggle */}
+                            <div style={styles.card}>
+                                <label style={{
+                                    ...styles.sectionTitle,
+                                    cursor: "pointer",
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={includeNewPackMembers}
+                                        onChange={e => setIncludeNewPackMembers(e.target.checked)}
+                                        style={{ marginRight: "4px" }}
                                     />
-                                ) : (
+                                    🐕 Include New Pack Members
+                                    <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px", marginLeft: "8px" }}>
+                                        (auto-generated from bookings)
+                                    </span>
+                                </label>
+                                {includeNewPackMembers && (
                                     <>
-                                        <div style={{ marginBottom: "8px" }}>
-                                            <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "4px" }}>
-                                                Image filename (e.g., hunter_snow_jan2025.jpg)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={block.content}
-                                                onChange={e => updateBlock(index, { content: e.target.value })}
-                                                style={styles.input}
-                                                placeholder="filename.jpg"
-                                            />
+                                        <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+                                            <select
+                                                value={selectedMonth}
+                                                onChange={e => setSelectedMonth(parseInt(e.target.value))}
+                                                style={{ ...styles.input, width: "auto", flex: 1 }}
+                                            >
+                                                {[
+                                                    "January", "February", "March", "April", "May", "June",
+                                                    "July", "August", "September", "October", "November", "December"
+                                                ].map((name, i) => (
+                                                    <option key={i + 1} value={i + 1}>{name}</option>
+                                                ))}
+                                            </select>
+                                            <select
+                                                value={selectedYear}
+                                                onChange={e => setSelectedYear(parseInt(e.target.value))}
+                                                style={{ ...styles.input, width: "auto" }}
+                                            >
+                                                {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                                                    <option key={y} value={y}>{y}</option>
+                                                ))}
+                                            </select>
                                         </div>
-                                        <div>
-                                            <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "4px" }}>
-                                                Caption (optional)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={block.caption || ""}
-                                                onChange={e => updateBlock(index, { caption: e.target.value })}
-                                                style={styles.input}
-                                                placeholder="Hunter enjoying the first snow of the year!"
-                                            />
-                                        </div>
-                                        {block.content && (
-                                            <div style={{ marginTop: "10px", textAlign: "center" }}>
-                                                <img
-                                                    src={`/api/newsletter-images/${block.content}`}
-                                                    alt={block.caption || "Preview"}
-                                                    style={{
-                                                        maxWidth: "100%",
-                                                        maxHeight: "150px",
-                                                        borderRadius: "6px",
-                                                        border: "1px solid #334155"
-                                                    }}
-                                                    onError={(e) => {
-                                                        (e.target as HTMLImageElement).style.display = "none";
-                                                    }}
-                                                />
+                                        {newPackMembers.length === 0 ? (
+                                            <p style={{ color: "#64748b", fontSize: "14px" }}>No new dogs this month</p>
+                                        ) : (
+                                            <div>
+                                                {newPackMembers.map(dog => (
+                                                    <label
+                                                        key={dog.dog_id}
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: "12px",
+                                                            padding: "10px",
+                                                            backgroundColor: dog.selected ? "#1e3a5f" : "#0f172a",
+                                                            borderRadius: "6px",
+                                                            marginBottom: "8px",
+                                                            cursor: "pointer",
+                                                        }}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={dog.selected}
+                                                            onChange={e => {
+                                                                setNewPackMembers(prev =>
+                                                                    prev.map(m =>
+                                                                        m.dog_id === dog.dog_id
+                                                                            ? { ...m, selected: e.target.checked }
+                                                                            : m
+                                                                    )
+                                                                );
+                                                            }}
+                                                        />
+                                                        {dog.image_filename && (
+                                                            <img
+                                                                src={`/api/dog-images/${dog.image_filename}`}
+                                                                alt={dog.dog_name}
+                                                                style={{
+                                                                    width: "40px",
+                                                                    height: "40px",
+                                                                    borderRadius: "50%",
+                                                                    objectFit: "cover",
+                                                                }}
+                                                            />
+                                                        )}
+                                                        <div>
+                                                            <div style={{ color: "#fff", fontWeight: "600" }}>{dog.dog_name}</div>
+                                                            <div style={{ color: "#94a3b8", fontSize: "12px" }}>
+                                                                {dog.breed} • First walk: {format(new Date(dog.first_service_date), "MMM d")}
+                                                            </div>
+                                                        </div>
+                                                    </label>
+                                                ))}
                                             </div>
                                         )}
                                     </>
                                 )}
                             </div>
-                        ))}
+                        </>
+                    ) : (
+                        <>
+                            {/* Editor Mode - Welcome Message */}
+                            <div style={styles.card}>
+                                <label style={styles.sectionTitle}>👋 Welcome Message</label>
+                                <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "15px" }}>
+                                    Add text and images to create your welcome section. Images should be placed in /home/hunter-dev/newsletter-images/
+                                </p>
 
-                        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                            <button
-                                onClick={addTextBlock}
-                                style={{
-                                    ...styles.button,
-                                    ...styles.secondaryButton,
-                                    flex: 1,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: "6px"
-                                }}
-                            >
-                                📝 Add Text Block
-                            </button>
-                            <button
-                                onClick={addImageBlock}
-                                style={{
-                                    ...styles.button,
-                                    ...styles.secondaryButton,
-                                    flex: 1,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: "6px"
-                                }}
-                            >
-                                🖼️ Add Image Block
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* New Pack Members */}
-                    <div style={styles.card}>
-                        <label style={styles.sectionTitle}>
-                            🐕 New Pack Members
-                            <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px", marginLeft: "8px" }}>
-                                (First service this month - photos will display at 150px)
-                            </span>
-                        </label>
-                        {newPackMembers.length === 0 ? (
-                            <p style={{ color: "#64748b", fontSize: "14px" }}>No new dogs this month</p>
-                        ) : (
-                            <div>
-                                {newPackMembers.map(dog => (
-                                    <label
-                                        key={dog.dog_id}
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: "12px",
-                                            padding: "10px",
-                                            backgroundColor: dog.selected ? "#1e3a5f" : "#0f172a",
-                                            borderRadius: "6px",
-                                            marginBottom: "8px",
-                                            cursor: "pointer",
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={dog.selected}
-                                            onChange={e => {
-                                                setNewPackMembers(prev =>
-                                                    prev.map(m =>
-                                                        m.dog_id === dog.dog_id
-                                                            ? { ...m, selected: e.target.checked }
-                                                            : m
-                                                    )
-                                                );
-                                            }}
-                                        />
-                                        {dog.image_filename && (
-                                            <img
-                                                src={`/api/dog-images/${dog.image_filename}`}
-                                                alt={dog.dog_name}
-                                                style={{
-                                                    width: "40px",
-                                                    height: "40px",
-                                                    borderRadius: "50%",
-                                                    objectFit: "cover",
-                                                }}
-                                            />
-                                        )}
-                                        <div>
-                                            <div style={{ color: "#fff", fontWeight: "600" }}>{dog.dog_name}</div>
-                                            <div style={{ color: "#94a3b8", fontSize: "12px" }}>
-                                                {dog.breed} • First walk: {format(new Date(dog.first_service_date), "MMM d")}
+                                {welcomeBlocks.map((block, index) => (
+                                    <div key={index} style={styles.blockContainer}>
+                                        <div style={styles.blockHeader}>
+                                            <span style={styles.blockType}>
+                                                {block.type === "text" ? "📝 Text Block" : "🖼️ Image Block"}
+                                            </span>
+                                            <div style={styles.blockControls}>
+                                                <button
+                                                    onClick={() => moveBlock(index, "up")}
+                                                    disabled={index === 0}
+                                                    style={{
+                                                        ...styles.iconButton,
+                                                        opacity: index === 0 ? 0.5 : 1
+                                                    }}
+                                                    title="Move up"
+                                                >
+                                                    ↑
+                                                </button>
+                                                <button
+                                                    onClick={() => moveBlock(index, "down")}
+                                                    disabled={index === welcomeBlocks.length - 1}
+                                                    style={{
+                                                        ...styles.iconButton,
+                                                        opacity: index === welcomeBlocks.length - 1 ? 0.5 : 1
+                                                    }}
+                                                    title="Move down"
+                                                >
+                                                    ↓
+                                                </button>
+                                                <button
+                                                    onClick={() => removeBlock(index)}
+                                                    style={{
+                                                        ...styles.iconButton,
+                                                        backgroundColor: "#7f1d1d",
+                                                        color: "#fecaca"
+                                                    }}
+                                                    title="Remove block"
+                                                >
+                                                    ×
+                                                </button>
                                             </div>
                                         </div>
-                                    </label>
+
+                                        {block.type === "text" ? (
+                                            <textarea
+                                                value={block.content}
+                                                onChange={e => updateBlock(index, { content: e.target.value })}
+                                                style={{ ...styles.textarea, minHeight: "80px" }}
+                                                placeholder="Write your text here..."
+                                            />
+                                        ) : (
+                                            <>
+                                                <div style={{ marginBottom: "8px" }}>
+                                                    <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "4px" }}>
+                                                        Image filename (e.g., hunter_snow_jan2025.jpg)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={block.content}
+                                                        onChange={e => updateBlock(index, { content: e.target.value })}
+                                                        style={styles.input}
+                                                        placeholder="filename.jpg"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "4px" }}>
+                                                        Caption (optional)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={block.caption || ""}
+                                                        onChange={e => updateBlock(index, { caption: e.target.value })}
+                                                        style={styles.input}
+                                                        placeholder="Hunter enjoying the first snow of the year!"
+                                                    />
+                                                </div>
+                                                {block.content && (
+                                                    <div style={{ marginTop: "10px", textAlign: "center" }}>
+                                                        <img
+                                                            src={`/api/newsletter-images/${block.content}`}
+                                                            alt={block.caption || "Preview"}
+                                                            style={{
+                                                                maxWidth: "100%",
+                                                                maxHeight: "150px",
+                                                                borderRadius: "6px",
+                                                                border: "1px solid #334155"
+                                                            }}
+                                                            onError={(e) => {
+                                                                (e.target as HTMLImageElement).style.display = "none";
+                                                            }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+
+                                <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                                    <button
+                                        onClick={addTextBlock}
+                                        style={{
+                                            ...styles.button,
+                                            ...styles.secondaryButton,
+                                            flex: 1,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: "6px"
+                                        }}
+                                    >
+                                        📝 Add Text Block
+                                    </button>
+                                    <button
+                                        onClick={addImageBlock}
+                                        style={{
+                                            ...styles.button,
+                                            ...styles.secondaryButton,
+                                            flex: 1,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            gap: "6px"
+                                        }}
+                                    >
+                                        🖼️ Add Image Block
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* New Pack Members */}
+                            <div style={styles.card}>
+                                <label style={styles.sectionTitle}>
+                                    🐕 New Pack Members
+                                    <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px", marginLeft: "8px" }}>
+                                        (First service this month - photos will display at 150px)
+                                    </span>
+                                </label>
+                                <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+                                    <select
+                                        value={selectedMonth}
+                                        onChange={e => setSelectedMonth(parseInt(e.target.value))}
+                                        style={{ ...styles.input, width: "auto", flex: 1 }}
+                                    >
+                                        {[
+                                            "January", "February", "March", "April", "May", "June",
+                                            "July", "August", "September", "October", "November", "December"
+                                        ].map((name, i) => (
+                                            <option key={i + 1} value={i + 1}>{name}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedYear}
+                                        onChange={e => setSelectedYear(parseInt(e.target.value))}
+                                        style={{ ...styles.input, width: "auto" }}
+                                    >
+                                        {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
+                                            <option key={y} value={y}>{y}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {newPackMembers.length === 0 ? (
+                                    <p style={{ color: "#64748b", fontSize: "14px" }}>No new dogs this month</p>
+                                ) : (
+                                    <div>
+                                        {newPackMembers.map(dog => (
+                                            <label
+                                                key={dog.dog_id}
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "12px",
+                                                    padding: "10px",
+                                                    backgroundColor: dog.selected ? "#1e3a5f" : "#0f172a",
+                                                    borderRadius: "6px",
+                                                    marginBottom: "8px",
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={dog.selected}
+                                                    onChange={e => {
+                                                        setNewPackMembers(prev =>
+                                                            prev.map(m =>
+                                                                m.dog_id === dog.dog_id
+                                                                    ? { ...m, selected: e.target.checked }
+                                                                    : m
+                                                            )
+                                                        );
+                                                    }}
+                                                />
+                                                {dog.image_filename && (
+                                                    <img
+                                                        src={`/api/dog-images/${dog.image_filename}`}
+                                                        alt={dog.dog_name}
+                                                        style={{
+                                                            width: "40px",
+                                                            height: "40px",
+                                                            borderRadius: "50%",
+                                                            objectFit: "cover",
+                                                        }}
+                                                    />
+                                                )}
+                                                <div>
+                                                    <div style={{ color: "#fff", fontWeight: "600" }}>{dog.dog_name}</div>
+                                                    <div style={{ color: "#94a3b8", fontSize: "12px" }}>
+                                                        {dog.breed} • First walk: {format(new Date(dog.first_service_date), "MMM d")}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Pack Farewells */}
+                            <div style={styles.card}>
+                                <label style={styles.sectionTitle}>👋 Pack Farewells</label>
+                                <textarea
+                                    value={packFarewells}
+                                    onChange={e => setPackFarewells(e.target.value)}
+                                    style={styles.textarea}
+                                    placeholder="We say goodbye to Buster who moved to Scotland with his family. We'll miss his energetic spirit on our morning walks!"
+                                />
+                            </div>
+
+                            {/* Walk Highlights */}
+                            <div style={styles.card}>
+                                <label style={styles.sectionTitle}>📸 Walk Highlights</label>
+                                <textarea
+                                    value={walkHighlightsText}
+                                    onChange={e => setWalkHighlightsText(e.target.value)}
+                                    style={{ ...styles.textarea, marginBottom: "12px" }}
+                                    placeholder="This month we explored Hampstead Heath and discovered some beautiful new trails..."
+                                />
+                                <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "8px" }}>
+                                    Image filenames from /newsletter-images/ (up to 4)
+                                </label>
+                                {walkHighlightImages.map((filename, idx) => (
+                                    <input
+                                        key={idx}
+                                        type="text"
+                                        value={filename}
+                                        onChange={e => {
+                                            const newImages = [...walkHighlightImages];
+                                            newImages[idx] = e.target.value;
+                                            setWalkHighlightImages(newImages);
+                                        }}
+                                        style={{ ...styles.input, marginBottom: "8px" }}
+                                        placeholder={`Image filename ${idx + 1} (e.g., walk_highlight_${idx + 1}.jpg)`}
+                                    />
                                 ))}
                             </div>
-                        )}
-                    </div>
 
-                    {/* Pack Farewells */}
-                    <div style={styles.card}>
-                        <label style={styles.sectionTitle}>👋 Pack Farewells</label>
-                        <textarea
-                            value={packFarewells}
-                            onChange={e => setPackFarewells(e.target.value)}
-                            style={styles.textarea}
-                            placeholder="We say goodbye to Buster who moved to Scotland with his family. We'll miss his energetic spirit on our morning walks!"
-                        />
-                    </div>
+                            {/* Seasonal Tips */}
+                            <div style={styles.card}>
+                                <label style={styles.sectionTitle}>🌿 Seasonal Tips</label>
+                                <textarea
+                                    value={seasonalTips}
+                                    onChange={e => setSeasonalTips(e.target.value)}
+                                    style={styles.textarea}
+                                    placeholder="With the cold weather, remember to check your dog's paws for ice and salt after walks..."
+                                />
+                            </div>
 
-                    {/* Walk Highlights */}
-                    <div style={styles.card}>
-                        <label style={styles.sectionTitle}>📸 Walk Highlights</label>
-                        <textarea
-                            value={walkHighlightsText}
-                            onChange={e => setWalkHighlightsText(e.target.value)}
-                            style={{ ...styles.textarea, marginBottom: "12px" }}
-                            placeholder="This month we explored Hampstead Heath and discovered some beautiful new trails..."
-                        />
-                        <label style={{ color: "#94a3b8", fontSize: "12px", display: "block", marginBottom: "8px" }}>
-                            Image filenames from /newsletter-images/ (up to 4)
-                        </label>
-                        {walkHighlightImages.map((filename, idx) => (
-                            <input
-                                key={idx}
-                                type="text"
-                                value={filename}
-                                onChange={e => {
-                                    const newImages = [...walkHighlightImages];
-                                    newImages[idx] = e.target.value;
-                                    setWalkHighlightImages(newImages);
-                                }}
-                                style={{ ...styles.input, marginBottom: "8px" }}
-                                placeholder={`Image filename ${idx + 1} (e.g., walk_highlight_${idx + 1}.jpg)`}
-                            />
-                        ))}
-                    </div>
-
-                    {/* Seasonal Tips */}
-                    <div style={styles.card}>
-                        <label style={styles.sectionTitle}>🌿 Seasonal Tips</label>
-                        <textarea
-                            value={seasonalTips}
-                            onChange={e => setSeasonalTips(e.target.value)}
-                            style={styles.textarea}
-                            placeholder="With the cold weather, remember to check your dog's paws for ice and salt after walks..."
-                        />
-                    </div>
-
-                    {/* New Features */}
-                    <div style={styles.card}>
-                        <label style={styles.sectionTitle}>✨ What's New</label>
-                        <textarea
-                            value={newFeatures}
-                            onChange={e => setNewFeatures(e.target.value)}
-                            style={styles.textarea}
-                            placeholder="We've added new features to your customer dashboard..."
-                        />
-                    </div>
+                            {/* New Features */}
+                            <div style={styles.card}>
+                                <label style={styles.sectionTitle}>✨ What's New</label>
+                                <textarea
+                                    value={newFeatures}
+                                    onChange={e => setNewFeatures(e.target.value)}
+                                    style={styles.textarea}
+                                    placeholder="We've added new features to your customer dashboard..."
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Sidebar */}
@@ -977,7 +1390,16 @@ export default function NewsletterPage() {
                                             cursor: "pointer",
                                         }}
                                     >
-                                        <div style={{ color: "#fff", fontSize: "13px", fontWeight: "500" }}>
+                                        <div style={{ color: "#fff", fontSize: "13px", fontWeight: "500", display: "flex", alignItems: "center", gap: "6px" }}>
+                                            {nl.content.source === "notion" && (
+                                                <span style={{
+                                                    display: "inline-block",
+                                                    width: "6px",
+                                                    height: "6px",
+                                                    borderRadius: "50%",
+                                                    backgroundColor: "#7c3aed",
+                                                }} />
+                                            )}
                                             {nl.title}
                                         </div>
                                         <div style={{ color: "#64748b", fontSize: "11px", marginTop: "4px" }}>
@@ -996,6 +1418,115 @@ export default function NewsletterPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Notion Import Modal */}
+            {showNotionImport && (
+                <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(0,0,0,0.8)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 1000,
+                        padding: "20px",
+                    }}
+                    onClick={() => setShowNotionImport(false)}
+                >
+                    <div
+                        style={{
+                            backgroundColor: "#1e293b",
+                            borderRadius: "12px",
+                            maxWidth: "500px",
+                            maxHeight: "70vh",
+                            width: "100%",
+                            overflow: "hidden",
+                            border: "1px solid #334155",
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div style={{
+                            padding: "20px",
+                            borderBottom: "1px solid #334155",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                        }}>
+                            <h3 style={{ margin: 0, color: "#fff", fontSize: "18px" }}>Import from Notion</h3>
+                            <button
+                                onClick={() => setShowNotionImport(false)}
+                                style={{
+                                    ...styles.button,
+                                    ...styles.secondaryButton,
+                                    padding: "6px 12px",
+                                }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div style={{ padding: "20px", overflowY: "auto", maxHeight: "calc(70vh - 70px)" }}>
+                            {isLoadingNotionPages ? (
+                                <p style={{ color: "#94a3b8", textAlign: "center", padding: "30px 0" }}>
+                                    Loading Notion pages...
+                                </p>
+                            ) : notionPages.length === 0 ? (
+                                <div style={{ textAlign: "center", padding: "30px 0" }}>
+                                    <p style={{ color: "#94a3b8", marginBottom: "10px" }}>No newsletter pages found.</p>
+                                    <p style={{ color: "#64748b", fontSize: "13px" }}>
+                                        Create a page in your Notion newsletter database and share it with your integration.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <p style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "15px" }}>
+                                        Select a page to import as your newsletter content:
+                                    </p>
+                                    {notionPages.map(page => (
+                                        <div
+                                            key={page.id}
+                                            onClick={() => handleImportNotionPage(page.id)}
+                                            style={{
+                                                padding: "14px",
+                                                backgroundColor: "#0f172a",
+                                                borderRadius: "8px",
+                                                marginBottom: "10px",
+                                                cursor: "pointer",
+                                                border: "1px solid #334155",
+                                                transition: "border-color 0.2s",
+                                            }}
+                                            onMouseEnter={e => (e.currentTarget.style.borderColor = "#7c3aed")}
+                                            onMouseLeave={e => (e.currentTarget.style.borderColor = "#334155")}
+                                        >
+                                            <div style={{ color: "#fff", fontSize: "15px", fontWeight: "500", marginBottom: "6px" }}>
+                                                {page.title}
+                                            </div>
+                                            <div style={{ display: "flex", gap: "12px", fontSize: "12px" }}>
+                                                <span style={{
+                                                    color: page.status === "Ready" ? "#10b981" : page.status === "Sent" ? "#6b7280" : "#f59e0b",
+                                                }}>
+                                                    {page.status}
+                                                </span>
+                                                {page.month && (
+                                                    <span style={{ color: "#64748b" }}>
+                                                        {page.month}
+                                                    </span>
+                                                )}
+                                                <span style={{ color: "#64748b" }}>
+                                                    Edited {format(new Date(page.last_edited), "MMM d, HH:mm")}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Preview Modal */}
             {showPreview && (

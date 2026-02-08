@@ -848,6 +848,12 @@ export interface NewsletterContent {
     };
     seasonalTips: string;
     newFeatures: string;
+    // Notion-sourced content
+    source?: 'editor' | 'notion';
+    notionPageId?: string;
+    notionBlocks?: any[];
+    notionHtml?: string;
+    includeNewPackMembers?: boolean;
 }
 
 /**
@@ -1043,6 +1049,9 @@ export function generateRecurringBookingEmail(data: RecurringBookingEmailData): 
 }
 
 export function generateNewsletterEmail(content: NewsletterContent): string {
+    if (content.source === 'notion' && content.notionHtml) {
+        return generateNotionNewsletterEmail(content);
+    }
     const { title, month, welcomeMessage, welcomeBlocks, packFarewells, walkHighlights, seasonalTips, newFeatures } = content;
 
     // Normalize pack members to handle both camelCase and snake_case property names
@@ -1227,4 +1236,90 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
     `;
 }
 
+function generateNotionNewsletterEmail(content: NewsletterContent): string {
+    const { title, month, notionHtml } = content;
 
+    // Build New Pack Members section (reused from editor mode)
+    const newPackMembers = (content.newPackMembers || []).map((dog: any) => ({
+        dogId: dog.dogId || dog.dog_id,
+        dogName: dog.dogName || dog.dog_name,
+        breed: dog.breed || dog.dog_breed,
+        ownerName: dog.ownerName || dog.owner_name,
+        imageFilename: dog.imageFilename || dog.image_filename,
+        firstServiceDate: dog.firstServiceDate || dog.first_service_date,
+    }));
+
+    let newMembersHtml = '';
+    if (content.includeNewPackMembers !== false && newPackMembers.length > 0) {
+        const memberCards = newPackMembers.map(dog => `
+            <div style="display: inline-block; width: 180px; text-align: center; margin: 10px; vertical-align: top;">
+                ${dog.imageFilename ? `
+                    <img src="https://hunters-hounds.london/api/dog-images/${dog.imageFilename}"
+                         alt="${dog.dogName}"
+                         style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 10px;">
+                ` : `
+                    <div style="width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #60a5fa); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center;">
+                        <span style="font-size: 48px;">&#128021;</span>
+                    </div>
+                `}
+                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${dog.dogName}</div>
+                <div style="color: #6b7280; font-size: 13px;">${dog.breed}</div>
+            </div>
+        `).join('');
+
+        newMembersHtml = `
+            <div style="margin: 30px 0; padding: 25px; background-color: #f0f9ff; border-radius: 12px;">
+                <h2 style="color: #1e40af; margin: 0 0 20px 0; font-size: 20px;">&#128021; Welcome to the Pack!</h2>
+                <p style="color: #4b5563; margin: 0 0 20px 0;">
+                    We're excited to welcome ${newPackMembers.length === 1 ? 'a new member' : `${newPackMembers.length} new members`} to Hunter's Hounds this month!
+                </p>
+                <div style="text-align: center;">
+                    ${memberCards}
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">&#128021; Hunter's Hounds</h1>
+                <p style="color: #bfdbfe; margin: 10px 0 0 0; font-size: 16px;">${month} Newsletter</p>
+            </div>
+
+            <!-- Notion Content -->
+            <div style="padding: 30px;">
+                ${notionHtml}
+
+                ${newMembersHtml}
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 25px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;">
+                    <strong>Hunter's Hounds</strong><br>
+                    Professional Dog Walking & Pet Care<br>
+                    Phone: 07932749772 | Email: bookings@hunters-hounds.london
+                </p>
+                <p style="color: #9ca3af; font-size: 12px; margin: 15px 0 0 0;">
+                    <a href="{{UNSUBSCRIBE_URL}}" style="color: #9ca3af; text-decoration: underline;">
+                        Unsubscribe from Hunter's Pack newsletter
+                    </a>
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+}

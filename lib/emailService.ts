@@ -124,16 +124,21 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     }
 
     try {
-        await getResend().emails.send({
+        const { data, error } = await getResend().emails.send({
             from: options.from || defaultFrom,
             to: options.to,
             bcc: bccList,
-            subject: options.subject,
+            subject: options.subject.replace(/[\r\n]+/g, ' ').trim(),
             html: options.html,
         });
 
+        if (error) {
+            console.error("[Email Service] Resend API error:", error);
+            throw new Error(`Resend API error: ${error.message || JSON.stringify(error)}`);
+        }
+
         const recipientList = Array.isArray(options.to) ? options.to.join(', ') : options.to;
-        console.log(`[Email Service] Email sent successfully to: ${recipientList}`);
+        console.log(`[Email Service] Email sent successfully to: ${recipientList} (id: ${data?.id})`);
     } catch (error) {
         console.error("[Email Service] Failed to send email:", error);
         throw error; // Re-throw to maintain existing error handling behavior

@@ -1,14 +1,9 @@
 // app/api/briefings/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { Client } from '@notionhq/client'
 import { Pool } from 'pg';
 import { getRedisService, BriefingData } from '../../../lib/redis';
-
-const notion = new Client({
-    auth: process.env.NOTION_API_KEY,
-    timeoutMs: 20000
-});
+import { parseNotionBlocks, getPlainText, notion } from '@/lib/notionParser';
 
 const pool = new Pool({
     host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'postgres',
@@ -21,10 +16,6 @@ const pool = new Pool({
 const redis = getRedisService();
 
 // --- HELPER FUNCTIONS ---
-function getPlainText(richText: any[]): string {
-    if (!richText || !Array.isArray(richText)) return '';
-    return richText.map(item => item.plain_text || '').join('');
-}
 function getTitle(titleProperty: any): string {
     if (!titleProperty || !titleProperty.title) return '';
     return titleProperty.title.map((item: any) => item.plain_text || '').join('');
@@ -41,153 +32,65 @@ function getDateValue(dateProperty: any): string {
     if (!dateProperty || !dateProperty.date) return '';
     return dateProperty.date.start || '';
 }
-function parseRichText(richText: any[]): any[] {
-    if (!richText || !Array.isArray(richText)) return [];
-    return richText.map(item => ({
-        type: 'text',
-        text: item.plain_text || item.text?.content || '',
-        annotations: item.annotations || {
-            bold: false,
-            italic: false,
-            strikethrough: false,
-            underline: false,
-            code: false,
-            color: 'default'
-        },
-        href: item.href || item.text?.link?.url || null
-    })).filter(item => item.text !== ''); // Remove empty text items
-}
 
-// --- NOTION BLOCK PARSING ---
-async function parseNotionBlocks(pageId: string): Promise<any[]> {
-    const allBlocks: any[] = [];
-    let cursor: string | undefined = undefined;
-
-    do {
-        const response: any = await notion.blocks.children.list({
-            block_id: pageId,
-            start_cursor: cursor,
-            page_size: 100
-        });
-        allBlocks.push(...response.results);
-        cursor = response.next_cursor || undefined;
-    } while (cursor);
-
-    const childrenMap: Record<string, any[]> = {};
-    const topLevelBlocks: any[] = [];
-
-    for (const block of allBlocks) {
-        if (block.has_children && block.type !== 'column_list' && block.type !== 'table') {
-            const childCursor: string | undefined = undefined;
-            const childBlocks: any[] = [];
-            let childCursorLoop = childCursor;
-            do {
-                const childResponse: any = await notion.blocks.children.list({
-                    block_id: block.id,
-                    start_cursor: childCursorLoop,
-                    page_size: 100
-                });
-                childBlocks.push(...childResponse.results);
-                childCursorLoop = childResponse.next_cursor || undefined;
-            } while (childCursorLoop);
-
-            childrenMap[block.id] = childBlocks;
-        }
-    }
-
-    for (const block of allBlocks) {
-        const parentId = (block as any).parent?.block_id;
-        if (!parentId || !allBlocks.some(b => b.id === parentId)) {
-            topLevelBlocks.push(block);
-        }
-    }
-
-    function sortTableByPerformance(tableBlock: any): any {
-        if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
-            return tableBlock;
-        }
-        const hasHeader = tableBlock.content?.hasColumnHeader;
-        const dataRowsStartIndex = hasHeader ? 1 : 0;
-        if (tableBlock.children.length <= dataRowsStartIndex) {
-            return tableBlock;
-        }
-        const findPerfColumn = (row: any): number => {
-            const cells = row?.content?.cells;
-            if (!cells) return -1;
-            for (let i = 0; i < cells.length; i++) {
-                const cellText = getPlainText(cells[i]).toLowerCase();
-                if (cellText.includes('%') || cellText.includes('bps')) {
-                    return i;
-                }
-            }
-            return -1;
-        };
-        const cleanAndParse = (cell: any): number => {
-            if (!cell) return NaN;
-            const text = getPlainText(cell);
-            const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
-            return parseFloat(cleanedText);
-        };
-        const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
-        if (changeColumnIndex === -1) {
-            return tableBlock;
-        }
-        const headerRow = hasHeader ? [tableBlock.children[0]] : [];
-        const dataRows = tableBlock.children.slice(dataRowsStartIndex);
-        dataRows.sort((a, b) => {
-            const cellA = a.content?.cells?.[changeColumnIndex];
-            const cellB = b.content?.cells?.[changeColumnIndex];
-            const numA = cleanAndParse(cellA);
-            const numB = cleanAndParse(cellB);
-            if (isNaN(numA) && isNaN(numB)) return 0;
-            if (isNaN(numA)) return 1;
-            if (isNaN(numB)) return -1;
-            return numB - numA;
-        });
-        tableBlock.children = [...headerRow, ...dataRows];
+// --- BRIEFING-SPECIFIC: Sort table rows by performance column ---
+function sortTableByPerformance(tableBlock: any): any {
+    if (tableBlock.type !== 'table' || !tableBlock.children || tableBlock.children.length < 1) {
         return tableBlock;
     }
-
-    const assembleBlocks = (blocks: any[]): any[] => {
-        return blocks.map(block => {
-            const baseBlock = { id: block.id, type: block.type, hasChildren: block.has_children };
-            let children: any[] = [];
-            if (childrenMap[block.id]) {
-                children = assembleBlocks(childrenMap[block.id]);
+    const hasHeader = tableBlock.content?.hasColumnHeader;
+    const dataRowsStartIndex = hasHeader ? 1 : 0;
+    if (tableBlock.children.length <= dataRowsStartIndex) {
+        return tableBlock;
+    }
+    const findPerfColumn = (row: any): number => {
+        const cells = row?.content?.cells;
+        if (!cells) return -1;
+        for (let i = 0; i < cells.length; i++) {
+            const cellText = getPlainText(cells[i]).toLowerCase();
+            if (cellText.includes('%') || cellText.includes('bps')) {
+                return i;
             }
-            let content: any = {};
-            switch (block.type) {
-                case 'paragraph': content = { richText: parseRichText(block.paragraph.rich_text) }; break;
-                case 'heading_1': content = { richText: parseRichText(block.heading_1.rich_text) }; break;
-                case 'heading_2': content = { richText: parseRichText(block.heading_2.rich_text) }; break;
-                case 'heading_3': content = { richText: parseRichText(block.heading_3.rich_text) }; break;
-                case 'bulleted_list_item': content = { richText: parseRichText(block.bulleted_list_item.rich_text) }; break;
-                case 'numbered_list_item': content = { richText: parseRichText(block.numbered_list_item.rich_text) }; break;
-                case 'to_do': content = { richText: parseRichText(block.to_do.rich_text), checked: block.to_do.checked }; break;
-                case 'toggle': content = { richText: parseRichText(block.toggle.rich_text) }; break;
-                case 'code': content = { richText: parseRichText(block.code.rich_text), language: block.code.language }; break;
-                case 'quote': content = { richText: parseRichText(block.quote.rich_text) }; break;
-                case 'callout': content = { richText: parseRichText(block.callout.rich_text), icon: block.callout.icon }; break;
-                case 'divider': content = {}; break;
-                case 'table': content = { tableWidth: block.table.table_width, hasColumnHeader: block.table.has_column_header, hasRowHeader: block.table.has_row_header }; break;
-                case 'table_row': content = { cells: block.table_row?.cells.map((cell: any[]) => parseRichText(cell)) || [] }; break;
-                case 'image': content = { url: block.image.file?.url || block.image.external?.url, caption: parseRichText(block.image.caption || []) }; break;
-                case 'video': content = { url: block.video.file?.url || block.video.external?.url, caption: parseRichText(block.video.caption || []) }; break;
-                case 'file': content = { url: block.file.file?.url || block.file.external?.url, caption: parseRichText(block.file.caption || []) }; break;
-                case 'bookmark': content = { url: block.bookmark.url, caption: parseRichText(block.bookmark.caption || []) }; break;
-                case 'embed': content = { url: block.embed.url, caption: parseRichText(block.embed.caption || []) }; break;
-                case 'column_list': content = {}; break;
-                case 'column': content = {}; break;
-                default: content = { unsupported: true, originalType: block.type }; break;
-            }
-            const parsedBlock = { ...baseBlock, content, children };
-            if (parsedBlock.type === 'table') {
-                return sortTableByPerformance(parsedBlock);
-            }
-            return parsedBlock;
-        });
+        }
+        return -1;
     };
-    return assembleBlocks(topLevelBlocks);
+    const cleanAndParse = (cell: any): number => {
+        if (!cell) return NaN;
+        const text = getPlainText(cell);
+        const cleanedText = text.replace('%', '').replace(/bps/i, '').trim();
+        return parseFloat(cleanedText);
+    };
+    const changeColumnIndex = findPerfColumn(tableBlock.children[dataRowsStartIndex]);
+    if (changeColumnIndex === -1) {
+        return tableBlock;
+    }
+    const headerRow = hasHeader ? [tableBlock.children[0]] : [];
+    const dataRows = tableBlock.children.slice(dataRowsStartIndex);
+    dataRows.sort((a: any, b: any) => {
+        const cellA = a.content?.cells?.[changeColumnIndex];
+        const cellB = b.content?.cells?.[changeColumnIndex];
+        const numA = cleanAndParse(cellA);
+        const numB = cleanAndParse(cellB);
+        if (isNaN(numA) && isNaN(numB)) return 0;
+        if (isNaN(numA)) return 1;
+        if (isNaN(numB)) return -1;
+        return numB - numA;
+    });
+    tableBlock.children = [...headerRow, ...dataRows];
+    return tableBlock;
+}
+
+// Post-process parsed blocks to sort tables by performance
+function postProcessBriefingBlocks(blocks: any[]): any[] {
+    return blocks.map(block => {
+        if (block.type === 'table') {
+            return sortTableByPerformance(block);
+        }
+        if (block.children && block.children.length > 0) {
+            return { ...block, children: postProcessBriefingBlocks(block.children) };
+        }
+        return block;
+    });
 }
 
 /**
@@ -198,7 +101,8 @@ async function backfillBriefingFromNotion(dbId: number, notionPageId: string): P
     console.log(`Backfilling briefing ${dbId} from Notion: ${notionPageId}`);
 
     try {
-        const content = await parseNotionBlocks(notionPageId);
+        const rawContent = await parseNotionBlocks(notionPageId);
+        const content = postProcessBriefingBlocks(rawContent);
         const pageResponse = await notion.pages.retrieve({ page_id: notionPageId });
         const page = pageResponse as any;
 
