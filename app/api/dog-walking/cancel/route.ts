@@ -1,28 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { google } from "googleapis";
-import { Pool } from "pg";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail, sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
+import { getPool } from '@/lib/database';
+import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 // --- Initialization ---
 
 // Database Connection
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
 // Google Calendar
-const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/calendar"],
-});
-const calendar = google.calendar({ version: "v3", auth });
+const calendar = getCalendar();
 
 // --- Helper Types ---
 interface CancelRequest {
@@ -116,7 +106,7 @@ export async function POST(request: NextRequest) {
         // --- 2. Delete Google Calendar Event ---
         if (booking.google_event_id) {
             await calendar.events.delete({
-                calendarId: process.env.GOOGLE_CALENDAR_ID,
+                calendarId: getCalendarId(),
                 eventId: booking.google_event_id,
             });
         }

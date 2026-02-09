@@ -2,27 +2,22 @@
 // This is the updated /app/api/dog-walking/book/route.ts
 
 import { NextResponse, type NextRequest } from "next/server";
-import { google } from "googleapis";
 import { format, differenceInDays, differenceInHours, isSameDay } from "date-fns";
 import { TZDate } from "@date-fns/tz";
-import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
 import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
+import { getPool } from '@/lib/database';
+import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 // --- Database Connection ---
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-});
+const pool = getPool();
 
-// --- Google Calendar Setup ---
-const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/calendar"],
-});
-const calendar = google.calendar({ version: "v3", auth });
+// --- Google Calendar ---
+const calendar = getCalendar();
 
 export async function POST(request: NextRequest) {
     try {
@@ -117,7 +112,7 @@ export async function POST(request: NextRequest) {
                 );
 
                 const calendarEvents = await calendar.events.list({
-                    calendarId: process.env.GOOGLE_CALENDAR_ID,
+                    calendarId: getCalendarId(),
                     timeMin: dayStart.toISOString(),
                     timeMax: dayEnd.toISOString(),
                     singleEvents: true,
@@ -300,7 +295,7 @@ export async function POST(request: NextRequest) {
             const event = generateCalendarEvent(calendarEventData, new Date(start_time), endDateTime);
 
             const calendarResponse = await calendar.events.insert({
-                calendarId: process.env.GOOGLE_CALENDAR_ID,
+                calendarId: getCalendarId(),
                 requestBody: event,
             });
 

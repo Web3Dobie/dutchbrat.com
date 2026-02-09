@@ -1,27 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Pool } from "pg";
-import { google } from "googleapis";
 import { format } from "date-fns";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
 import { getSoloWalkPrice } from "@/lib/pricing";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
+import { getPool } from '@/lib/database';
+import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 // Database Connection
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
 // Google Calendar
-const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/calendar"],
-});
-const calendar = google.calendar({ version: "v3", auth });
+const calendar = getCalendar();
 
 interface ModifyDogsRequest {
     booking_id: number;
@@ -197,7 +187,7 @@ export async function POST(request: NextRequest) {
         if (booking.google_event_id) {
             try {
                 await calendar.events.patch({
-                    calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
+                    calendarId: getCalendarId(),
                     eventId: booking.google_event_id,
                     requestBody: {
                         summary: `${serviceDisplayName} - ${dogNames} (${booking.owner_name})`,

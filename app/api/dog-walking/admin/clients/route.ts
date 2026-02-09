@@ -1,16 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Pool } from "pg";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
+import { getPool } from '@/lib/database';
 
 // Database connection (same as other admin APIs)
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
 interface Dog {
     id: number;

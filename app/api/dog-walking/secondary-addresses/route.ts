@@ -1,10 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Pool } from "pg";
+import { getPool } from '@/lib/database';
 
 // Database connection
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-});
+const pool = getPool();
 
 interface SecondaryAddress {
     id: number;

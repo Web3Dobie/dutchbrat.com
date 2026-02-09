@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { google } from "googleapis";
 import {
     format,
     startOfDay,
@@ -13,17 +12,11 @@ import {
 import {
     TZDate
 } from "@date-fns/tz";
-import { Pool } from "pg";
+import { getPool } from '@/lib/database';
+import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 // --- Database Connection (for exclude_booking_id lookup) ---
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -33,11 +26,8 @@ const TRAVEL_BUFFER_MINUTES = 15;
 const WORKING_HOURS_START = 8;   // 8:00 AM
 const WORKING_HOURS_END = 20;    // 8:00 PM
 
-// --- Authentication ---
-const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
-});
-const calendar = google.calendar({ version: "v3", auth });
+// --- Google Calendar ---
+const calendar = getCalendar();
 
 interface TimeRange {
     start: Date;
@@ -113,7 +103,7 @@ export async function GET(request: NextRequest) {
 
         // 4. Fetch Google Calendar events
         const res = await calendar.events.list({
-            calendarId: process.env.GOOGLE_CALENDAR_ID,
+            calendarId: getCalendarId(),
             timeMin: dayStart.toISOString(),
             timeMax: dayEnd.toISOString(),
             singleEvents: true,

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Pool } from "pg";
+import { getPool } from '@/lib/database';
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail } from "@/lib/emailService";
 import { generateNoShowEmail } from "@/lib/emailTemplates";
@@ -7,15 +7,7 @@ import { format } from "date-fns";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 
-// Database Connection
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
 interface UpdateStatusRequest {
     status: string;

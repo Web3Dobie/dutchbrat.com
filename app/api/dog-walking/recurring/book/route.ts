@@ -1,32 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { google } from "googleapis";
 import { format, parse } from "date-fns";
 import { TZDate } from "@date-fns/tz";
-import { Pool } from "pg";
 import { sendEmail } from "@/lib/emailService";
 import { getSoloWalkPrice, getServicePrice } from "@/lib/pricing";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
 import { generateRecurringBookingEmail } from "@/lib/emailTemplates";
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
+import { getPool } from '@/lib/database';
+import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
 
 // --- Database Connection ---
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
-// --- Google Calendar Setup ---
-const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/calendar"],
-});
-const calendar = google.calendar({ version: "v3", auth });
+// --- Google Calendar ---
+const calendar = getCalendar();
 
 interface BookingDate {
     date: string; // YYYY-MM-DD
@@ -251,7 +241,7 @@ export async function POST(request: NextRequest) {
             const event = generateCalendarEvent(calendarEventData, startDateTime, endDateTime, TIMEZONE);
 
             const calendarResponse = await calendar.events.insert({
-                calendarId: process.env.GOOGLE_CALENDAR_ID,
+                calendarId: getCalendarId(),
                 requestBody: event,
             });
 

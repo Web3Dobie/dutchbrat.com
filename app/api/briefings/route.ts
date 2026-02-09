@@ -1,18 +1,11 @@
 // app/api/briefings/route.ts
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { Pool } from 'pg';
 import { getRedisService, BriefingData } from '../../../lib/redis';
 import { parseNotionBlocks, getPlainText, notion } from '@/lib/notionParser';
+import { getPool } from '@/lib/database';
 
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'postgres',
-    port: parseInt(process.env.POSTGRES_PORT || process.env.DB_PORT || '5432'),
-    database: process.env.POSTGRES_DB || process.env.DB_NAME || 'agents_platform',
-    user: process.env.POSTGRES_USER || process.env.DB_USER || 'hunter_admin',
-    password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD,
-    ssl: false
-});
+const pool = getPool();
 const redis = getRedisService();
 
 // --- HELPER FUNCTIONS ---

@@ -1,23 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { Pool } from "pg";
 import { promises as fs } from "fs";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
 import ExifReader from "exifreader";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
+import { getPool } from '@/lib/database';
 
 const execAsync = promisify(exec);
 
 // Database connection
-const pool = new Pool({
-    host: process.env.POSTGRES_HOST || "postgres",
-    port: parseInt(process.env.POSTGRES_PORT || "5432"),
-    database: process.env.POSTGRES_DB || "agents_platform",
-    user: process.env.POSTGRES_USER || "hunter_admin",
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
+const pool = getPool();
 
 const CLIENT_MEDIA_DIR = "/app/client-media";
 const ORIGINALS_DIR = path.join(CLIENT_MEDIA_DIR, "originals");

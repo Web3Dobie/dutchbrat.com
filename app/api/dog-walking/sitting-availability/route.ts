@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { google } from "googleapis";
 import {
     format,
     startOfDay,
@@ -17,6 +16,7 @@ import {
 import {
     TZDate
 } from "@date-fns/tz";
+import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -26,11 +26,8 @@ const TRAVEL_BUFFER_MINUTES = 15;
 const DOG_SITTING_START_HOUR = 0;   // 00:00
 const DOG_SITTING_END_HOUR = 24;    // 24:00 (end of day)
 
-// --- Authentication ---
-const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
-});
-const calendar = google.calendar({ version: "v3", auth });
+// --- Google Calendar ---
+const calendar = getCalendar();
 
 interface TimeRange {
     start: Date;
@@ -52,7 +49,7 @@ interface AvailabilityResult {
 // Function to get busy events for a date range
 async function getBusyEvents(startDate: Date, endDate: Date) {
     const res = await calendar.events.list({
-        calendarId: process.env.GOOGLE_CALENDAR_ID,
+        calendarId: getCalendarId(),
         timeMin: startDate.toISOString(),
         timeMax: endDate.toISOString(),
         singleEvents: true,
