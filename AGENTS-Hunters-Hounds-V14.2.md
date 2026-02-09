@@ -1507,6 +1507,9 @@ Newsletter images (walk photos, seasonal photos, etc.) are stored on the host an
 ```sql
 newsletter_subscribed BOOLEAN DEFAULT true
 newsletter_unsubscribe_token UUID DEFAULT gen_random_uuid()
+-- Partner independent subscription (added V14.2)
+partner_newsletter_subscribed BOOLEAN DEFAULT true
+partner_newsletter_unsubscribe_token UUID DEFAULT gen_random_uuid()
 ```
 
 **New tables:**
@@ -1566,6 +1569,7 @@ HAVING MIN(b.start_time) >= DATE_TRUNC('month', CURRENT_DATE)
 - **Unsubscribe link**: Every newsletter includes personalized unsubscribe link
 - **Token-based**: Each owner has unique `newsletter_unsubscribe_token` UUID
 - **Public endpoint**: `/newsletter/unsubscribe?token={uuid}` - no auth required
+- **Independent partner subscriptions (V14.2)**: Partner emails have their own `partner_newsletter_subscribed` flag and `partner_newsletter_unsubscribe_token`. Primary and partner can unsubscribe independently without affecting each other. Unsubscribe route checks primary token first, then partner token.
 
 ### Email Template Structure
 ```
@@ -1604,7 +1608,7 @@ HAVING MIN(b.start_time) >= DATE_TRUNC('month', CURRENT_DATE)
 
 ### Technical Notes
 - Uses existing Resend email service
-- 100ms delay between sends to avoid rate limiting
+- 600ms delay between sends to avoid Resend rate limiting (2 req/sec)
 - Newsletter history tracks sent/failed status per recipient
 - Unsubscribe page uses Suspense boundary for `useSearchParams()` (Next.js requirement)
 - Dog images served via `/api/dog-images/` (V11.10 dynamic serving)
@@ -1612,7 +1616,7 @@ HAVING MIN(b.start_time) >= DATE_TRUNC('month', CURRENT_DATE)
 - Pack member photos increased to 150px circular (from 100px)
 - Welcome section uses block-based structure (`welcomeBlocks[]`) with backward compatibility for legacy `welcomeMessage` string
 
-**For AI Agents**: V12 adds a complete newsletter system. The admin composer at `/dog-walking/admin/newsletter` allows creating newsletters with auto-detected new pack members (based on first booking date, not account creation). Content is stored as JSONB in the `newsletters` table. The `generateNewsletterEmail()` function in `/lib/emailTemplates.ts` generates the HTML with `{{UNSUBSCRIBE_URL}}` placeholder replaced per-recipient. Subscription status is tracked via `owners.newsletter_subscribed` boolean with token-based unsubscribe. When sending, the system loops through all subscribed owners, sends via Resend, and records results in `newsletter_history`. The unsubscribe page at `/newsletter/unsubscribe` uses a Suspense boundary around the component that calls `useSearchParams()`. The welcome section supports block-based content (`welcomeBlocks[]`) with text and image blocks that can be reordered. Newsletter images are stored at `/home/hunter-dev/newsletter-images/` and served via `/api/newsletter-images/[filename]`. Pack member photos display at 150px circular. Legacy newsletters with single `welcomeMessage` string are auto-converted to blocks when loaded.
+**For AI Agents**: V12 adds a complete newsletter system. The admin composer at `/dog-walking/admin/newsletter` allows creating newsletters with auto-detected new pack members (based on first booking date, not account creation). Content is stored as JSONB in the `newsletters` table. The `generateNewsletterEmail()` function in `/lib/emailTemplates.ts` generates the HTML with `{{UNSUBSCRIBE_URL}}` placeholder replaced per-recipient. Subscription status is tracked via `owners.newsletter_subscribed` boolean with token-based unsubscribe. Partner emails have independent subscription via `partner_newsletter_subscribed` and `partner_newsletter_unsubscribe_token` — each person can unsubscribe without affecting the other. When sending, the system builds a combined recipient list (primary + partner emails), each with their own unsubscribe token, sends via Resend with retry logic, and records results in `newsletter_history`. The unsubscribe route tries the primary token first, then the partner token, updating only the matching subscription. The unsubscribe page at `/newsletter/unsubscribe` uses a Suspense boundary around the component that calls `useSearchParams()`. The welcome section supports block-based content (`welcomeBlocks[]`) with text and image blocks that can be reordered. Newsletter images are stored at `/home/hunter-dev/newsletter-images/` and served via `/api/newsletter-images/[filename]`. Pack member photos display at 150px circular. Legacy newsletters with single `welcomeMessage` string are auto-converted to blocks when loaded.
 
 ---
 
@@ -2975,3 +2979,59 @@ Existing calendar events continue to work with legacy format checks, while new b
 - `/app/dog-walking/admin/manage-bookings/page.tsx` - Calendar update warning display
 
 **For AI Agents**: The reschedule-booking route now uses `calendar.events.patch()` instead of `calendar.events.update()`. All calendar modification routes in the codebase should use `events.patch()` for partial updates (not `events.update()` which does full resource replacement). The API response now includes `calendar_updated` boolean so the frontend can alert the admin if the calendar sync failed. Always use `events.patch()` for updating existing Google Calendar events.
+
+---
+
+## V14.2.2: Dashboard Grouping Fix, API Caching Fix & Partner Newsletter Subscriptions
+
+### **Bug Fix: Customer Dashboard Caching Stale Booking Data**
+
+**Problem**: After rescheduling a booking via the API, the customer dashboard (`/my-account`) continued to show old booking times. The database had the correct updated times but the frontend served stale data.
+
+**Root Cause**: The `customer-bookings` and `booking-details` API routes (GET handlers) were missing `export const dynamic = 'force-dynamic'`. In Next.js 14 production builds, GET route handlers without this directive can be cached, serving stale responses.
+
+**Fix**: Added `export const dynamic = 'force-dynamic'` to both routes, matching the pattern already used by `customer-session`, `customer-media`, and auth routes.
+
+**Files Modified:**
+- `/app/api/dog-walking/customer-bookings/route.ts` — Added `export const dynamic = 'force-dynamic'`
+- `/app/api/dog-walking/booking-details/route.ts` — Added `export const dynamic = 'force-dynamic'`
+
+### **Dashboard Booking Sections Reorganization**
+
+**Problem**: The "Your Current Bookings" section grouped ALL current bookings (confirmed + completed) by month/week. Completed-but-unpaid bookings from earlier in the day appeared inside the grouped view above future confirmed bookings, which was confusing.
+
+**Fix**: Split bookings into three distinct sections:
+
+1. **"Your Current Bookings"** (grouped by month/week) — `confirmed` only
+2. **"Awaiting Payment"** (flat list) — `completed` only
+3. **"Booking History"** (flat list) — `completed & paid` + `cancelled` + `no_show`
+
+**Files Modified:**
+- `/app/components/DashboardMain.tsx` — Separated booking sections by status
+
+### **Independent Partner Newsletter Subscriptions**
+
+**Problem**: Newsletter only went to primary owner emails. Partners on file received nothing.
+
+**Solution**: Added independent newsletter subscriptions for partner emails, so each person can subscribe/unsubscribe individually.
+
+**Database Changes:**
+```sql
+ALTER TABLE hunters_hounds.owners
+ADD COLUMN partner_newsletter_subscribed BOOLEAN DEFAULT true,
+ADD COLUMN partner_newsletter_unsubscribe_token UUID DEFAULT gen_random_uuid();
+```
+
+**How It Works:**
+- Newsletter send route builds a combined recipient list (primary + partner emails)
+- Each recipient gets their own unique unsubscribe token in the email
+- Primary uses `newsletter_unsubscribe_token`, partner uses `partner_newsletter_unsubscribe_token`
+- Unsubscribe route checks primary token first, then partner token — only the matching subscription is toggled
+- Primary and partner can unsubscribe independently without affecting each other
+- `newsletter_history` records only track primary owner (to avoid duplicate `owner_id` entries)
+
+**Files Modified:**
+- `/app/api/dog-walking/admin/newsletter/send/route.ts` — Fetches partner emails, builds combined recipient list with individual tokens, checks `partner_newsletter_subscribed`
+- `/app/api/dog-walking/newsletter/unsubscribe/route.ts` — GET (unsubscribe) and POST (resubscribe) both try primary token, then partner token
+
+**For AI Agents**: V14.2.2 fixes three issues. (1) Customer-facing API routes (`customer-bookings`, `booking-details`) now have `export const dynamic = 'force-dynamic'` to prevent Next.js from caching GET responses — always add this to any new API route that returns dynamic database data. (2) The customer dashboard now separates bookings into confirmed (grouped by month/week), awaiting payment (flat), and history (flat) sections. Only confirmed bookings are grouped. (3) Newsletter sending now includes partner emails with independent subscription management. Each person (primary + partner) has their own `newsletter_subscribed` flag and `unsubscribe_token`. The unsubscribe route tries primary token first, then partner token, updating only the matched subscription. When adding new owner fields for partners, follow this pattern of independent flags rather than household-level settings.
