@@ -2864,3 +2864,82 @@ Existing calendar events continue to work with legacy format checks, while new b
 
 **For AI Agents**: Hunter's Hounds V14.1 fixes critical bugs in the recurring booking availability checker and standardizes calendar event formatting across all booking channels. The availability checker now properly detects and respects all-day calendar blocks (vacation, personal time) while allowing walks during multi-day sitting bookings. All booking routes (customer, admin, recurring, reschedule) now use a shared utility (`/lib/calendarEvents.ts`) that generates consistent Google Calendar events with standardized summaries and descriptions. The format includes clear "Booking Type" labels (Single Day, Multi-Day, Recurring) and consistent structure for owner, dogs, service, duration, price, location, and status. The availability filters support both the new standardized format and legacy formats for backward compatibility. This prevents future issues with calendar event filtering and makes the system more maintainable and reliable for new features.
 
+
+---
+
+## 🔧 V14.2: Admin Reschedule & Grouped Bookings Display
+
+### **Admin Reschedule Feature**
+
+**Purpose**: Enable admins to reschedule bookings directly from the manage-bookings page without time restrictions.
+
+**Key Features:**
+- Reschedule button in Actions column of bookings table
+- Modal interface for selecting new date/time
+- No working hours restrictions (admin can reschedule to any time)
+- Automatic calculation of end time based on booking duration
+- Integration with existing reschedule API
+- Calendar update, email notification, and Telegram alert
+
+**UI Components:**
+- Actions column added to bookings table
+- Modal with date/time pickers
+- Pre-populated with current booking time
+- Shows booking details for reference
+- Loading states and error handling
+
+**Files Modified:**
+- `/app/dog-walking/admin/manage-bookings/page.tsx` → Added reschedule modal and functionality
+
+**API Integration:**
+- Uses existing `/api/dog-walking/reschedule-booking` endpoint
+- Sends `booking_id`, `new_start_time`, and `new_end_time`
+- Automatically calculates end time from booking duration
+
+### **Grouped Bookings Display**
+
+**Purpose**: Organize customer dashboard bookings by month and week for better readability, especially for recurring bookings spanning multiple months.
+
+**Key Features:**
+- Bookings grouped by month (e.g., "February 2026")
+- Within each month, grouped by week (e.g., "Week of Feb 10 - Feb 16")
+- Visual hierarchy with indentation
+- Chronological sorting within weeks
+- Month headers with blue styling and separators
+- Week headers showing date ranges
+
+**Display Structure:**
+```
+📆 February 2026
+├─ Week of Feb 10 - Feb 16
+│  ├─ Booking 1 (Feb 10, 10:00)
+│  ├─ Booking 2 (Feb 12, 14:00)
+│  └─ Booking 3 (Feb 14, 09:00)
+├─ Week of Feb 17 - Feb 23
+│  └─ Booking 4 (Feb 19, 10:00)
+
+📆 March 2026
+├─ Week of Mar 3 - Mar 9
+   └─ Booking 5 (Mar 5, 10:00)
+```
+
+**Benefits:**
+- Easy to scan upcoming bookings
+- Perfect for recurring bookings (2-3 months)
+- Quick to find bookings in specific week
+- Multiple bookings per week clearly grouped
+- Maintains all existing functionality (cancel, view details)
+
+**Implementation Details:**
+- Groups bookings using `yyyy-MM` for months
+- Groups weeks starting on Sunday
+- Sorts chronologically at all levels
+- Preserves all booking card features
+- Applied only to "Current Bookings" section
+
+**Files Modified:**
+- `/app/components/DashboardMain.tsx` → Added month/week grouping logic and rendering
+
+### **V14.2 Summary**
+
+**For AI Agents**: Hunter's Hounds V14.2 adds two UX improvements. First, admins can now reschedule bookings directly from the manage-bookings page via a new Actions column with a Reschedule button. The modal allows selecting any date/time (no working hours restrictions) and automatically calculates the end time based on booking duration. Second, the customer dashboard now groups bookings by month and week, making it much easier to browse recurring bookings that span 2-3 months. Each month shows as a section (e.g., "📆 February 2026") with weeks nested inside (e.g., "Week of Feb 10 - Feb 16"). This provides better visual organization without requiring a full calendar interface. All existing functionality (cancellation, viewing details) is preserved in both features.
