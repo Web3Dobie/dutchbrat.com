@@ -2942,4 +2942,36 @@ Existing calendar events continue to work with legacy format checks, while new b
 
 ### **V14.2 Summary**
 
-**For AI Agents**: Hunter's Hounds V14.2 adds two UX improvements. First, admins can now reschedule bookings directly from the manage-bookings page via a new Actions column with a Reschedule button. The modal allows selecting any date/time (no working hours restrictions) and automatically calculates the end time based on booking duration. Second, the customer dashboard now groups bookings by month and week, making it much easier to browse recurring bookings that span 2-3 months. Each month shows as a section (e.g., "📆 February 2026") with weeks nested inside (e.g., "Week of Feb 10 - Feb 16"). This provides better visual organization without requiring a full calendar interface. All existing functionality (cancellation, viewing details) is preserved in both features.
+**For AI Agents**: Hunter's Hounds V14.2 adds two UX improvements. First, admins can now reschedule bookings directly from the manage-bookings page via a new Actions column with a Reschedule button. The modal allows selecting any date/time (no working hours restrictions) and automatically calculates the end time based on booking duration. Second, the customer dashboard now groups bookings by month and week, making it much easier to browse recurring bookings that span 2-3 months. Each month shows as a section (e.g., "February 2026") with weeks nested inside (e.g., "Week of Feb 10 - Feb 16"). This provides better visual organization without requiring a full calendar interface. All existing functionality (cancellation, viewing details) is preserved in both features.
+
+---
+
+## V14.2.1: Reschedule Google Calendar Fix
+
+### **Bug Fix: Google Calendar Not Updating on Reschedule**
+
+**Problem**: When rescheduling a booking from the admin console, the database updated correctly and email/Telegram notifications were sent, but the Google Calendar event was not updated. The calendar update error was silently caught and swallowed.
+
+**Root Cause**: The reschedule route used `calendar.events.update()` (HTTP PUT - full resource replacement), which was the only route in the codebase using this method. All other routes that modify calendar events use `calendar.events.patch()` (HTTP PATCH - partial update). The PUT method requires the complete event resource and clears any fields not included in the request body (attendees, reminders, organizer metadata, etc.), which can cause the Google Calendar API to reject the request.
+
+**Fix Applied**:
+
+1. **Changed `events.update()` to `events.patch()`** in `/app/api/dog-walking/reschedule-booking/route.ts`
+   - Consistent with `modify-booking-dogs/route.ts` which uses `events.patch()` successfully
+   - PATCH only modifies specified fields, leaving other event metadata intact
+
+2. **Added `calendar_updated` flag to API response**
+   - The reschedule API now returns `calendar_updated: true/false`
+   - Admin UI checks this flag and displays a warning if calendar update failed
+
+3. **Added booking ID to Telegram notification**
+   - Reschedule TG messages now include `(ID: {booking_id})` for reference
+
+4. **Added warning for missing google_event_id**
+   - Logs a warning if a booking has no `google_event_id` (calendar can't be updated)
+
+**Files Modified:**
+- `/app/api/dog-walking/reschedule-booking/route.ts` - `events.update()` -> `events.patch()`, calendar_updated flag, TG booking ID
+- `/app/dog-walking/admin/manage-bookings/page.tsx` - Calendar update warning display
+
+**For AI Agents**: The reschedule-booking route now uses `calendar.events.patch()` instead of `calendar.events.update()`. All calendar modification routes in the codebase should use `events.patch()` for partial updates (not `events.update()` which does full resource replacement). The API response now includes `calendar_updated` boolean so the frontend can alert the admin if the calendar sync failed. Always use `events.patch()` for updating existing Google Calendar events.

@@ -416,17 +416,33 @@ export async function deleteMediaFile(id: number): Promise<{
   }
 }
 
-// Authentication function
+// Authentication function - uses shared admin credentials
 export async function verifyFamilyAuth(username: string, password: string): Promise<boolean> {
-  // Simple hardcoded auth for now - enhance with database later
+  // Verify credentials from environment variables only (no hardcoded fallbacks)
+  // Uses same admin credentials as dog walking admin (shared across sites)
+  if (!process.env.HUNTER_ADMIN_USER || !process.env.HUNTER_ADMIN_PASSWORD) {
+    console.error('Missing required environment variables: HUNTER_ADMIN_USER and/or HUNTER_ADMIN_PASSWORD');
+    return false;
+  }
+
   const validCredentials = [
-    { username: 'boyboy', password: '010918' },
-    { username: 'hunter', password: 'memorial' }
-  ]
+    {
+      username: process.env.HUNTER_ADMIN_USER,
+      password: process.env.HUNTER_ADMIN_PASSWORD
+    }
+  ];
+
+  // Optional: Secondary admin credentials
+  if (process.env.HUNTER_ADMIN_USER_2 && process.env.HUNTER_ADMIN_PASSWORD_2) {
+    validCredentials.push({
+      username: process.env.HUNTER_ADMIN_USER_2,
+      password: process.env.HUNTER_ADMIN_PASSWORD_2
+    });
+  }
 
   return validCredentials.some(cred =>
     cred.username === username && cred.password === password
-  )
+  );
 }
 
 // File system utilities

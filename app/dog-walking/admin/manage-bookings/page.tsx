@@ -204,6 +204,13 @@ export default function ManageBookings() {
                 throw new Error(errorData.error || "Failed to reschedule booking");
             }
 
+            const result = await response.json();
+
+            // Warn if calendar update failed
+            if (result.calendar_updated === false) {
+                setError("Booking rescheduled but Google Calendar was not updated - please update the calendar event manually.");
+            }
+
             // Refresh bookings list
             await fetchBookings();
 

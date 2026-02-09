@@ -9,12 +9,15 @@ import { Pool } from 'pg'
 // Replace the getPool function with this:
 function getPool(): Pool {
   if (!pool) {
+    if (!process.env.POSTGRES_PASSWORD) {
+      throw new Error('POSTGRES_PASSWORD environment variable is required');
+    }
     pool = new Pool({
       host: process.env.POSTGRES_HOST || 'postgres',
       port: parseInt(process.env.POSTGRES_PORT || '5432'),
       database: process.env.POSTGRES_DB || 'agents_platform',
       user: process.env.POSTGRES_USER || 'hunter_admin',
-      password: process.env.POSTGRES_PASSWORD || 'YourSecurePassword123!',
+      password: process.env.POSTGRES_PASSWORD,
       ssl: false  // KEY FIX: Disable SSL for local Docker PostgreSQL
     })
   }

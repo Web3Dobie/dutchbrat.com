@@ -2,15 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-// Use same credentials as Hunter Media (from environment or hardcoded fallback)
+// Verify admin credentials from environment variables only (no hardcoded fallbacks)
 function verifyAdminCredentials(username: string, password: string): boolean {
+    // Primary admin credentials (required)
+    if (!process.env.HUNTER_ADMIN_USER || !process.env.HUNTER_ADMIN_PASSWORD) {
+        console.error('Missing required environment variables: HUNTER_ADMIN_USER and/or HUNTER_ADMIN_PASSWORD');
+        return false;
+    }
+
     const validCredentials = [
         {
-            username: process.env.HUNTER_ADMIN_USER || 'boyboy',
-            password: process.env.HUNTER_ADMIN_PASSWORD || '010918'
-        },
-        { username: 'hunter', password: 'memorial' }
+            username: process.env.HUNTER_ADMIN_USER,
+            password: process.env.HUNTER_ADMIN_PASSWORD
+        }
     ];
+
+    // Optional: Secondary admin credentials
+    if (process.env.HUNTER_ADMIN_USER_2 && process.env.HUNTER_ADMIN_PASSWORD_2) {
+        validCredentials.push({
+            username: process.env.HUNTER_ADMIN_USER_2,
+            password: process.env.HUNTER_ADMIN_PASSWORD_2
+        });
+    }
 
     return validCredentials.some(cred =>
         cred.username === username && cred.password === password

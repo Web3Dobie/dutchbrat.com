@@ -202,6 +202,7 @@ export async function POST(request: NextRequest) {
         // 2. Update Google Calendar event
         const serviceDisplayName = getServiceDisplayName(booking.service_type);
         const dogNames = booking.dog_names?.join(" & ") || "dogs";
+        let calendarUpdated = false;
 
         if (booking.google_event_id) {
             try {
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
                     phone: booking.phone,
                     email: booking.email,
                     address: booking.address,
-                    duration_minutes: booking.duration_minutes,
+                    duration_minutes: newDurationMinutes,
                     booking_type: 'single',
                     start_time: newStartTime,
                     end_time: newEndTime,
@@ -225,16 +226,19 @@ export async function POST(request: NextRequest) {
 
                 const event = generateCalendarEvent(calendarEventData, newStartTime, newEndTime);
 
-                await calendar.events.update({
+                await calendar.events.patch({
                     calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
                     eventId: booking.google_event_id,
                     requestBody: event,
                 });
+                calendarUpdated = true;
                 console.log("Google Calendar event updated:", booking.google_event_id);
             } catch (calendarError) {
                 console.error("Failed to update calendar event:", calendarError);
                 // Don't fail the whole operation if calendar update fails
             }
+        } else {
+            console.warn(`Booking ${data.booking_id} has no google_event_id - calendar not updated`);
         }
 
         // 3. Send reschedule confirmation email using new email service
@@ -291,7 +295,7 @@ export async function POST(request: NextRequest) {
         // 4. Send Telegram notification to business owner
         try {
             const telegramMessage = `
-📅 **BOOKING RESCHEDULED**
+📅 **BOOKING RESCHEDULED** (ID: ${data.booking_id})
 
 **Customer:** ${booking.owner_name}
 **Phone:** ${booking.phone}
@@ -319,7 +323,8 @@ ${booking.price_pounds ? `**Price:** £${parseFloat(booking.price_pounds).toFixe
             message: "Booking rescheduled successfully",
             booking_id: data.booking_id,
             new_start_time: data.new_start_time,
-            new_end_time: data.new_end_time
+            new_end_time: data.new_end_time,
+            calendar_updated: calendarUpdated,
         });
 
     } catch (error) {
