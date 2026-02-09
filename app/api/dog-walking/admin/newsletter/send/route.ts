@@ -84,11 +84,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Production mode: send to all subscribed customers (including partner emails)
+        // Production mode: send to all subscribed customers (including individually subscribed partners)
         const subscribersQuery = `
-            SELECT id, owner_name, email, partner_email, newsletter_unsubscribe_token
+            SELECT id, owner_name, email, partner_email,
+                   newsletter_subscribed, newsletter_unsubscribe_token,
+                   partner_newsletter_subscribed, partner_newsletter_unsubscribe_token
             FROM hunters_hounds.owners
-            WHERE newsletter_subscribed = true
+            WHERE (newsletter_subscribed = true OR partner_newsletter_subscribed = true)
             AND email IS NOT NULL
             AND email != '';
         `;
@@ -102,22 +104,27 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Build list of all emails to send to (primary + partner)
+        // Build list of all emails to send to (primary + partner, each with their own token)
         const emailsToSend: { email: string; ownerId: number; unsubscribeToken: string; isPrimary: boolean }[] = [];
 
         for (const subscriber of subscribers) {
-            emailsToSend.push({
-                email: subscriber.email,
-                ownerId: subscriber.id,
-                unsubscribeToken: subscriber.newsletter_unsubscribe_token,
-                isPrimary: true,
-            });
+            // Primary owner - only if individually subscribed
+            if (subscriber.newsletter_subscribed) {
+                emailsToSend.push({
+                    email: subscriber.email,
+                    ownerId: subscriber.id,
+                    unsubscribeToken: subscriber.newsletter_unsubscribe_token,
+                    isPrimary: true,
+                });
+            }
 
-            if (subscriber.partner_email && subscriber.partner_email.trim() !== '') {
+            // Partner - only if they have an email and are individually subscribed
+            if (subscriber.partner_newsletter_subscribed
+                && subscriber.partner_email && subscriber.partner_email.trim() !== '') {
                 emailsToSend.push({
                     email: subscriber.partner_email.trim(),
                     ownerId: subscriber.id,
-                    unsubscribeToken: subscriber.newsletter_unsubscribe_token,
+                    unsubscribeToken: subscriber.partner_newsletter_unsubscribe_token,
                     isPrimary: false,
                 });
             }

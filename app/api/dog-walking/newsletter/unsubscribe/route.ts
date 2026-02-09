@@ -28,28 +28,42 @@ export async function GET(request: NextRequest) {
     const client = await pool.connect();
 
     try {
-        // Find owner by token and update subscription status
-        const result = await client.query(`
+        // Try primary owner token first
+        const primaryResult = await client.query(`
             UPDATE hunters_hounds.owners
             SET newsletter_subscribed = false
             WHERE newsletter_unsubscribe_token = $1
             RETURNING owner_name, email;
         `, [token]);
 
-        if (result.rows.length === 0) {
-            return NextResponse.json(
-                { error: "Invalid or expired unsubscribe link" },
-                { status: 404 }
-            );
+        if (primaryResult.rows.length > 0) {
+            return NextResponse.json({
+                success: true,
+                message: "Successfully unsubscribed from Hunter's Pack newsletter",
+                email: primaryResult.rows[0].email
+            });
         }
 
-        const owner = result.rows[0];
+        // Try partner token
+        const partnerResult = await client.query(`
+            UPDATE hunters_hounds.owners
+            SET partner_newsletter_subscribed = false
+            WHERE partner_newsletter_unsubscribe_token = $1
+            RETURNING partner_email;
+        `, [token]);
 
-        return NextResponse.json({
-            success: true,
-            message: "Successfully unsubscribed from Hunter's Pack newsletter",
-            email: owner.email
-        });
+        if (partnerResult.rows.length > 0) {
+            return NextResponse.json({
+                success: true,
+                message: "Successfully unsubscribed from Hunter's Pack newsletter",
+                email: partnerResult.rows[0].partner_email
+            });
+        }
+
+        return NextResponse.json(
+            { error: "Invalid or expired unsubscribe link" },
+            { status: 404 }
+        );
 
     } catch (error) {
         console.error("Unsubscribe error:", error);
@@ -76,24 +90,40 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const result = await client.query(`
+        // Try primary owner token first
+        const primaryResult = await client.query(`
             UPDATE hunters_hounds.owners
             SET newsletter_subscribed = true
             WHERE newsletter_unsubscribe_token = $1
             RETURNING owner_name, email;
         `, [token]);
 
-        if (result.rows.length === 0) {
-            return NextResponse.json(
-                { error: "Invalid token" },
-                { status: 404 }
-            );
+        if (primaryResult.rows.length > 0) {
+            return NextResponse.json({
+                success: true,
+                message: "Successfully resubscribed to Hunter's Pack newsletter"
+            });
         }
 
-        return NextResponse.json({
-            success: true,
-            message: "Successfully resubscribed to Hunter's Pack newsletter"
-        });
+        // Try partner token
+        const partnerResult = await client.query(`
+            UPDATE hunters_hounds.owners
+            SET partner_newsletter_subscribed = true
+            WHERE partner_newsletter_unsubscribe_token = $1
+            RETURNING partner_email;
+        `, [token]);
+
+        if (partnerResult.rows.length > 0) {
+            return NextResponse.json({
+                success: true,
+                message: "Successfully resubscribed to Hunter's Pack newsletter"
+            });
+        }
+
+        return NextResponse.json(
+            { error: "Invalid token" },
+            { status: 404 }
+        );
 
     } catch (error) {
         console.error("Resubscribe error:", error);
