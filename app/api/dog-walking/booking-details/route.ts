@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
 
+export const dynamic = 'force-dynamic';
+
 // Database Connection
 const pool = getPool();
 
