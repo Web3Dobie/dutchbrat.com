@@ -588,27 +588,23 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             </h3>
 
                             {(() => {
-                                // Filter for current bookings (confirmed, completed, and awaiting payment)
-                                const currentBookings = bookings.filter(booking => {
-                                    if (booking.status === 'confirmed') return true;
-                                    if (booking.status === 'completed') return true;
-                                    return false;
-                                });
+                                // Only confirmed bookings get grouped by month/week
+                                const confirmedBookings = bookings.filter(b => b.status === 'confirmed');
 
-                                if (currentBookings.length === 0) {
+                                if (confirmedBookings.length === 0) {
                                     return (
                                         <div style={{ textAlign: "center", padding: "20px" }}>
                                             <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
-                                                No upcoming bookings or unpaid services
+                                                No upcoming bookings
                                             </p>
                                         </div>
                                     );
                                 }
 
-                                // Group bookings by month and week
+                                // Group confirmed bookings by month and week
                                 const grouped: { [monthKey: string]: { [weekKey: string]: Booking[] } } = {};
 
-                                currentBookings.forEach(booking => {
+                                confirmedBookings.forEach(booking => {
                                     const date = new Date(booking.start_time);
                                     const monthKey = format(date, 'yyyy-MM'); // e.g., "2026-02"
                                     const weekStart = new Date(date);
@@ -681,35 +677,37 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                         </div>
                     )}
 
+                    {/* Awaiting Payment Section (flat, not grouped) */}
+                    {!isLoading && !error && (() => {
+                        const awaitingPayment = bookings.filter(b => b.status === 'completed');
+                        if (awaitingPayment.length === 0) return null;
+                        return (
+                            <div style={styles.card}>
+                                <h3 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.1rem" }}>
+                                    💷 Awaiting Payment
+                                </h3>
+                                {awaitingPayment.map(booking => renderBookingCard(booking, false))}
+                            </div>
+                        );
+                    })()}
+
                     {/* Booking History Section */}
-                    {!isLoading && !error && (
-                        <div style={styles.card}>
-                            <h3 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.1rem" }}>
-                                📋 Booking History
-                            </h3>
-
-                            {(() => {
-                                // Filter for historical bookings (completed & paid, cancelled, no-show)
-                                const historyBookings = bookings.filter(booking =>
-                                    booking.status === 'completed & paid' ||
-                                    booking.status === 'cancelled' ||
-                                    booking.status === 'no_show'
-                                );
-
-                                if (historyBookings.length === 0) {
-                                    return (
-                                        <div style={{ textAlign: "center", padding: "20px" }}>
-                                            <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
-                                                No booking history yet
-                                            </p>
-                                        </div>
-                                    );
-                                }
-
-                                return historyBookings.map((booking) => renderBookingCard(booking, false));
-                            })()}
-                        </div>
-                    )}
+                    {!isLoading && !error && (() => {
+                        const historyBookings = bookings.filter(booking =>
+                            booking.status === 'completed & paid' ||
+                            booking.status === 'cancelled' ||
+                            booking.status === 'no_show'
+                        );
+                        if (historyBookings.length === 0) return null;
+                        return (
+                            <div style={styles.card}>
+                                <h3 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.1rem" }}>
+                                    📋 Booking History
+                                </h3>
+                                {historyBookings.map(booking => renderBookingCard(booking, false))}
+                            </div>
+                        );
+                    })()}
 
                     {/* Empty State - Only show if no bookings at all */}
                     {!isLoading && !error && bookings.length === 0 && (
