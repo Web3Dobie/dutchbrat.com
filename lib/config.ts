@@ -62,12 +62,13 @@ environment configuration.
  */
 export function getEnvVar(name: string, required: boolean = false): string | undefined {
     const value = process.env[name];
+    const isBuild = process.env.NEXT_PHASE === 'phase-production-build';
 
-    if (required && !value) {
+    if (required && !value && !isBuild) {
         throw new Error(`Required environment variable ${name} is not set`);
     }
 
-    return value;
+    return value || '';
 }
 
 /**
@@ -81,8 +82,11 @@ export function getEnvVarWithDefault(name: string, defaultValue: string): string
  * Validate configuration on module import (server-side only)
  * This runs when the module is first imported
  */
-if (typeof window === 'undefined') {
-    // Only validate on server-side
+// Skip validation during build (env vars aren't available at build time)
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+
+if (typeof window === 'undefined' && !isBuildPhase) {
+    // Only validate on server-side at runtime
     try {
         validateConfig();
         console.log('✅ Environment configuration validated successfully');

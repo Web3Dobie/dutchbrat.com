@@ -8,8 +8,6 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 // Database Connection
 const pool = getPool();
-    ssl: false,
-});
 
 // POST: Set customer session cookie after successful lookup
 export async function POST(request: NextRequest) {

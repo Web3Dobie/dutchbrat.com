@@ -9,9 +9,6 @@ import { getPool } from '@/lib/database';
 
 // Database Connection
 const pool = getPool();
-    password: process.env.POSTGRES_PASSWORD,
-    ssl: false,
-});
 
 interface RequestReviewRequest {
     booking_id: number;
