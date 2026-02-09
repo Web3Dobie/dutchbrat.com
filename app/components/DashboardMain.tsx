@@ -588,15 +588,10 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             </h3>
 
                             {(() => {
-                                // NEW: Filter for current bookings (confirmed, completed, and awaiting payment)
+                                // Filter for current bookings (confirmed, completed, and awaiting payment)
                                 const currentBookings = bookings.filter(booking => {
                                     if (booking.status === 'confirmed') return true;
-
-                                    if (booking.status === 'completed') {
-                                        // Only show completed bookings in "current" if they're unpaid (any age)
-                                        return true;
-                                    }
-
+                                    if (booking.status === 'completed') return true;
                                     return false;
                                 });
 
@@ -610,7 +605,78 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                                     );
                                 }
 
-                                return currentBookings.map((booking) => renderBookingCard(booking, true));
+                                // Group bookings by month and week
+                                const grouped: { [monthKey: string]: { [weekKey: string]: Booking[] } } = {};
+
+                                currentBookings.forEach(booking => {
+                                    const date = new Date(booking.start_time);
+                                    const monthKey = format(date, 'yyyy-MM'); // e.g., "2026-02"
+                                    const weekStart = new Date(date);
+                                    weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+                                    const weekKey = format(weekStart, 'yyyy-MM-dd');
+
+                                    if (!grouped[monthKey]) grouped[monthKey] = {};
+                                    if (!grouped[monthKey][weekKey]) grouped[monthKey][weekKey] = [];
+                                    grouped[monthKey][weekKey].push(booking);
+                                });
+
+                                // Sort month keys
+                                const sortedMonths = Object.keys(grouped).sort();
+
+                                return sortedMonths.map(monthKey => {
+                                    const monthDate = new Date(monthKey + '-01');
+                                    const monthLabel = format(monthDate, 'MMMM yyyy'); // e.g., "February 2026"
+                                    const weeks = grouped[monthKey];
+                                    const sortedWeeks = Object.keys(weeks).sort();
+
+                                    return (
+                                        <div key={monthKey} style={{ marginBottom: "32px" }}>
+                                            {/* Month Header */}
+                                            <div style={{
+                                                fontSize: "1.1rem",
+                                                fontWeight: "bold",
+                                                color: "#3b82f6",
+                                                marginBottom: "16px",
+                                                paddingBottom: "8px",
+                                                borderBottom: "2px solid #374151",
+                                            }}>
+                                                📆 {monthLabel}
+                                            </div>
+
+                                            {/* Week Groups */}
+                                            {sortedWeeks.map(weekKey => {
+                                                const weekStart = new Date(weekKey);
+                                                const weekEnd = new Date(weekStart);
+                                                weekEnd.setDate(weekStart.getDate() + 6);
+                                                const weekLabel = `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d')}`;
+                                                const weekBookings = weeks[weekKey];
+
+                                                return (
+                                                    <div key={weekKey} style={{ marginBottom: "24px" }}>
+                                                        {/* Week Header */}
+                                                        <div style={{
+                                                            fontSize: "0.9rem",
+                                                            fontWeight: "600",
+                                                            color: "#9ca3af",
+                                                            marginBottom: "12px",
+                                                            paddingLeft: "8px",
+                                                        }}>
+                                                            Week of {weekLabel}
+                                                        </div>
+
+                                                        {/* Bookings in this week */}
+                                                        <div style={{ paddingLeft: "16px" }}>
+                                                            {weekBookings
+                                                                .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                                                                .map(booking => renderBookingCard(booking, true))
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                });
                             })()}
                         </div>
                     )}

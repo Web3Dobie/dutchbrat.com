@@ -178,7 +178,13 @@ export default function ManageBookings() {
             setError(null);
 
             // Combine date and time into ISO string
-            const newStartTime = new Date(`${rescheduleDate}T${rescheduleTime}:00`).toISOString();
+            const newStartDate = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
+            const newStartTime = newStartDate.toISOString();
+
+            // Calculate end time based on booking duration
+            const durationMs = reschedulingBooking.duration_minutes * 60 * 1000;
+            const newEndDate = new Date(newStartDate.getTime() + durationMs);
+            const newEndTime = newEndDate.toISOString();
 
             const response = await fetch('/api/dog-walking/reschedule-booking', {
                 method: 'POST',
@@ -189,6 +195,7 @@ export default function ManageBookings() {
                 body: JSON.stringify({
                     booking_id: reschedulingBooking.id,
                     new_start_time: newStartTime,
+                    new_end_time: newEndTime,
                 }),
             });
 
