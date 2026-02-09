@@ -84,9 +84,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Production mode: send to all subscribed customers
+        // Production mode: send to all subscribed customers (including partner emails)
         const subscribersQuery = `
-            SELECT id, owner_name, email, newsletter_unsubscribe_token
+            SELECT id, owner_name, email, partner_email, newsletter_unsubscribe_token
             FROM hunters_hounds.owners
             WHERE newsletter_subscribed = true
             AND email IS NOT NULL
@@ -102,15 +102,36 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Send to each subscriber
+        // Build list of all emails to send to (primary + partner)
+        const emailsToSend: { email: string; ownerId: number; unsubscribeToken: string; isPrimary: boolean }[] = [];
+
+        for (const subscriber of subscribers) {
+            emailsToSend.push({
+                email: subscriber.email,
+                ownerId: subscriber.id,
+                unsubscribeToken: subscriber.newsletter_unsubscribe_token,
+                isPrimary: true,
+            });
+
+            if (subscriber.partner_email && subscriber.partner_email.trim() !== '') {
+                emailsToSend.push({
+                    email: subscriber.partner_email.trim(),
+                    ownerId: subscriber.id,
+                    unsubscribeToken: subscriber.newsletter_unsubscribe_token,
+                    isPrimary: false,
+                });
+            }
+        }
+
+        // Send to each recipient
         let successCount = 0;
         let failCount = 0;
         const errors: string[] = [];
 
-        for (const subscriber of subscribers) {
+        for (const recipient of emailsToSend) {
             try {
                 // Generate personalized email with unsubscribe link
-                const unsubscribeUrl = `https://hunters-hounds.london/newsletter/unsubscribe?token=${subscriber.newsletter_unsubscribe_token}`;
+                const unsubscribeUrl = `https://hunters-hounds.london/newsletter/unsubscribe?token=${recipient.unsubscribeToken}`;
                 const personalizedHtml = emailHtml.replace(
                     '{{UNSUBSCRIBE_URL}}',
                     unsubscribeUrl
@@ -121,7 +142,7 @@ export async function POST(request: NextRequest) {
                 for (let attempt = 0; attempt < 3; attempt++) {
                     try {
                         await sendEmail({
-                            to: subscriber.email,
+                            to: recipient.email,
                             subject: newsletter.title,
                             html: personalizedHtml,
                         });
@@ -136,12 +157,14 @@ export async function POST(request: NextRequest) {
                     }
                 }
 
-                // Record in history
-                await client.query(`
-                    INSERT INTO hunters_hounds.newsletter_history
-                    (newsletter_id, owner_id, email_status)
-                    VALUES ($1, $2, 'sent');
-                `, [newsletter_id, subscriber.id]);
+                // Record in history (only for primary to avoid duplicate owner entries)
+                if (recipient.isPrimary) {
+                    await client.query(`
+                        INSERT INTO hunters_hounds.newsletter_history
+                        (newsletter_id, owner_id, email_status)
+                        VALUES ($1, $2, 'sent');
+                    `, [newsletter_id, recipient.ownerId]);
+                }
 
                 successCount++;
 
@@ -150,14 +173,16 @@ export async function POST(request: NextRequest) {
 
             } catch (emailError: any) {
                 failCount++;
-                errors.push(`${subscriber.email}: ${emailError.message}`);
+                errors.push(`${recipient.email}: ${emailError.message}`);
 
-                // Record failure in history
-                await client.query(`
-                    INSERT INTO hunters_hounds.newsletter_history
-                    (newsletter_id, owner_id, email_status)
-                    VALUES ($1, $2, 'failed');
-                `, [newsletter_id, subscriber.id]);
+                // Record failure in history (only for primary)
+                if (recipient.isPrimary) {
+                    await client.query(`
+                        INSERT INTO hunters_hounds.newsletter_history
+                        (newsletter_id, owner_id, email_status)
+                        VALUES ($1, $2, 'failed');
+                    `, [newsletter_id, recipient.ownerId]);
+                }
             }
         }
 
