@@ -36,6 +36,8 @@ interface PaymentStats {
     paid_bookings_this_month: number;
     total_paid_this_year: number;
     paid_bookings_this_year: number;
+    confirmed_this_month_total: number;
+    confirmed_this_month_count: number;
 }
 
 export default function AdminPaymentManagement() {
@@ -692,6 +694,13 @@ export default function AdminPaymentManagement() {
                         <div style={styles.statLabel}>Paid This Year</div>
                         <div style={{ ...styles.statLabel, marginTop: "4px" }}>
                             ({paymentStats.paid_bookings_this_year} bookings)
+                        </div>
+                    </div>
+                    <div style={styles.statCard}>
+                        <div style={{ ...styles.statValue, color: "#3b82f6" }}>{formatCurrency(paymentStats.confirmed_this_month_total)}</div>
+                        <div style={styles.statLabel}>Estimated Revenue This Month</div>
+                        <div style={{ ...styles.statLabel, marginTop: "4px" }}>
+                            ({paymentStats.confirmed_this_month_count} confirmed bookings)
                         </div>
                     </div>
                 </div>

@@ -104,13 +104,31 @@ export async function GET(request: NextRequest) {
                     END), 0) as total_paid_this_year,
                     
                     -- This year's paid bookings count
-                    COUNT(CASE 
-                        WHEN status = 'completed & paid' 
+                    COUNT(CASE
+                        WHEN status = 'completed & paid'
                         AND price_pounds > 0
                         AND EXTRACT(YEAR FROM start_time) = EXTRACT(YEAR FROM CURRENT_DATE)
-                        THEN 1 
-                    END) as paid_bookings_this_year
-                    
+                        THEN 1
+                    END) as paid_bookings_this_year,
+
+                    -- Confirmed bookings this month (forward revenue estimate)
+                    COALESCE(SUM(CASE
+                        WHEN status = 'confirmed'
+                        AND price_pounds > 0
+                        AND EXTRACT(YEAR FROM start_time) = EXTRACT(YEAR FROM CURRENT_DATE)
+                        AND EXTRACT(MONTH FROM start_time) = EXTRACT(MONTH FROM CURRENT_DATE)
+                        THEN price_pounds
+                        ELSE 0
+                    END), 0) as confirmed_this_month_total,
+
+                    COUNT(CASE
+                        WHEN status = 'confirmed'
+                        AND price_pounds > 0
+                        AND EXTRACT(YEAR FROM start_time) = EXTRACT(YEAR FROM CURRENT_DATE)
+                        AND EXTRACT(MONTH FROM start_time) = EXTRACT(MONTH FROM CURRENT_DATE)
+                        THEN 1
+                    END) as confirmed_this_month_count
+
                 FROM hunters_hounds.bookings
             )
             SELECT * FROM payment_stats;
@@ -142,7 +160,9 @@ export async function GET(request: NextRequest) {
             total_paid_this_month: 0,
             paid_bookings_this_month: 0,
             total_paid_this_year: 0,
-            paid_bookings_this_year: 0
+            paid_bookings_this_year: 0,
+            confirmed_this_month_total: 0,
+            confirmed_this_month_count: 0
         };
 
         return NextResponse.json({
@@ -154,7 +174,9 @@ export async function GET(request: NextRequest) {
                 total_paid_this_month: parseFloat(stats.total_paid_this_month),
                 paid_bookings_this_month: parseInt(stats.paid_bookings_this_month),
                 total_paid_this_year: parseFloat(stats.total_paid_this_year),
-                paid_bookings_this_year: parseInt(stats.paid_bookings_this_year)
+                paid_bookings_this_year: parseInt(stats.paid_bookings_this_year),
+                confirmed_this_month_total: parseFloat(stats.confirmed_this_month_total),
+                confirmed_this_month_count: parseInt(stats.confirmed_this_month_count)
             },
             view: view
         });
