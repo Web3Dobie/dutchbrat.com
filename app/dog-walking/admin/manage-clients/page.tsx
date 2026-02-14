@@ -30,6 +30,12 @@ interface Client {
     // Payment preference
     payment_preference?: string | null;
     dogs: Dog[];
+    // Loyalty card data
+    loyalty?: {
+        qualifying_walks: number;
+        stamps_on_card: number;
+        available_to_redeem: number;
+    };
 }
 
 interface ClientsResponse {
@@ -341,6 +347,7 @@ export default function ClientManagement() {
                                 <th style={styles.th}>Address</th>
                                 <th style={styles.th}>Registered</th>
                                 <th style={styles.th}>Dogs</th>
+                                <th style={styles.th}>Loyalty</th>
                                 <th style={styles.th}>Actions</th>
                             </tr>
                         </thead>
@@ -359,7 +366,41 @@ export default function ClientManagement() {
                                         </div>
                                     </td>
                                     <td style={styles.td}>
-                                        <button 
+                                        <div style={{ fontSize: "14px" }}>
+                                            {(() => {
+                                                const loyalty = client.loyalty;
+                                                if (!loyalty || loyalty.qualifying_walks === 0) {
+                                                    return <span style={{ color: "#6b7280" }}>0/15</span>;
+                                                }
+                                                const displayStamps = loyalty.available_to_redeem > 0 ? 15 : loyalty.stamps_on_card;
+                                                return (
+                                                    <span title={`Total qualifying walks: ${loyalty.qualifying_walks}`}>
+                                                        <span style={{
+                                                            color: loyalty.available_to_redeem > 0 ? "#f59e0b" : displayStamps >= 12 ? "#f59e0b" : "#10b981",
+                                                            fontWeight: "bold"
+                                                        }}>
+                                                            {displayStamps}/15
+                                                        </span>
+                                                        {loyalty.available_to_redeem > 0 && (
+                                                            <span style={{
+                                                                marginLeft: "6px",
+                                                                backgroundColor: "#f59e0b",
+                                                                color: "#000",
+                                                                fontSize: "0.65rem",
+                                                                padding: "2px 6px",
+                                                                borderRadius: "4px",
+                                                                fontWeight: "bold",
+                                                            }}>
+                                                                REDEEMABLE
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
+                                    </td>
+                                    <td style={styles.td}>
+                                        <button
                                             style={styles.editButton}
                                             onClick={() => setEditingClient(client)}
                                         >

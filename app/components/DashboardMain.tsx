@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths, isSameDay } from "date-fns";
 import { formatPrice } from '@/lib/pricing';
 import { getServiceDisplayName } from '@/lib/serviceTypes';
+import LoyaltyCard from './LoyaltyCard';
 
 // --- Types ---
 interface Dog {
@@ -39,6 +40,8 @@ interface Booking {
     dog_names: string[];
     created_at: string;
     walk_summary?: string | null;
+    booking_type?: string | null;
+    note_count?: number;
     // Series fields for recurring bookings
     series_id?: number | null;
     series_index?: number | null;
@@ -61,7 +64,8 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'bookings' | 'account'>('bookings');
+    const [activeTab, setActiveTab] = useState<'bookings' | 'loyalty' | 'account'>('bookings');
+    const [sittingNotes, setSittingNotes] = useState<Record<number, Array<{ id: number; note_text: string; note_date: string }>>>({});
 
     // --- Styles ---
     const styles = {
@@ -137,6 +141,25 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     useEffect(() => {
         fetchBookings();
     }, [customer.owner_id]);
+
+    // Fetch sitting notes for confirmed multi-day bookings that have notes
+    useEffect(() => {
+        if (bookings.length > 0) {
+            const bookingsWithNotes = bookings.filter(
+                b => b.status === 'confirmed' && b.booking_type === 'multi_day' && (b.note_count || 0) > 0
+            );
+            bookingsWithNotes.forEach(b => {
+                fetch(`/api/dog-walking/booking-notes?booking_id=${b.id}&owner_id=${customer.owner_id}`)
+                    .then(res => res.ok ? res.json() : null)
+                    .then(data => {
+                        if (data?.notes) {
+                            setSittingNotes(prev => ({ ...prev, [b.id]: data.notes }));
+                        }
+                    })
+                    .catch(() => { /* silently fail */ });
+            });
+        }
+    }, [bookings, customer.owner_id]);
 
     // --- API Functions ---
     const fetchBookings = async () => {
@@ -391,7 +414,32 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                         )}
                     </div>
 
-                    {/* Walk Summary */}
+                    {/* Sitting Updates -- shown during confirmed multi-day sittings */}
+                    {booking.status === 'confirmed' && sittingNotes[booking.id] && sittingNotes[booking.id].length > 0 && (
+                        <div style={{
+                            backgroundColor: "#1e3a5f",
+                            border: "1px solid #3b82f6",
+                            borderRadius: "6px",
+                            padding: "8px",
+                            marginBottom: "12px"
+                        }}>
+                            <p style={{ color: "#60a5fa", fontSize: "0.75rem", fontWeight: "600", marginBottom: "8px" }}>
+                                SITTING UPDATES
+                            </p>
+                            {sittingNotes[booking.id].map((note, idx) => (
+                                <div key={note.id} style={{ marginBottom: idx < sittingNotes[booking.id].length - 1 ? "8px" : "0" }}>
+                                    <p style={{ color: "#93c5fd", fontSize: "0.7rem", fontWeight: "600", margin: "0" }}>
+                                        {new Date(note.note_date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                    </p>
+                                    <p style={{ color: "#bfdbfe", fontSize: "0.875rem", margin: "2px 0 0 0" }}>
+                                        {note.note_text}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Walk Summary -- shown after completion */}
                     {booking.walk_summary && (
                         <div style={{
                             backgroundColor: "#065f46",
@@ -403,7 +451,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             <p style={{ color: "#10b981", fontSize: "0.75rem", fontWeight: "600", marginBottom: "4px" }}>
                                 WALK SUMMARY
                             </p>
-                            <p style={{ color: "#a7f3d0", fontSize: "0.875rem", margin: "0" }}>
+                            <p style={{ color: "#a7f3d0", fontSize: "0.875rem", margin: "0", whiteSpace: "pre-line" }}>
                                 {booking.walk_summary}
                             </p>
                         </div>
@@ -501,6 +549,15 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     onClick={() => handleTabChange('bookings')}
                 >
                     📅 My Bookings
+                </button>
+                <button
+                    style={{
+                        ...styles.tab,
+                        ...(activeTab === 'loyalty' ? styles.activeTab : {}),
+                    }}
+                    onClick={() => setActiveTab('loyalty')}
+                >
+                    Loyalty Card
                 </button>
                 <button
                     style={{
@@ -729,6 +786,11 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Loyalty Card Content */}
+            {activeTab === 'loyalty' && (
+                <LoyaltyCard ownerId={customer.owner_id} bookings={bookings} />
             )}
         </div>
     );

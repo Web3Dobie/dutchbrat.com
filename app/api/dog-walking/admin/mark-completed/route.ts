@@ -74,19 +74,45 @@ export async function POST(request: NextRequest) {
                 );
             }
 
+            // Auto-amalgamate ad-hoc notes into walk_summary if no explicit summary provided
+            let finalSummary = data.walk_summary;
+            if (!finalSummary) {
+                // For each booking, check for ad-hoc notes to amalgamate
+                // (typically only one booking at a time, but handle array)
+                for (const bookingId of data.booking_ids) {
+                    const notesResult = await client.query(
+                        `SELECT note_text, note_date
+                         FROM hunters_hounds.booking_notes
+                         WHERE booking_id = $1
+                         ORDER BY note_date ASC, created_at ASC`,
+                        [bookingId]
+                    );
+
+                    if (notesResult.rows.length > 0) {
+                        finalSummary = notesResult.rows.map((note: { note_text: string; note_date: string }, index: number) => {
+                            const dateStr = new Date(note.note_date).toLocaleDateString('en-GB', {
+                                weekday: 'short', day: 'numeric', month: 'short'
+                            });
+                            return `Day ${index + 1} (${dateStr}): ${note.note_text}`;
+                        }).join('\n\n');
+                        break; // Use notes from the first booking that has them
+                    }
+                }
+            }
+
             // Update bookings to 'completed' with optional walk summary
-            const updateQuery = data.walk_summary 
-                ? `UPDATE hunters_hounds.bookings 
+            const updateQuery = finalSummary
+                ? `UPDATE hunters_hounds.bookings
                    SET status = 'completed', walk_summary = $2, updated_at = CURRENT_TIMESTAMP
                    WHERE id = ANY($1) AND status = 'confirmed'
                    RETURNING id;`
-                : `UPDATE hunters_hounds.bookings 
+                : `UPDATE hunters_hounds.bookings
                    SET status = 'completed', updated_at = CURRENT_TIMESTAMP
                    WHERE id = ANY($1) AND status = 'confirmed'
                    RETURNING id;`;
 
-            const updateParams = data.walk_summary 
-                ? [data.booking_ids, data.walk_summary]
+            const updateParams = finalSummary
+                ? [data.booking_ids, finalSummary]
                 : [data.booking_ids];
 
             const updateResult = await client.query(updateQuery, updateParams);
@@ -120,8 +146,8 @@ ${bookingDetails}
 <i>Status updated to 'completed' (awaiting payment)</i>`;
 
                 // Add walk summary to notification if provided
-                if (data.walk_summary) {
-                    telegramMessage += `\n\n📝 <b>Walk Summary:</b>\n${data.walk_summary}`;
+                if (finalSummary) {
+                    telegramMessage += `\n\n📝 <b>Walk Summary:</b>\n${finalSummary}`;
                 }
 
                 await sendTelegramNotification(telegramMessage.trim());
@@ -133,7 +159,7 @@ ${bookingDetails}
             return NextResponse.json({
                 success: true,
                 updated_count: updatedCount,
-                message: `${updatedCount} booking(s) marked as completed${data.walk_summary ? ' with summary' : ''}`
+                message: `${updatedCount} booking(s) marked as completed${finalSummary ? ' with summary' : ''}`
             });
 
         } catch (error) {

@@ -105,3 +105,19 @@ export const getDurationDisplay = (duration: number): string => {
   if (duration === 120) return "2 Hours";
   return `${duration} minutes`;
 };
+
+// Loyalty reward tier: snap an average price to the closest service price tier
+const REWARD_TIERS = [10, 17.50, 25, 32.50];
+
+export const getRewardTier = (avgPrice: number): number => {
+  let closest = REWARD_TIERS[0];
+  let minDist = Math.abs(avgPrice - closest);
+  for (const tier of REWARD_TIERS) {
+    const dist = Math.abs(avgPrice - tier);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = tier;
+    }
+  }
+  return closest;
+};

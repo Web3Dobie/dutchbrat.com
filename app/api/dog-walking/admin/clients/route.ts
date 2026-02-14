@@ -34,6 +34,12 @@ interface Client {
     // Payment preference
     payment_preference?: string | null;
     dogs: Dog[];
+    // Loyalty card data
+    loyalty?: {
+        qualifying_walks: number;
+        stamps_on_card: number;
+        available_to_redeem: number;
+    };
 }
 
 export async function GET(request: NextRequest) {
@@ -144,6 +150,48 @@ export async function GET(request: NextRequest) {
             client.query(countQuery, countParams)
         ]);
 
+        // Batch-fetch loyalty data for the page's client IDs
+        const clientIds = clientsResult.rows.map((r: { id: number }) => r.id);
+        const loyaltyMap: Record<number, { qualifying_walks: number; stamps_on_card: number; available_to_redeem: number }> = {};
+
+        if (clientIds.length > 0) {
+            const [loyaltyWalksResult, loyaltyRedemptionsResult] = await Promise.all([
+                client.query(
+                    `SELECT b.owner_id, COUNT(b.id)::int as qualifying_walks
+                     FROM hunters_hounds.bookings b
+                     LEFT JOIN hunters_hounds.loyalty_redemptions lr ON lr.booking_id = b.id
+                     WHERE b.owner_id = ANY($1)
+                       AND b.service_type IN ('solo', 'quick')
+                       AND b.status IN ('completed', 'completed & paid')
+                       AND lr.id IS NULL
+                     GROUP BY b.owner_id`,
+                    [clientIds]
+                ),
+                client.query(
+                    `SELECT owner_id, COUNT(*)::int as redemptions
+                     FROM hunters_hounds.loyalty_redemptions
+                     WHERE owner_id = ANY($1)
+                     GROUP BY owner_id`,
+                    [clientIds]
+                )
+            ]);
+
+            const redemptionCounts: Record<number, number> = {};
+            for (const row of loyaltyRedemptionsResult.rows) {
+                redemptionCounts[row.owner_id] = row.redemptions;
+            }
+
+            for (const row of loyaltyWalksResult.rows) {
+                const walks = row.qualifying_walks;
+                const redeemed = redemptionCounts[row.owner_id] || 0;
+                loyaltyMap[row.owner_id] = {
+                    qualifying_walks: walks,
+                    stamps_on_card: walks % 15,
+                    available_to_redeem: Math.max(0, Math.floor(walks / 15) - redeemed),
+                };
+            }
+        }
+
         const clients: Client[] = clientsResult.rows.map(row => ({
             id: row.id,
             owner_name: row.owner_name,
@@ -153,7 +201,8 @@ export async function GET(request: NextRequest) {
             created_at: row.created_at,
             extended_travel_time: row.extended_travel_time || false,
             payment_preference: row.payment_preference || 'per_service',
-            dogs: Array.isArray(row.dogs) ? row.dogs : []
+            dogs: Array.isArray(row.dogs) ? row.dogs : [],
+            loyalty: loyaltyMap[row.id] || { qualifying_walks: 0, stamps_on_card: 0, available_to_redeem: 0 },
         }));
 
         const total = parseInt(countResult.rows[0].total);

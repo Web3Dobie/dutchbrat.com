@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
                     b.series_id,
                     b.series_index,
                     b.owner_id,
+                    b.booking_type,
                     b.dog_id_1,
                     b.dog_id_2,
                     b.secondary_address_id,

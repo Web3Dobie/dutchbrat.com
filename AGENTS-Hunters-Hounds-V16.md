@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V14.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V16.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V14 - Recurring Bookings** 🎉
+**Status**: **V16 - Digital Loyalty Card** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -45,6 +45,7 @@ export function useClientDomainDetection() {
 ⭐ hunters-hounds.london/review/[token]   → Token-based review submission form
 📸 hunters-hounds.london/my-account (Media tab) → V13: Customer's photos and videos from walks
 🔄 hunters-hounds.london/dog-walking/dashboard/book-recurring → V14: Recurring booking flow
+🎫 hunters-hounds.london/my-account (Loyalty Card tab) → V16: Digital loyalty card with paw print stamps
 📧 hunters-hounds.london/contact          → Contact information (optional)
 ```
 
@@ -114,6 +115,13 @@ export function useClientDomainDetection() {
 🔗 /api/dog-walking/recurring/book                → POST: Create booking series + individual bookings
 🔗 /api/dog-walking/recurring/[seriesId]          → GET: Fetch series details and associated bookings
 🔗 /api/dog-walking/recurring/[seriesId]/cancel   → POST: Cancel (single, series, or future bookings)
+
+# NEW V15: Ad-Hoc Sitting Notes API Routes
+🔗 /api/dog-walking/admin/booking-notes           → GET: Fetch notes for booking, POST: Create note, PUT: Update note, DELETE: Delete note
+🔗 /api/dog-walking/booking-notes                 → GET: Customer-facing read-only notes (validates ownership)
+
+# NEW V16: Loyalty Card API Routes
+🔗 /api/dog-walking/loyalty                       → GET: Fetch loyalty status (cards, stamps, redemptions), POST: Redeem a full card against a confirmed booking
 ```
 
 ## 🔐 Admin Panel Authentication
@@ -176,6 +184,7 @@ export function unauthorizedResponse(): NextResponse {
 - `/api/dog-walking/admin/photo-check` - Photo filename generation
 - `/api/dog-walking/admin/photo-check/[filename]` - Check photo exists
 - `/api/dog-walking/admin/update-summary` - Update walk summaries
+- `/api/dog-walking/admin/booking-notes` - CRUD ad-hoc sitting notes (V15)
 - `/api/dog-walking/admin/christmas-email` - Send campaign emails
 
 ### **Credentials**
@@ -394,6 +403,20 @@ CREATE TABLE hunters_hounds.payment_reminders (
     booking_ids INT[] NOT NULL,
     email_sent_to VARCHAR(255) NOT NULL
 );
+```
+
+**NEW V15: booking_notes Table:**
+```sql
+CREATE TABLE hunters_hounds.booking_notes (
+    id SERIAL PRIMARY KEY,
+    booking_id INTEGER NOT NULL REFERENCES hunters_hounds.bookings(id) ON DELETE CASCADE,
+    note_text TEXT NOT NULL,
+    note_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_booking_notes_booking_id ON hunters_hounds.booking_notes(booking_id);
 ```
 
 ### Database Functions
@@ -3035,3 +3058,307 @@ ADD COLUMN partner_newsletter_unsubscribe_token UUID DEFAULT gen_random_uuid();
 - `/app/api/dog-walking/newsletter/unsubscribe/route.ts` — GET (unsubscribe) and POST (resubscribe) both try primary token, then partner token
 
 **For AI Agents**: V14.2.2 fixes three issues. (1) Customer-facing API routes (`customer-bookings`, `booking-details`) now have `export const dynamic = 'force-dynamic'` to prevent Next.js from caching GET responses — always add this to any new API route that returns dynamic database data. (2) The customer dashboard now separates bookings into confirmed (grouped by month/week), awaiting payment (flat), and history (flat) sections. Only confirmed bookings are grouped. (3) Newsletter sending now includes partner emails with independent subscription management. Each person (primary + partner) has their own `newsletter_subscribed` flag and `unsubscribe_token`. The unsubscribe route tries primary token first, then partner token, updating only the matched subscription. When adding new owner fields for partners, follow this pattern of independent flags rather than household-level settings.
+
+## 📝 V15: Ad-Hoc Sitting Notes for Multi-Day Bookings
+
+### **Feature Overview**
+
+**Problem**: For multi-day dog sittings (e.g. week-long holiday care), clients could not see any updates until the entire sitting was marked complete. The `walk_summary` field only gets populated on completion.
+
+**Solution**: A new `booking_notes` system allows the admin to write daily ad-hoc notes during an ongoing multi-day sitting. These notes are visible to clients in real-time on their dashboard. When the sitting is marked complete, the notes are automatically amalgamated into the existing `walk_summary` field in a "Day 1 / Day 2..." format.
+
+**Scope**: Multi-day sittings only (`booking_type = 'multi_day'`). No email notifications — clients check their dashboard.
+
+### **Database Schema**
+
+```sql
+CREATE TABLE hunters_hounds.booking_notes (
+    id SERIAL PRIMARY KEY,
+    booking_id INTEGER NOT NULL REFERENCES hunters_hounds.bookings(id) ON DELETE CASCADE,
+    note_text TEXT NOT NULL,
+    note_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_booking_notes_booking_id ON hunters_hounds.booking_notes(booking_id);
+```
+
+- `note_date` is a `DATE` (not timestamp) — the admin picks which calendar day the note is about. Defaults to today.
+- `ON DELETE CASCADE` — if a booking is deleted, its notes are cleaned up automatically.
+- Individual notes are kept in the database after completion (not deleted) for audit purposes.
+
+### **API Routes**
+
+**Admin CRUD** — `/api/dog-walking/admin/booking-notes/route.ts` (all methods require admin auth):
+- **GET** `?booking_id=X` — Fetch all notes for a booking, ordered by `note_date ASC`
+- **POST** `{ booking_id, note_text, note_date? }` — Create note. Validates booking is `confirmed` and `multi_day`. Sends Telegram notification.
+- **PUT** `{ note_id, note_text }` — Edit an existing note
+- **DELETE** `{ note_id }` — Delete a note
+
+**Customer Read-Only** — `/api/dog-walking/booking-notes/route.ts`:
+- **GET** `?booking_id=X&owner_id=Y` — Returns notes for a confirmed booking. Validates ownership via JOIN on `bookings.owner_id`.
+
+### **Amalgamation on Completion**
+
+When `mark-completed` is called (`/api/dog-walking/admin/mark-completed/route.ts`):
+1. If no explicit `walk_summary` is provided in the request body, the API queries `booking_notes` for the booking
+2. If notes exist, it auto-generates the summary in this format:
+   ```
+   Day 1 (Mon 3 Feb): Note text here
+
+   Day 2 (Tue 4 Feb): Note text here
+   ```
+3. If the admin provides a `walk_summary` in the modal (e.g. edits the pre-populated text), that takes precedence
+4. The individual `booking_notes` rows are kept in the database (not deleted)
+
+### **Admin UI — Manage Bookings Page**
+
+**Actions Dropdown**: A new "Add Sitting Note" option appears in the actions dropdown **only for confirmed multi-day bookings** (`booking_type === 'multi_day'` and `status === 'confirmed'`).
+
+**Add Sitting Note Modal** (`activeModal === 'add-note'`):
+- Shows booking summary header (owner, dogs, dates)
+- Scrollable list of existing notes with date headers, each with Edit/Delete buttons
+- Date picker (defaults to today) + textarea + "Add Note" button
+- Modal stays open after adding — allows adding multiple notes in sequence
+- Inline editing: clicking "Edit" on a note shows a textarea in place
+
+**Mark-Completed Modal Enhancement**:
+- When opening the mark-completed modal, it fetches any existing ad-hoc notes
+- If notes exist, the `walkSummary` textarea is pre-populated with the amalgamated "Day 1 / Day 2..." format
+- Admin can edit the text before confirming
+- A helper text appears: "Pre-populated from sitting notes. Edit as needed before confirming."
+
+### **Customer Dashboard — Sitting Updates**
+
+**File**: `/app/components/DashboardMain.tsx`
+
+- `Booking` interface extended with `booking_type` and `note_count` fields
+- On load, for confirmed multi-day bookings with `note_count > 0`, fetches notes from `/api/dog-walking/booking-notes`
+- **Blue "SITTING UPDATES" card** (distinct from green "WALK SUMMARY"):
+  - Background: `#1e3a5f`, border: `#3b82f6`
+  - Each note shows its date header (e.g. "Mon 3 Feb") + note text
+  - Appears above the action buttons for ongoing multi-day sittings
+- After completion, the blue card disappears and the standard green "WALK SUMMARY" shows the amalgamated text
+- Added `whiteSpace: "pre-line"` to `walk_summary` display so multi-line amalgamated format renders properly
+
+### **Modified APIs**
+
+- `/api/dog-walking/customer-bookings/route.ts` — Added `booking_type` and `note_count` (correlated subquery) to the SELECT and response mapping
+- `/api/dog-walking/admin/bookings/editable/route.ts` — Added `booking_type` to the SELECT so the admin UI can conditionally show the "Add Sitting Note" action
+
+### **Files Created**
+```
+app/api/dog-walking/admin/booking-notes/route.ts    → Admin CRUD for ad-hoc notes
+app/api/dog-walking/booking-notes/route.ts          → Customer read-only notes endpoint
+```
+
+### **Files Modified**
+```
+app/api/dog-walking/customer-bookings/route.ts       → Added booking_type + note_count
+app/api/dog-walking/admin/bookings/editable/route.ts → Added booking_type
+app/api/dog-walking/admin/mark-completed/route.ts    → Auto-amalgamation logic
+app/dog-walking/admin/manage-bookings/page.tsx       → Add Sitting Note modal + mark-completed enhancement
+app/components/DashboardMain.tsx                     → Sitting Updates display for customers
+```
+
+### **V15 Summary**
+
+**For AI Agents**: V15 adds ad-hoc sitting notes for multi-day bookings. Key patterns: (1) The `booking_notes` table stores individual dated notes linked to a booking via `booking_id`. Notes are only created for `multi_day` confirmed bookings. (2) The `customer-bookings` API now returns `note_count` and `booking_type` for each booking — use these fields when deciding what to display. (3) On mark-completed, notes are auto-amalgamated into `walk_summary` unless the admin provides explicit text. The amalgamation format is "Day N (date): text" separated by double newlines. (4) The customer-facing notes API at `/api/dog-walking/booking-notes` validates ownership via a JOIN — it does NOT require admin auth but does require `owner_id` matching. (5) In the customer dashboard, sitting notes use a blue color scheme (`#1e3a5f` / `#3b82f6`) to distinguish from the green walk summary (`#065f46` / `#059669`). Follow this pattern for any future in-progress vs completed status distinction.
+
+## 🎫 V16: Digital Loyalty Card
+
+### **Feature Overview**
+
+**Purpose**: A digital loyalty card system where customers earn paw print stamps for every completed Solo Walk or Quick Walk. After 15 walks, the card is full and can be redeemed for a free walk. Multiple cards can stack — customers are not forced to redeem immediately.
+
+**Eligible Services**: Solo Walk (`solo`) and Quick Walk (`quick`) only. Meet & Greet (free) and Dog Sitting are excluded.
+
+**Counting**: 1 stamp per completed booking, regardless of how many dogs are on the walk.
+
+**Redemption**: Customers choose which upcoming confirmed Solo/Quick Walk booking to apply the free walk to. The booking price is set to £0.
+
+### **Reward Value & Tier Snapping**
+
+The reward value is determined by the average price of the 15 walks on the card, snapped to the **closest service price tier**:
+
+| Tier | Service |
+|------|---------|
+| £10.00 | Quick Walk (30 min) |
+| £17.50 | Solo Walk 1hr / 1 dog |
+| £25.00 | Solo Walk 2hr / 1 dog |
+| £32.50 | Solo Walk 2hr / 2 dogs |
+
+The `getRewardTier()` function in `lib/pricing.ts` snaps any average to the nearest tier. Customers can only redeem against bookings priced at or below their reward tier.
+
+**Examples**:
+- Card avg £12.50 → snaps to £10.00 → can redeem Quick Walks only
+- Card avg £14.00 → snaps to £17.50 → can redeem Quick Walks or 1hr Solo Walks
+- Card avg £23.00 → snaps to £25.00 → can redeem up to 2hr Solo Walk (1 dog)
+
+### **Database Schema**
+
+```sql
+CREATE TABLE hunters_hounds.loyalty_redemptions (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER NOT NULL REFERENCES hunters_hounds.owners(id),
+    card_index INTEGER NOT NULL,
+    max_value DECIMAL(8,2) NOT NULL,
+    booking_id INTEGER NOT NULL REFERENCES hunters_hounds.bookings(id),
+    original_price DECIMAL(8,2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_loyalty_redemptions_owner ON hunters_hounds.loyalty_redemptions(owner_id);
+```
+
+- `card_index`: Which card was redeemed (1st card, 2nd card, etc.)
+- `max_value`: The reward tier value at time of redemption
+- `original_price`: The booking's original price before being set to £0
+- No separate "stamps" table — stamps are computed dynamically from qualifying walks using SQL window functions
+
+### **How Cards Are Computed (No Stamps Table)**
+
+Cards are computed on-the-fly using SQL `ROW_NUMBER()` window functions:
+
+```sql
+WITH qualifying_walks AS (
+    SELECT b.id, b.price_pounds,
+        ROW_NUMBER() OVER (ORDER BY b.start_time, b.id) as walk_num
+    FROM hunters_hounds.bookings b
+    LEFT JOIN hunters_hounds.loyalty_redemptions lr ON lr.booking_id = b.id
+    WHERE b.owner_id = $1
+      AND b.service_type IN ('solo', 'quick')
+      AND b.status IN ('completed', 'completed & paid')
+      AND lr.id IS NULL
+),
+cards AS (
+    SELECT
+        CEIL(walk_num::numeric / 15)::int as card_index,
+        COUNT(*)::int as stamps,
+        ROUND(AVG(price_pounds)::numeric, 2) as avg_price
+    FROM qualifying_walks
+    GROUP BY CEIL(walk_num::numeric / 15)::int
+)
+SELECT * FROM cards ORDER BY card_index
+```
+
+- Qualifying walks exclude bookings that were themselves redeemed (free walks via `LEFT JOIN loyalty_redemptions`)
+- Walks are ordered chronologically (`start_time, id`) and grouped into cards of 15
+- Each card gets its own `avg_price` for tier calculation
+
+### **API Routes**
+
+**File**: `app/api/dog-walking/loyalty/route.ts` (no admin auth required — uses `owner_id` param)
+
+**GET** `?owner_id=X` — Returns loyalty status:
+```json
+{
+  "loyalty": {
+    "total_qualifying_walks": 20,
+    "current_card": { "stamps": 5, "card_index": 2, "avg_price": 17.50 },
+    "full_cards": [
+      { "card_index": 1, "avg_price": 23.00, "redeemed": false }
+    ],
+    "total_redeemed": 0,
+    "available_to_redeem": 1,
+    "redemption_history": []
+  }
+}
+```
+
+**POST** `{ owner_id, booking_id }` — Redeems the oldest unredeemed full card:
+1. Recalculates qualifying walks and cards (same CTE as GET)
+2. Finds the oldest unredeemed full card
+3. Validates the target booking: must be owned by customer, status `confirmed`, service type `solo` or `quick`
+4. Checks booking price <= `getRewardTier(avgPrice)` of the card
+5. Sets booking `price_pounds = 0` and creates a `loyalty_redemptions` record
+6. All within a database transaction (`BEGIN`/`COMMIT`/`ROLLBACK`)
+
+### **Customer Dashboard — Loyalty Card Tab**
+
+**File**: `app/components/DashboardMain.tsx`
+
+- New "Loyalty Card" tab added alongside "My Bookings" and "Account" tabs
+- Tab renders `<LoyaltyCard ownerId={customer.owner_id} bookings={bookings} />`
+
+**File**: `app/components/LoyaltyCard.tsx`
+
+**Visual Design**:
+- Paw print grid: 5 columns x 3 rows = 15 stamps per card
+- Filled stamps: green circles (`#10b981`) with white paw SVG, animated entrance
+- Empty stamps: dark circles with dashed grey border
+- Full redeemable cards: amber border (`#f59e0b`) with pulsing glow animation
+- Redeemed cards: opacity 0.4, grey border (`#374151`), grey paw prints (`#4b5563`), "Redeemed" badge
+
+**Multi-Card Display**:
+- All full cards rendered stacked vertically (unredeemed first, then redeemed)
+- Current in-progress card shown below
+- Each card labeled "Card #N" with reward value shown for full cards
+- Empty state shows an empty card with "Complete your first walk to start earning stamps!"
+
+**Booking Picker**:
+- Clicking "Redeem Free Walk" on a redeemable card shows inline booking picker
+- Lists all upcoming confirmed Solo/Quick Walk bookings
+- Eligible bookings (price <= reward tier): green "Apply" button, shows "£X.XX → FREE"
+- Ineligible bookings (price > reward tier): shown at reduced opacity with explanation
+- Cancel button to close picker
+
+**Redemption History**:
+- Collapsible section at bottom showing past redemptions
+- Each entry shows card number, amount saved, and date
+
+### **Admin Panel — Loyalty Column**
+
+**File**: `app/api/dog-walking/admin/clients/route.ts`
+
+- Batch-fetches loyalty data for all clients on current page using `ANY($1)` array query
+- Returns `loyalty: { qualifying_walks, stamps_on_card, available_to_redeem }` per client
+
+**File**: `app/dog-walking/admin/manage-clients/page.tsx`
+
+- "Loyalty" column in client table showing `X/15` progress
+- Color coding: green for normal progress, amber when >= 12 stamps or redeemable
+- "REDEEMABLE" badge (amber) shown when `available_to_redeem > 0`
+- Tooltip shows total qualifying walks on hover
+
+### **Shared Pricing Utility**
+
+**File**: `lib/pricing.ts`
+
+```typescript
+const REWARD_TIERS = [10, 17.50, 25, 32.50];
+
+export const getRewardTier = (avgPrice: number): number => {
+  let closest = REWARD_TIERS[0];
+  let minDist = Math.abs(avgPrice - closest);
+  for (const tier of REWARD_TIERS) {
+    const dist = Math.abs(avgPrice - tier);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = tier;
+    }
+  }
+  return closest;
+};
+```
+
+Used by both the loyalty API (server-side eligibility check) and the LoyaltyCard component (client-side display and booking filtering).
+
+### **Files Created**
+```
+app/api/dog-walking/loyalty/route.ts       → Loyalty API (GET status, POST redeem)
+app/components/LoyaltyCard.tsx             → Customer-facing loyalty card component
+```
+
+### **Files Modified**
+```
+lib/pricing.ts                                      → Added getRewardTier() and REWARD_TIERS
+app/components/DashboardMain.tsx                     → Added Loyalty Card tab
+app/api/dog-walking/admin/clients/route.ts           → Added batch loyalty data to client list
+app/dog-walking/admin/manage-clients/page.tsx        → Added Loyalty column with progress display
+```
+
+### **V16 Summary**
+
+**For AI Agents**: V16 adds a digital loyalty card system. Key patterns: (1) There is no stamps table — loyalty cards are computed dynamically from qualifying walks using SQL `ROW_NUMBER()` grouped into cards of 15. The only persisted data is the `loyalty_redemptions` table which records when a card is redeemed. (2) Reward values are snapped to the nearest service price tier (£10, £17.50, £25, £32.50) using `getRewardTier()` in `lib/pricing.ts` — this is shared between server and client. (3) Multiple cards can stack; customers are not forced to redeem. The oldest unredeemed card is always redeemed first. (4) Redemption targets must be confirmed Solo/Quick Walk bookings priced at or below the reward tier. The booking price is set to £0 and a redemption record is created in a single transaction. (5) Free walks (redeemed bookings) are excluded from qualifying walk counts via a LEFT JOIN on `loyalty_redemptions`. (6) The admin clients list includes batch loyalty data using `ANY($1)` array queries for efficient per-page loading.

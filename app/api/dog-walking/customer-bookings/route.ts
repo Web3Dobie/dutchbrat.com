@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
                 b.start_time,
                 b.end_time,
                 b.duration_minutes,
+                b.booking_type,
                 b.status,
                 b.price_pounds,
                 b.walk_summary,
@@ -45,7 +46,8 @@ export async function GET(request: NextRequest) {
                 b.series_index,
                 bs.recurrence_pattern,
                 bs.status AS series_status,
-                ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names
+                ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names,
+                (SELECT COUNT(*) FROM hunters_hounds.booking_notes bn WHERE bn.booking_id = b.id)::int AS note_count
             FROM hunters_hounds.bookings b
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
@@ -80,6 +82,8 @@ export async function GET(request: NextRequest) {
             status: row.status,
             price_pounds: row.price_pounds ? parseFloat(row.price_pounds) : null,
             walk_summary: row.walk_summary,
+            booking_type: row.booking_type,
+            note_count: row.note_count || 0,
             dog_names: row.dog_names || [],
             created_at: row.created_at,
             // Series fields for recurring bookings

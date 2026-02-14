@@ -22,6 +22,7 @@ interface EditableBooking {
     dog_id_1: number | null;
     dog_id_2: number | null;
     secondary_address_id: number | null;
+    booking_type?: string | null;
     // Series fields
     series_id?: number | null;
     series_index?: number | null;
@@ -47,7 +48,7 @@ interface SecondaryAddress {
     is_active: boolean;
 }
 
-type ModalType = 'reschedule' | 'cancel' | 'modify-dogs' | 'modify-address' | 'mark-completed' | 'mark-confirmed' | 'mark-no-show' | null;
+type ModalType = 'reschedule' | 'cancel' | 'modify-dogs' | 'modify-address' | 'mark-completed' | 'mark-confirmed' | 'mark-no-show' | 'add-note' | null;
 
 export default function ManageBookings() {
     // Core state
@@ -81,6 +82,14 @@ export default function ManageBookings() {
 
     // Mark Completed modal state
     const [walkSummary, setWalkSummary] = useState<string>('');
+
+    // Add Sitting Note modal state
+    const [noteText, setNoteText] = useState<string>('');
+    const [noteDate, setNoteDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [existingNotes, setExistingNotes] = useState<Array<{ id: number; note_text: string; note_date: string; created_at: string }>>([]);
+    const [loadingNotes, setLoadingNotes] = useState(false);
+    const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+    const [editingNoteText, setEditingNoteText] = useState<string>('');
 
     // Filter state
     const [filterClient, setFilterClient] = useState<string>('');
@@ -165,6 +174,15 @@ export default function ManageBookings() {
 
         if (modal === 'mark-completed') {
             setWalkSummary('');
+            fetchNotesForCompletion(booking.id);
+        }
+
+        if (modal === 'add-note') {
+            setNoteText('');
+            setNoteDate(new Date().toISOString().split('T')[0]);
+            setEditingNoteId(null);
+            setEditingNoteText('');
+            fetchExistingNotes(booking.id);
         }
     };
 
@@ -386,6 +404,117 @@ export default function ManageBookings() {
         }
     };
 
+    // --- Sitting Notes Handlers ---
+
+    const fetchExistingNotes = async (bookingId: number) => {
+        setLoadingNotes(true);
+        try {
+            const response = await fetch(`/api/dog-walking/admin/booking-notes?booking_id=${bookingId}`, { credentials: 'include' });
+            if (!response.ok) throw new Error("Failed to fetch notes");
+            const data = await response.json();
+            setExistingNotes(data.notes || []);
+        } catch (err: any) {
+            setModalError("Could not load existing notes.");
+        } finally {
+            setLoadingNotes(false);
+        }
+    };
+
+    const fetchNotesForCompletion = async (bookingId: number) => {
+        try {
+            const response = await fetch(`/api/dog-walking/admin/booking-notes?booking_id=${bookingId}`, { credentials: 'include' });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.notes && data.notes.length > 0) {
+                    const amalgamated = data.notes.map((note: { note_text: string; note_date: string }, index: number) => {
+                        const dateStr = new Date(note.note_date).toLocaleDateString('en-GB', {
+                            weekday: 'short', day: 'numeric', month: 'short'
+                        });
+                        return `Day ${index + 1} (${dateStr}): ${note.note_text}`;
+                    }).join('\n\n');
+                    setWalkSummary(amalgamated);
+                }
+            }
+        } catch {
+            // Silently fail -- admin can still type manually
+        }
+    };
+
+    const handleAddNoteSubmit = async () => {
+        if (!actionBooking || !noteText.trim()) {
+            setModalError("Please enter a note");
+            return;
+        }
+        try {
+            setModalLoading(true);
+            setModalError(null);
+            const response = await fetch('/api/dog-walking/admin/booking-notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    booking_id: actionBooking.id,
+                    note_text: noteText.trim(),
+                    note_date: noteDate,
+                }),
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to add note");
+            }
+            await fetchExistingNotes(actionBooking.id);
+            setNoteText('');
+        } catch (err: any) {
+            setModalError(err.message || "Could not add note.");
+        } finally {
+            setModalLoading(false);
+        }
+    };
+
+    const handleEditNote = async (noteId: number) => {
+        if (!editingNoteText.trim()) {
+            setModalError("Note text cannot be empty");
+            return;
+        }
+        try {
+            setModalLoading(true);
+            setModalError(null);
+            const response = await fetch('/api/dog-walking/admin/booking-notes', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ note_id: noteId, note_text: editingNoteText.trim() }),
+            });
+            if (!response.ok) throw new Error("Failed to update note");
+            setEditingNoteId(null);
+            setEditingNoteText('');
+            if (actionBooking) await fetchExistingNotes(actionBooking.id);
+        } catch (err: any) {
+            setModalError(err.message || "Could not update note.");
+        } finally {
+            setModalLoading(false);
+        }
+    };
+
+    const handleDeleteNote = async (noteId: number) => {
+        try {
+            setModalLoading(true);
+            setModalError(null);
+            const response = await fetch('/api/dog-walking/admin/booking-notes', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ note_id: noteId }),
+            });
+            if (!response.ok) throw new Error("Failed to delete note");
+            if (actionBooking) await fetchExistingNotes(actionBooking.id);
+        } catch (err: any) {
+            setModalError(err.message || "Could not delete note.");
+        } finally {
+            setModalLoading(false);
+        }
+    };
+
     // --- Helper Functions ---
 
     const formatDate = (dateString: string) => {
@@ -558,6 +687,9 @@ export default function ManageBookings() {
             <option value="reschedule">Reschedule</option>
             <option value="modify-dogs">Modify Dogs</option>
             <option value="modify-address">Modify Pickup Address</option>
+            {booking.booking_type === 'multi_day' && booking.status === 'confirmed' && (
+                <option value="add-note">Add Sitting Note</option>
+            )}
             <option disabled>──────────────</option>
             <option value="mark-completed">Mark as Completed</option>
             <option value="mark-confirmed">Mark as Confirmed</option>
@@ -903,15 +1035,116 @@ export default function ManageBookings() {
                             <textarea
                                 value={walkSummary}
                                 onChange={(e) => setWalkSummary(e.target.value)}
-                                placeholder="How did the walk go? (shown to customer in their dashboard)"
-                                rows={3}
+                                placeholder="How did the walk/sitting go? (shown to customer in their dashboard)"
+                                rows={walkSummary.split('\n').length > 3 ? Math.min(walkSummary.split('\n').length + 1, 10) : 3}
                                 style={{ ...styles.modalInput, resize: "vertical" }}
                             />
+                            {walkSummary && actionBooking?.booking_type === 'multi_day' && (
+                                <p style={{ color: "#9ca3af", fontSize: "0.75rem", marginTop: "6px" }}>
+                                    Pre-populated from sitting notes. Edit as needed before confirming.
+                                </p>
+                            )}
                         </div>
                         <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
                             <button onClick={closeModal} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#6b7280", opacity: modalLoading ? 0.5 : 1 }}>Cancel</button>
                             <button onClick={handleMarkCompletedSubmit} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#059669", opacity: modalLoading ? 0.5 : 1 }}>
                                 {modalLoading ? "Saving..." : "Mark Completed"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Sitting Note Modal */}
+            {activeModal === 'add-note' && actionBooking && (
+                <div style={styles.modalOverlay}>
+                    <div style={{ ...styles.modal, maxWidth: "600px" }}>
+                        <h2 style={styles.modalTitle}>Sitting Notes</h2>
+                        {bookingSummary(actionBooking)}
+                        {modalError && <div style={{ color: "#ef4444", marginBottom: "16px", fontSize: "0.875rem" }}>{modalError}</div>}
+
+                        {/* Existing notes list */}
+                        {loadingNotes ? (
+                            <div style={{ color: "#9ca3af", marginBottom: "16px" }}>Loading notes...</div>
+                        ) : existingNotes.length > 0 ? (
+                            <div style={{ marginBottom: "16px", maxHeight: "250px", overflowY: "auto" }}>
+                                {existingNotes.map(note => (
+                                    <div key={note.id} style={{ backgroundColor: "#374151", padding: "10px 12px", borderRadius: "6px", marginBottom: "8px" }}>
+                                        {editingNoteId === note.id ? (
+                                            <div>
+                                                <textarea
+                                                    value={editingNoteText}
+                                                    onChange={(e) => setEditingNoteText(e.target.value)}
+                                                    rows={2}
+                                                    style={{ ...styles.modalInput, marginBottom: "8px", resize: "vertical" }}
+                                                />
+                                                <div style={{ display: "flex", gap: "8px" }}>
+                                                    <button onClick={() => handleEditNote(note.id)} disabled={modalLoading} style={{ padding: "4px 12px", backgroundColor: "#059669", color: "#fff", border: "none", borderRadius: "4px", fontSize: "0.8rem", cursor: "pointer" }}>
+                                                        Save
+                                                    </button>
+                                                    <button onClick={() => { setEditingNoteId(null); setEditingNoteText(''); }} style={{ padding: "4px 12px", backgroundColor: "#6b7280", color: "#fff", border: "none", borderRadius: "4px", fontSize: "0.8rem", cursor: "pointer" }}>
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                    <span style={{ color: "#10b981", fontSize: "0.75rem", fontWeight: "600" }}>
+                                                        {new Date(note.note_date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    </span>
+                                                    <div style={{ display: "flex", gap: "6px" }}>
+                                                        <button
+                                                            onClick={() => { setEditingNoteId(note.id); setEditingNoteText(note.note_text); }}
+                                                            style={{ padding: "2px 8px", backgroundColor: "transparent", color: "#9ca3af", border: "1px solid #4b5563", borderRadius: "4px", fontSize: "0.7rem", cursor: "pointer" }}
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteNote(note.id)}
+                                                            disabled={modalLoading}
+                                                            style={{ padding: "2px 8px", backgroundColor: "transparent", color: "#ef4444", border: "1px solid #7f1d1d", borderRadius: "4px", fontSize: "0.7rem", cursor: "pointer" }}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div style={{ color: "#d1d5db", fontSize: "0.875rem", marginTop: "4px" }}>{note.note_text}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ color: "#9ca3af", fontStyle: "italic", marginBottom: "16px" }}>No notes yet for this booking.</div>
+                        )}
+
+                        {/* Add new note */}
+                        <div style={{ borderTop: "1px solid #374151", paddingTop: "16px", marginBottom: "16px" }}>
+                            <label style={styles.modalLabel}>Date</label>
+                            <input
+                                type="date"
+                                value={noteDate}
+                                onChange={(e) => setNoteDate(e.target.value)}
+                                style={{ ...styles.modalInput, marginBottom: "12px" }}
+                            />
+                            <label style={styles.modalLabel}>Note</label>
+                            <textarea
+                                value={noteText}
+                                onChange={(e) => setNoteText(e.target.value)}
+                                placeholder="How was the sitting today?"
+                                rows={3}
+                                style={{ ...styles.modalInput, resize: "vertical" }}
+                            />
+                        </div>
+                        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                            <button onClick={closeModal} style={{ ...styles.modalButton, backgroundColor: "#6b7280" }}>Close</button>
+                            <button
+                                onClick={handleAddNoteSubmit}
+                                disabled={modalLoading || !noteText.trim()}
+                                style={{ ...styles.modalButton, backgroundColor: "#059669", opacity: (modalLoading || !noteText.trim()) ? 0.5 : 1 }}
+                            >
+                                {modalLoading ? "Adding..." : "Add Note"}
                             </button>
                         </div>
                     </div>
