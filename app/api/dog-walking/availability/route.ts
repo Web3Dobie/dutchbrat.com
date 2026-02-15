@@ -14,6 +14,7 @@ import {
 } from "@date-fns/tz";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { getWalkLimitForDate } from '@/lib/walkLimit';
 
 // --- Database Connection (for exclude_booking_id lookup) ---
 const pool = getPool();
@@ -97,11 +98,24 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // 3. Define the day's boundaries
+        // 3. Check walk limit during multi-day sitting
+        const isWalkService = serviceType && (serviceType.includes('walk') || serviceType.includes('solo') || serviceType.includes('quick'));
+        if (isWalkService) {
+            const limitResult = await getWalkLimitForDate(pool, dateQuery);
+            if (limitResult.limitReached) {
+                return NextResponse.json({
+                    availableRanges: [],
+                    walkLimitReached: true,
+                    message: `Walk limit reached for this date (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting)`
+                });
+            }
+        }
+
+        // 4. Define the day's boundaries
         const dayStart = startOfDay(targetDate);
         const dayEnd = endOfDay(targetDate);
 
-        // 4. Fetch Google Calendar events
+        // 5. Fetch Google Calendar events
         const res = await calendar.events.list({
             calendarId: getCalendarId(),
             timeMin: dayStart.toISOString(),

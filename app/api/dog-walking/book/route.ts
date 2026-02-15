@@ -12,6 +12,7 @@ import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes"
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { getWalkLimitForDate } from '@/lib/walkLimit';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -43,6 +44,19 @@ export async function POST(request: NextRequest) {
         // Normalize service type for consistent storage
         const normalizedServiceType = normalizeServiceType(service_type);
         console.log(`[Booking] Service type: "${service_type}" -> normalized: "${normalizedServiceType}"`);
+
+        // Walk limit check during multi-day sitting
+        if (normalizedServiceType === 'solo' || normalizedServiceType === 'quick') {
+            const bookingDate = new Date(start_time).toISOString().split('T')[0];
+            const limitResult = await getWalkLimitForDate(pool, bookingDate);
+            if (limitResult.limitReached) {
+                console.log(`[Booking] Walk limit reached on ${bookingDate}: ${limitResult.currentWalkCount}/${limitResult.walkLimit}`);
+                return NextResponse.json(
+                    { error: `Walk limit reached for this date (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting). Contact admin for override.` },
+                    { status: 409 }
+                );
+            }
+        }
 
         // Log secondary address selection
         if (secondary_address_id) {

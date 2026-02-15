@@ -7,6 +7,7 @@ import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { getWalkLimitForDate } from '@/lib/walkLimit';
 
 // Database Connection
 const pool = getPool();
@@ -105,6 +106,21 @@ export async function POST(request: NextRequest) {
         }
 
         const booking = bookingResult.rows[0];
+
+        // Walk limit check during multi-day sitting (exclude the booking being rescheduled from count)
+        const serviceTypeLower = (booking.service_type || '').toLowerCase();
+        if (serviceTypeLower === 'solo' || serviceTypeLower === 'quick') {
+            const targetDate = new Date(data.new_start_time).toISOString().split('T')[0];
+            const limitResult = await getWalkLimitForDate(pool, targetDate, data.booking_id);
+            if (limitResult.limitReached) {
+                console.log(`[Reschedule] Walk limit reached on ${targetDate}: ${limitResult.currentWalkCount}/${limitResult.walkLimit}`);
+                await client.query("ROLLBACK");
+                return NextResponse.json(
+                    { error: `Walk limit reached for this date (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting). Cannot reschedule to this date.` },
+                    { status: 409 }
+                );
+            }
+        }
 
         // Check for time conflicts with OTHER bookings (explicitly exclude the booking being rescheduled)
         // Also exclude long dog sittings (6+ hours) which can coexist with walks (per V11.1)

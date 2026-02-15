@@ -48,7 +48,7 @@ interface SecondaryAddress {
     is_active: boolean;
 }
 
-type ModalType = 'reschedule' | 'cancel' | 'modify-dogs' | 'modify-address' | 'mark-completed' | 'mark-confirmed' | 'mark-no-show' | 'add-note' | null;
+type ModalType = 'reschedule' | 'cancel' | 'modify-dogs' | 'modify-address' | 'mark-completed' | 'mark-confirmed' | 'mark-no-show' | 'add-note' | 'walk-limit-override' | null;
 
 export default function ManageBookings() {
     // Core state
@@ -90,6 +90,12 @@ export default function ManageBookings() {
     const [loadingNotes, setLoadingNotes] = useState(false);
     const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
     const [editingNoteText, setEditingNoteText] = useState<string>('');
+
+    // Walk Limit Override modal state
+    const [walkLimitOverrides, setWalkLimitOverrides] = useState<Record<string, { id?: number; max_walks: number | null }>>({});
+    const [loadingOverrides, setLoadingOverrides] = useState(false);
+    const [defaultWalkLimit, setDefaultWalkLimit] = useState<number>(4);
+    const [sittingDays, setSittingDays] = useState<string[]>([]);
 
     // Filter state
     const [filterClient, setFilterClient] = useState<string>('');
@@ -183,6 +189,10 @@ export default function ManageBookings() {
             setEditingNoteId(null);
             setEditingNoteText('');
             fetchExistingNotes(booking.id);
+        }
+
+        if (modal === 'walk-limit-override') {
+            fetchWalkLimitOverrides(booking);
         }
     };
 
@@ -515,6 +525,84 @@ export default function ManageBookings() {
         }
     };
 
+    // --- Walk Limit Override Functions ---
+
+    const fetchWalkLimitOverrides = async (booking: EditableBooking) => {
+        setLoadingOverrides(true);
+        setModalError(null);
+        try {
+            const startDate = new Date(booking.start_time);
+            const endDate = booking.end_time ? new Date(booking.end_time) : startDate;
+            const days: string[] = [];
+            const current = new Date(startDate);
+            current.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(0, 0, 0, 0);
+
+            while (current <= end) {
+                days.push(current.toISOString().split('T')[0]);
+                current.setDate(current.getDate() + 1);
+            }
+            setSittingDays(days);
+
+            const startStr = days[0];
+            const endStr = days[days.length - 1];
+            const response = await fetch(
+                `/api/dog-walking/admin/walk-limit-override?start_date=${startStr}&end_date=${endStr}`,
+                { credentials: 'include' }
+            );
+
+            if (!response.ok) throw new Error("Failed to fetch overrides");
+            const data = await response.json();
+
+            const overrideMap: Record<string, { id?: number; max_walks: number | null }> = {};
+            for (const override of data.overrides) {
+                const dateKey = new Date(override.override_date).toISOString().split('T')[0];
+                overrideMap[dateKey] = { id: override.id, max_walks: override.max_walks };
+            }
+            setWalkLimitOverrides(overrideMap);
+            setDefaultWalkLimit(data.default_limit || 4);
+        } catch (err: any) {
+            setModalError("Could not load walk limit overrides.");
+        } finally {
+            setLoadingOverrides(false);
+        }
+    };
+
+    const handleWalkLimitToggle = async (dateStr: string, currentlyOverridden: boolean) => {
+        try {
+            if (currentlyOverridden) {
+                const response = await fetch('/api/dog-walking/admin/walk-limit-override', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ override_date: dateStr }),
+                });
+                if (!response.ok) throw new Error("Failed to remove override");
+                setWalkLimitOverrides(prev => {
+                    const updated = { ...prev };
+                    delete updated[dateStr];
+                    return updated;
+                });
+            } else {
+                const response = await fetch('/api/dog-walking/admin/walk-limit-override', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ override_date: dateStr, max_walks: null }),
+                });
+                if (!response.ok) throw new Error("Failed to create override");
+                const data = await response.json();
+                setWalkLimitOverrides(prev => ({
+                    ...prev,
+                    [dateStr]: { id: data.override.id, max_walks: null },
+                }));
+            }
+        } catch (err: any) {
+            setModalError(err.message || "Could not update walk limit override.");
+        }
+    };
+
     // --- Helper Functions ---
 
     const formatDate = (dateString: string) => {
@@ -689,6 +777,9 @@ export default function ManageBookings() {
             <option value="modify-address">Modify Pickup Address</option>
             {booking.booking_type === 'multi_day' && booking.status === 'confirmed' && (
                 <option value="add-note">Add Sitting Note</option>
+            )}
+            {booking.booking_type === 'multi_day' && booking.status === 'confirmed' && (
+                <option value="walk-limit-override">Walk Limit Overrides</option>
             )}
             <option disabled>──────────────</option>
             <option value="mark-completed">Mark as Completed</option>
@@ -1145,6 +1236,75 @@ export default function ManageBookings() {
                                 style={{ ...styles.modalButton, backgroundColor: "#059669", opacity: (modalLoading || !noteText.trim()) ? 0.5 : 1 }}
                             >
                                 {modalLoading ? "Adding..." : "Add Note"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Walk Limit Override Modal */}
+            {activeModal === 'walk-limit-override' && actionBooking && (
+                <div style={styles.modalOverlay}>
+                    <div style={{ ...styles.modal, maxWidth: "550px" }}>
+                        <h2 style={styles.modalTitle}>Walk Limit Overrides</h2>
+                        {bookingSummary(actionBooking)}
+                        <p style={{ color: "#9ca3af", fontSize: "0.875rem", marginBottom: "16px" }}>
+                            Default limit: <strong>{defaultWalkLimit} walks per day</strong> during this sitting.
+                            Toggle to allow unlimited walks on specific days.
+                        </p>
+                        {modalError && <div style={{ color: "#ef4444", marginBottom: "16px", fontSize: "0.875rem" }}>{modalError}</div>}
+
+                        {loadingOverrides ? (
+                            <div style={{ color: "#9ca3af", marginBottom: "16px" }}>Loading overrides...</div>
+                        ) : (
+                            <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                                {sittingDays.map(dateStr => {
+                                    const isOverridden = dateStr in walkLimitOverrides;
+                                    const dayLabel = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', {
+                                        weekday: 'short', day: 'numeric', month: 'short'
+                                    });
+
+                                    return (
+                                        <div key={dateStr} style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            padding: "10px 12px",
+                                            backgroundColor: isOverridden ? "#1a3a2a" : "#374151",
+                                            borderRadius: "6px",
+                                            marginBottom: "6px",
+                                            border: isOverridden ? "1px solid #059669" : "1px solid #4b5563",
+                                        }}>
+                                            <span style={{ color: "#d1d5db", fontSize: "0.9rem" }}>{dayLabel}</span>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>
+                                                    {isOverridden ? "Unlimited" : `Max ${defaultWalkLimit}`}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleWalkLimitToggle(dateStr, isOverridden)}
+                                                    style={{
+                                                        padding: "4px 12px",
+                                                        backgroundColor: isOverridden ? "#dc2626" : "#059669",
+                                                        color: "#fff",
+                                                        border: "none",
+                                                        borderRadius: "4px",
+                                                        fontSize: "0.8rem",
+                                                        cursor: "pointer",
+                                                        fontWeight: "600",
+                                                    }}
+                                                >
+                                                    {isOverridden ? "Restore Limit" : "Remove Limit"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
+                            <button onClick={closeModal} style={{ ...styles.modalButton, backgroundColor: "#6b7280" }}>
+                                Close
                             </button>
                         </div>
                     </div>

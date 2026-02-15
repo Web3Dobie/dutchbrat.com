@@ -8,6 +8,7 @@ import { generateRecurringBookingEmail } from "@/lib/emailTemplates";
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { getWalkLimitForDate } from '@/lib/walkLimit';
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -179,8 +180,21 @@ export async function POST(request: NextRequest) {
         }> = [];
 
         // 2. Create individual bookings for each confirmed date
+        const skippedByLimit: string[] = [];
+
         for (let i = 0; i < confirmed_dates.length; i++) {
             const { date, time } = confirmed_dates[i];
+
+            // Walk limit check during multi-day sitting
+            if (normalizedServiceType === 'solo' || normalizedServiceType === 'quick') {
+                const limitResult = await getWalkLimitForDate(pool, date);
+                if (limitResult.limitReached) {
+                    console.log(`[Recurring] Walk limit reached for ${date}, skipping`);
+                    skippedByLimit.push(date);
+                    continue;
+                }
+            }
+
             const [hour, minute] = time.split(':').map(Number);
 
             // Calculate start and end times
@@ -345,7 +359,8 @@ ${totalPrice ? `💰 Total: £${totalPrice.toFixed(2)}` : ''}
                 time: b.time,
             })),
             total_price: totalPrice,
-            message: `Successfully created ${createdBookings.length} recurring bookings`,
+            skipped_by_walk_limit: skippedByLimit,
+            message: `Successfully created ${createdBookings.length} recurring bookings${skippedByLimit.length > 0 ? ` (${skippedByLimit.length} skipped due to walk limit)` : ''}`,
         });
 
     } catch (error) {

@@ -13,6 +13,7 @@ import {
 import { TZDate } from "@date-fns/tz";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { getWalkLimitForDate } from '@/lib/walkLimit';
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -137,6 +138,18 @@ export async function POST(request: NextRequest) {
                     displayDate: format(targetDate, "EEE d MMM"),
                     status: 'blocked',
                     reason: 'Walks not available on weekends'
+                });
+                continue;
+            }
+
+            // Check walk limit during multi-day sitting
+            const limitResult = await getWalkLimitForDate(pool, dateStr);
+            if (limitResult.limitReached) {
+                blockedDates.push({
+                    date: dateStr,
+                    displayDate: format(targetDate, "EEE d MMM"),
+                    status: 'blocked',
+                    reason: `Walk limit reached (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting)`
                 });
                 continue;
             }
