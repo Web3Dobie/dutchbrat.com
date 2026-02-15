@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V16.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V17.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V16 - Digital Loyalty Card** 🎉
+**Status**: **V17 - Walk Limit During Sitting** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -122,6 +122,9 @@ export function useClientDomainDetection() {
 
 # NEW V16: Loyalty Card API Routes
 🔗 /api/dog-walking/loyalty                       → GET: Fetch loyalty status (cards, stamps, redemptions), POST: Redeem a full card against a confirmed booking
+
+# NEW V17: Walk Limit During Sitting API Routes
+🔗 /api/dog-walking/admin/walk-limit-override     → GET: Fetch overrides for date range, POST: Create/update override, DELETE: Remove override
 ```
 
 ## 🔐 Admin Panel Authentication
@@ -185,6 +188,7 @@ export function unauthorizedResponse(): NextResponse {
 - `/api/dog-walking/admin/photo-check/[filename]` - Check photo exists
 - `/api/dog-walking/admin/update-summary` - Update walk summaries
 - `/api/dog-walking/admin/booking-notes` - CRUD ad-hoc sitting notes (V15)
+- `/api/dog-walking/admin/walk-limit-override` - Per-day walk limit overrides during sitting (V17)
 - `/api/dog-walking/admin/christmas-email` - Send campaign emails
 
 ### **Credentials**
@@ -272,7 +276,7 @@ The booking system uses intelligent conflict detection that allows walks and 6+ 
 
 | Existing Booking | Can Book Walk? | Reason |
 |------------------|----------------|--------|
-| Multi-day dog sitting (e.g., 4 days) | **YES** | Dog stays at home, walker can go out |
+| Multi-day dog sitting (e.g., 4 days) | **YES (max 4/day)** | Dog stays at home, walker can go out. V17: Limited to `MAX_WALKS_DURING_SITTING` (default 4) per day. Admin can override per-day. |
 | Single-day sitting (6+ hours) | **YES** | Dog rests at home between walks |
 | Single-day sitting (<6 hours) | **NO** | Actively watching the dog during those hours |
 | Other walks | **NO** | Buffer time applied between walk appointments |
@@ -3362,3 +3366,106 @@ app/dog-walking/admin/manage-clients/page.tsx        → Added Loyalty column wi
 ### **V16 Summary**
 
 **For AI Agents**: V16 adds a digital loyalty card system. Key patterns: (1) There is no stamps table — loyalty cards are computed dynamically from qualifying walks using SQL `ROW_NUMBER()` grouped into cards of 15. The only persisted data is the `loyalty_redemptions` table which records when a card is redeemed. (2) Reward values are snapped to the nearest service price tier (£10, £17.50, £25, £32.50) using `getRewardTier()` in `lib/pricing.ts` — this is shared between server and client. (3) Multiple cards can stack; customers are not forced to redeem. The oldest unredeemed card is always redeemed first. (4) Redemption targets must be confirmed Solo/Quick Walk bookings priced at or below the reward tier. The booking price is set to £0 and a redemption record is created in a single transaction. (5) Free walks (redeemed bookings) are excluded from qualifying walk counts via a LEFT JOIN on `loyalty_redemptions`. (6) The admin clients list includes batch loyalty data using `ANY($1)` array queries for efficient per-page loading.
+
+## 🚶 V17: Walk Limit During Multi-Day Sitting
+
+### **Feature Overview**
+
+**Problem**: During multi-day (overnight) dog sitting bookings, the walker has limited capacity to go out and walk other dogs. Previously the system allowed unlimited walks on sitting days, which could lead to overbooking.
+
+**Solution**: A configurable walk limit (default 4 per day) that activates whenever a confirmed multi-day sitting booking spans a given date. The limit applies to both Solo Walk (`solo`) and Quick Walk (`quick`) bookings. Admin can bypass the limit via manual booking creation, and can toggle per-day overrides through the admin UI.
+
+### **Configuration**
+
+**Environment Variable**: `MAX_WALKS_DURING_SITTING=4` in `config/services/hunters-hounds.env`
+
+The default limit of 4 walks per day can be changed without code changes by updating this env var and restarting the container.
+
+### **Database Schema**
+
+```sql
+CREATE TABLE hunters_hounds.walk_limit_overrides (
+    id SERIAL PRIMARY KEY,
+    override_date DATE NOT NULL UNIQUE,
+    max_walks INTEGER,  -- NULL = unlimited (no limit on that day)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_walk_limit_overrides_date ON hunters_hounds.walk_limit_overrides (override_date);
+```
+
+- `override_date`: The specific date being overridden (UNIQUE — one override per date)
+- `max_walks`: `NULL` means unlimited (completely remove the limit). An integer value sets a custom limit for that day.
+- No foreign key to bookings — overrides are per-date, not per-sitting
+
+### **Shared Helper — `lib/walkLimit.ts`**
+
+Central function `getWalkLimitForDate(pool, dateStr, excludeBookingId?)` used by all API routes:
+
+1. Queries `hunters_hounds.bookings` for any confirmed multi-day sitting spanning the date (`booking_type = 'multi_day'`, `status = 'confirmed'`, `start_time::date <= date AND end_time::date >= date`)
+2. If no sitting found → `{ limitReached: false }` (no limit applies)
+3. Checks `walk_limit_overrides` for the date:
+   - Override with `max_walks = NULL` → unlimited, no limit
+   - Override with `max_walks = N` → use N as the limit
+   - No override → use `MAX_WALKS_DURING_SITTING` env var (default 4)
+4. Counts confirmed `solo`/`quick` bookings on that date
+5. Returns `{ hasActiveSitting, walkLimit, currentWalkCount, limitReached }`
+
+The optional `excludeBookingId` parameter supports rescheduling — the booking being rescheduled is excluded from the count.
+
+### **Enforcement Points**
+
+The walk limit is enforced at 5 points in the system:
+
+| Route | Behaviour |
+|-------|-----------|
+| `/api/dog-walking/availability` | Returns empty `availableRanges` when limit reached (skips Calendar API call for performance) |
+| `/api/dog-walking/book` | Server-side validation — returns `409` if limit reached (safety net against race conditions) |
+| `/api/dog-walking/reschedule-booking` | Blocks rescheduling to a full date — returns `409`. Excludes the booking being rescheduled from the count. |
+| `/api/dog-walking/recurring/check-availability` | Marks dates as `blocked` with reason "Walk limit reached (active sitting)" |
+| `/api/dog-walking/recurring/book` | Skips dates where limit is reached (does not fail entire batch). Reports skipped dates in response. |
+
+### **Admin Override — Automatic Bypass**
+
+`/api/dog-walking/admin/create-booking` has no conflict checking and does NOT call `getWalkLimitForDate`. Admin can always create bookings manually regardless of the walk limit.
+
+### **Admin Override — Per-Day Toggle**
+
+**API Route**: `app/api/dog-walking/admin/walk-limit-override/route.ts`
+
+| Method | Description |
+|--------|-------------|
+| **GET** `?start_date=X&end_date=Y` | Fetch overrides for date range + default limit |
+| **POST** `{ override_date, max_walks }` | Create/update override (upsert). `max_walks: null` = unlimited. |
+| **DELETE** `{ override_date }` | Remove override (reverts to default limit) |
+
+**Admin UI**: `app/dog-walking/admin/manage-bookings/page.tsx`
+
+- New "Walk Limit Overrides" option in the actions dropdown (only for `booking_type === 'multi_day'` and `status === 'confirmed'` bookings)
+- Opens a modal showing every day within the sitting period as a row:
+  - Date label (e.g., "Mon 17 Feb")
+  - Current status: "Max 4" or "Unlimited"
+  - Toggle button: green "Remove Limit" or red "Restore Limit"
+- Each toggle makes an immediate API call (same UX pattern as sitting note edit/delete)
+- Green highlighted background for overridden days
+
+### **Files Created**
+```
+lib/walkLimit.ts                                              → Shared helper: getWalkLimitForDate()
+app/api/dog-walking/admin/walk-limit-override/route.ts        → Admin CRUD API for per-day overrides
+```
+
+### **Files Modified**
+```
+config/services/hunters-hounds.env                            → Added MAX_WALKS_DURING_SITTING=4
+app/api/dog-walking/availability/route.ts                     → Early return when walk limit reached
+app/api/dog-walking/book/route.ts                             → Server-side 409 rejection
+app/api/dog-walking/reschedule-booking/route.ts               → Walk limit check for target date
+app/api/dog-walking/recurring/check-availability/route.ts     → Per-date blocked status
+app/api/dog-walking/recurring/book/route.ts                   → Skip limited dates in batch
+app/dog-walking/admin/manage-bookings/page.tsx                → Walk Limit Overrides modal + action
+```
+
+### **V17 Summary**
+
+**For AI Agents**: V17 adds a walk limit during multi-day sitting bookings. Key patterns: (1) The shared helper `getWalkLimitForDate()` in `lib/walkLimit.ts` is the single source of truth — it checks for active multi-day sittings, per-day overrides, and counts confirmed walks. All 5 enforcement routes call this same function. (2) The limit only applies when a confirmed multi-day sitting (`booking_type = 'multi_day'`, `status = 'confirmed'`) spans the date — if no sitting exists, there is no limit. (3) The default limit is configurable via `MAX_WALKS_DURING_SITTING` env var (default 4). (4) Per-day overrides are stored in `walk_limit_overrides` with `max_walks = NULL` meaning unlimited. (5) Admin create-booking (`/admin/create-booking`) completely bypasses the limit — it has no conflict checking at all. (6) The admin UI provides a per-day toggle modal accessible from the actions dropdown on multi-day bookings in the manage-bookings page. (7) If the sitting is cancelled (`status` changes from `confirmed`), the limit automatically stops applying since the query filters by `status = 'confirmed'`.
