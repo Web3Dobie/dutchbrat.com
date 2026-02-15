@@ -129,7 +129,29 @@ export async function GET(request: NextRequest) {
             !excludedEventId || event.id !== excludedEventId
         );
 
-        // 5. Define working hours for walk services (9:00-20:00)
+        // 5. Check for all-day blocking events (vacations, holidays, personal time)
+        const hasAllDayBlock = busyEvents.some((event) => {
+            if (event.start?.date && event.end?.date) {
+                const description = event.description || '';
+                const summary = event.summary || '';
+
+                // Allow walks during Dog Sitting events (check both summary and description)
+                if (summary.includes('Multi-Day Dog Sitting')) return false;
+                if (summary.includes('Dog Sitting')) return false;
+                if (description.includes('Multi-day booking')) return false;
+                if (description.includes('Booking Type: Multi-Day')) return false;
+
+                // Any other all-day event is a blocking event (vacation, personal time, etc.)
+                return true;
+            }
+            return false;
+        });
+
+        if (hasAllDayBlock) {
+            return NextResponse.json({ availableRanges: [] });
+        }
+
+        // 6. Define working hours for walk services (9:00-20:00)
         const workDayStart = new TZDate(targetDate, TIMEZONE);
         workDayStart.setHours(WORKING_HOURS_START, 0, 0, 0);
 
@@ -140,27 +162,24 @@ export async function GET(request: NextRequest) {
         const paddedBusyTimes: TimeRange[] = busyEvents
             .filter((event) => event.start?.dateTime && event.end?.dateTime)
             // Skip dog sitting events where walks can occur:
-            // - Multi-day sitting: dog stays at home, walker can go out to walk other dogs
-            // - Single-day sitting (6+ hours): long enough that dog can be left at home
-            // Short single-day sitting (<6 hours) still blocks walks
+            // - Multi-day sitting: dog stays at home, walker can go out
+            // - Single-day sitting (6+ hours): long enough that dog rests at home
+            // Checks both summary and description, standardized and legacy formats
             .filter((event) => {
                 const description = event.description || '';
+                const summary = event.summary || '';
 
-                // Multi-day sitting: EXCLUDE (allow walks)
-                if (description.includes('Multi-Day Dog Sitting')) {
-                    return false;
-                }
+                // Multi-day sitting: standardized and legacy format checks
+                if (summary.includes('Multi-Day Dog Sitting')) return false;
+                if (description.includes('Multi-day booking')) return false;
+                if (description.includes('Booking Type: Multi-Day')) return false;
 
-                // Single-day sitting 6+ hours: EXCLUDE (allow walks)
-                if (description.includes('Single-Day Dog Sitting')) {
-                    // Extract duration from description (e.g., "Duration: 9 hours")
-                    const durationMatch = description.match(/Duration:\s*(\d+)\s*hours?/i);
-                    if (durationMatch) {
-                        const hours = parseInt(durationMatch[1], 10);
-                        if (hours >= 6) {
-                            return false; // Long sitting - allow walks
-                        }
-                    }
+                // Single-day long sitting (6+ hours): has "Dog Sitting" in summary
+                if (summary.includes('Dog Sitting')) {
+                    const minutesMatch = description.match(/Duration:\s*(\d+)\s*minutes/i);
+                    const hoursMatch = description.match(/Duration:\s*(\d+)\s*hours?/i);
+                    if (minutesMatch && parseInt(minutesMatch[1], 10) >= 360) return false;
+                    if (hoursMatch && parseInt(hoursMatch[1], 10) >= 6) return false;
                 }
 
                 return true; // Include everything else (blocks walks)
