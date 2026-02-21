@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
             JOIN hunters_hounds.owners o ON d.owner_id = o.id
             JOIN hunters_hounds.bookings b ON (b.dog_id_1 = d.id OR b.dog_id_2 = d.id)
             WHERE b.status IN ('confirmed', 'completed', 'completed & paid')
+            AND b.service_type NOT IN ('meetgreet', 'Meet & Greet', 'Meet & Greet - for new clients')
             GROUP BY d.id, d.dog_name, d.dog_breed, d.image_filename, o.id, o.owner_name
             HAVING
                 EXTRACT(YEAR FROM MIN(b.start_time)) = $1
