@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { format, isPast, addMinutes, differenceInDays } from "date-fns";
+import { format, isPast, addMinutes, differenceInDays, differenceInHours, isSameDay } from "date-fns";
 import { sendEmail } from "@/lib/emailService";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // ← ADDED getSoloWalkPrice
@@ -54,8 +54,10 @@ export async function POST(request: NextRequest) {
         const serviceDisplayName = getServiceDisplayName(normalizedServiceType);
         console.log(`[Admin Booking] Service type: "${data.service_type}" -> normalized: "${normalizedServiceType}", display: "${serviceDisplayName}"`);
 
-        // Determine booking type
-        const booking_type = data.end_time && !data.duration_minutes ? 'multi_day' : 'single';
+        // Determine booking type (mirrors client route: same-day sitting vs multi-day vs single)
+        const booking_type = data.end_time && !data.duration_minutes
+            ? (isSameDay(startTime, new Date(data.end_time)) ? 'single_day_sitting' : 'multi_day')
+            : 'single';
 
         // Calculate end_time for single bookings
         let endTime: Date;
@@ -228,35 +230,101 @@ export async function POST(request: NextRequest) {
                 ? `${customer.dog_name_1} & ${customer.dog_name_2}`
                 : customer.dog_name_1;
 
-            const emailSubject = booking_type === 'multi_day'
-                ? `Multi-Day Dog Sitting Confirmation - ${dogNamesForEmail}`
-                : `Booking Confirmation - ${serviceDisplayName}`;
+            const cancellationLink = `https://hunters-hounds.com/dog-walking/cancel?token=${cancellation_token}`;
+            const dashboardLink = `https://hunters-hounds.com/my-account`;
 
-            const emailContent = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2>Booking Confirmation</h2>
-                    <p>Dear ${customer.owner_name},</p>
-                    <p>Your booking has been confirmed for ${dogNamesForEmail}.</p>
+            let emailSubject: string;
+            let emailContent: string;
 
-                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                        <p><strong>Service:</strong> ${serviceDisplayName}</p>
-                        <p><strong>Date & Time:</strong> ${format(startTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>
-                        ${booking_type === 'single' ? `<p><strong>Duration:</strong> ${formatDurationForEmail(data.duration_minutes ?? null)}</p>` : `<p><strong>End Time:</strong> ${format(endTime, "EEEE, dd MMMM yyyy 'at' HH:mm")}</p>`}
-                        ${finalPrice !== null ? `<p><strong>Price:</strong> £${finalPrice.toFixed(2)}</p>` : ''}
-                    </div>
-
-                    <p>We look forward to seeing you and ${dogNamesForEmail}!</p>
-
-                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-
-                    <p style="color: #6b7280; font-size: 14px;">
-                        <strong>Hunter's Hounds</strong><br>
-                        Professional Dog Walking Service<br>
-                        Phone: 07932749772<br>
-                        Email: bookings@hunters-hounds.london
-                    </p>
-                </div>
-            `;
+            if (booking_type === 'multi_day') {
+                const numDays = differenceInDays(endTime, startTime) + 1;
+                emailSubject = `Hunter's Hounds Multi-Day Dog Sitting Confirmed: ${numDays} days`;
+                emailContent = `
+                    <h1>Multi-Day Dog Sitting Confirmed!</h1>
+                    <p>Hi ${customer.owner_name},</p>
+                    <p>Your <strong>${numDays}-day dog sitting booking</strong> is confirmed!</p>
+                    <p><strong>Start:</strong> ${format(startTime, "EEEE, MMMM d 'at' HH:mm")}</p>
+                    <p><strong>End:</strong> ${format(endTime, "EEEE, MMMM d 'at' HH:mm")}</p>
+                    <p><strong>Dog(s):</strong> ${dogNamesForEmail}</p>
+                    <p><strong>Duration:</strong> ${numDays} days</p>
+                    <p><strong>Address:</strong> ${customer.address}</p>
+                    <br>
+                    <p>This is a multi-day booking where I'll be providing continuous care for your dog(s). We'll discuss the specific arrangements and pricing (POA) before the start date.</p>
+                    <br>
+                    <p>Please save this confirmation email for your records. I'll be in touch closer to the start date to coordinate details.</p>
+                    <br>
+                    <p><strong>Manage Your Booking:</strong></p>
+                    <a href="${dashboardLink}" style="display: inline-block; padding: 10px 20px; font-weight: bold; color: white; background-color: #3b82f6; border-radius: 4px; text-decoration: none; margin-right: 10px; margin-bottom: 10px;">
+                        View Dashboard
+                    </a>
+                    <p>If you need to cancel this appointment, please click the button below:</p>
+                    <a href="${cancellationLink}" style="display: inline-block; padding: 10px 20px; font-weight: bold; color: white; background-color: #ef4444; border-radius: 4px; text-decoration: none;">
+                        Cancel Booking
+                    </a>
+                    <br><br>
+                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. For multi-day bookings, please provide as much notice as possible.</p>
+                    <p>Thank you!</p>
+                `;
+            } else if (booking_type === 'single_day_sitting') {
+                const numHours = differenceInHours(endTime, startTime);
+                const displayDate = format(startTime, "EEEE, dd MMMM");
+                const startTimeOnly = format(startTime, "HH:mm");
+                const endTimeOnly = format(endTime, "HH:mm");
+                emailSubject = `Hunter's Hounds ${numHours} Hour Dog Sitting Confirmed`;
+                emailContent = `
+                    <h1>${numHours} Hour Dog Sitting Confirmed!</h1>
+                    <p>Hi ${customer.owner_name},</p>
+                    <p>Your <strong>${numHours}-hour dog sitting booking</strong> is confirmed!</p>
+                    <p><strong>Date:</strong> ${displayDate}</p>
+                    <p><strong>Time:</strong> ${startTimeOnly} - ${endTimeOnly}</p>
+                    <p><strong>Dog(s):</strong> ${dogNamesForEmail}</p>
+                    <p><strong>Duration:</strong> ${numHours} hours</p>
+                    <p><strong>Address:</strong> ${customer.address}</p>
+                    <br>
+                    <p>I'll be providing dedicated care for your dog(s) during this ${numHours}-hour session. We'll discuss the specific arrangements and pricing (POA) before the scheduled time.</p>
+                    <br>
+                    <p>Please save this confirmation email for your records. I'll be in touch if I need any additional details.</p>
+                    <br>
+                    <p><strong>Manage Your Booking:</strong></p>
+                    <a href="${dashboardLink}" style="display: inline-block; padding: 10px 20px; font-weight: bold; color: white; background-color: #3b82f6; border-radius: 4px; text-decoration: none; margin-right: 10px; margin-bottom: 10px;">
+                        View Dashboard
+                    </a>
+                    <p>If you need to cancel this appointment, please click the button below:</p>
+                    <a href="${cancellationLink}" style="display: inline-block; padding: 10px 20px; font-weight: bold; color: white; background-color: #ef4444; border-radius: 4px; text-decoration: none;">
+                        Cancel Booking
+                    </a>
+                    <br><br>
+                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p>Thank you!</p>
+                `;
+            } else {
+                const displayDate = format(startTime, "EEEE, dd MMMM 'at' HH:mm");
+                emailSubject = `Hunter's Hounds Booking Confirmation: ${displayDate}`;
+                const priceDisplay = finalPrice ? `<p><strong>Total Price:</strong> £${finalPrice.toFixed(2)}</p>` : '';
+                emailContent = `
+                    <h1>Booking Confirmed!</h1>
+                    <p>Hi ${customer.owner_name},</p>
+                    <p>Your booking for a <strong>${serviceDisplayName}</strong> is confirmed!</p>
+                    <p><strong>Date & Time:</strong> ${displayDate}</p>
+                    <p><strong>Dog(s):</strong> ${dogNamesForEmail}</p>
+                    <p><strong>Duration:</strong> ${formatDurationForEmail(data.duration_minutes ?? null)}</p>
+                    <p><strong>Address:</strong> ${customer.address}</p>
+                    ${priceDisplay}
+                    <p>Please save this confirmation email for your records. We'll see you at the scheduled time!</p>
+                    <br>
+                    <p><strong>Manage Your Booking:</strong></p>
+                    <a href="${dashboardLink}" style="display: inline-block; padding: 10px 20px; font-weight: bold; color: white; background-color: #3b82f6; border-radius: 4px; text-decoration: none; margin-right: 10px; margin-bottom: 10px;">
+                        View Dashboard
+                    </a>
+                    <p>If you need to cancel this appointment, please click the button below:</p>
+                    <a href="${cancellationLink}" style="display: inline-block; padding: 10px 20px; font-weight: bold; color: white; background-color: #ef4444; border-radius: 4px; text-decoration: none;">
+                        Cancel Booking
+                    </a>
+                    <br><br>
+                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p>Thank you!</p>
+                `;
+            }
 
             // --- 5. Send Telegram Notification ---
             try {
