@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
                         address: customer.address,
                         duration_minutes: calculatedDurationMinutes,
                         duration_days: calculatedDurationDays,
-                        booking_type: booking_type,
+                        booking_type: booking_type === 'multi_day' ? 'multi_day' : 'single',
                         start_time: startTime,
                         end_time: endTime,
                         price: finalPrice !== null ? finalPrice : undefined,

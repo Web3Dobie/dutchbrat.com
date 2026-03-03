@@ -7,7 +7,7 @@ import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
-import { getWalkLimitForDate } from '@/lib/walkLimit';
+import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 
 // Database Connection
 const pool = getPool();
@@ -22,6 +22,10 @@ interface RescheduleRequest {
 }
 
 export async function POST(request: NextRequest) {
+    if (!isAuthenticated(request)) {
+        return unauthorizedResponse();
+    }
+
     const data: RescheduleRequest = await request.json();
 
     // Validation
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
 
         // First, fetch the current booking details
         const bookingQuery = `
-            SELECT 
+            SELECT
                 b.id,
                 b.service_type,
                 b.start_time as old_start_time,
@@ -80,7 +84,7 @@ export async function POST(request: NextRequest) {
                 o.address,
                 -- Get dog names
                 array_agg(
-                    CASE 
+                    CASE
                         WHEN d1.id IS NOT NULL THEN d1.dog_name
                         WHEN d2.id IS NOT NULL THEN d2.dog_name
                         ELSE NULL
@@ -91,7 +95,7 @@ export async function POST(request: NextRequest) {
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.id = $1 AND b.status = 'confirmed'
-            GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes, 
+            GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes,
                      b.status, b.price_pounds, b.google_event_id, o.owner_name, o.phone, o.email, o.address;
         `;
 
@@ -107,25 +111,13 @@ export async function POST(request: NextRequest) {
 
         const booking = bookingResult.rows[0];
 
-        // Walk limit check during multi-day sitting (exclude the booking being rescheduled from count)
-        const serviceTypeLower = (booking.service_type || '').toLowerCase();
-        if (serviceTypeLower === 'solo' || serviceTypeLower === 'quick') {
-            const targetDate = new Date(data.new_start_time).toISOString().split('T')[0];
-            const limitResult = await getWalkLimitForDate(pool, targetDate, data.booking_id);
-            if (limitResult.limitReached) {
-                await client.query("ROLLBACK");
-                return NextResponse.json(
-                    { error: `Walk limit reached for this date (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting). Cannot reschedule to this date.` },
-                    { status: 409 }
-                );
-            }
-        }
+        // Admin route: no walk limit check — admin can reschedule onto any date
 
         // Check for time conflicts with OTHER bookings (explicitly exclude the booking being rescheduled)
         // Also exclude long dog sittings (6+ hours) which can coexist with walks (per V11.1)
         const bookingIdNum = parseInt(String(data.booking_id));
 
-        console.log(`Reschedule check: booking_id=${bookingIdNum}, new_start=${data.new_start_time}, new_end=${data.new_end_time}`);
+        console.log(`[Admin] Reschedule check: booking_id=${bookingIdNum}, new_start=${data.new_start_time}, new_end=${data.new_end_time}`);
 
         const conflictQuery = `
             SELECT id, start_time, end_time, service_type, duration_minutes FROM hunters_hounds.bookings
@@ -149,31 +141,27 @@ export async function POST(request: NextRequest) {
         // 2. Long dog sittings (6+ hours) - walks can coexist with these (V11.1)
         // 3. Multi-day dog sittings - walks can coexist with these
         const actualConflicts = conflictResult.rows.filter(row => {
-            // Exclude the booking being rescheduled
             if (Number(row.id) === bookingIdNum) return false;
 
-            // Check if this is a dog sitting that allows walk coexistence
             const serviceType = (row.service_type || '').toLowerCase();
             const isSitting = serviceType.includes('sitting');
 
             if (isSitting) {
-                // Calculate duration in hours
                 const startTime = new Date(row.start_time);
                 const endTime = new Date(row.end_time);
                 const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
 
-                // Long sittings (6+ hours) don't block walks
                 if (durationHours >= 6) {
                     console.log(`Allowing coexistence: booking ${row.id} is a ${durationHours}h sitting, walks can coexist`);
                     return false;
                 }
             }
 
-            return true; // This is a real conflict
+            return true;
         });
 
         if (actualConflicts.length > 0) {
-            console.log(`Reschedule conflict found: booking ${bookingIdNum} conflicts with bookings:`,
+            console.log(`[Admin] Reschedule conflict found: booking ${bookingIdNum} conflicts with bookings:`,
                 actualConflicts.map(r => `id=${r.id} (${r.start_time} - ${r.end_time})`).join(', '));
             await client.query("ROLLBACK");
             return NextResponse.json(
@@ -182,15 +170,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log(`Reschedule check passed: no conflicts found for booking ${bookingIdNum}`);
+        console.log(`[Admin] Reschedule check passed: no conflicts found for booking ${bookingIdNum}`);
 
         // Calculate new duration (in case it's different)
         const newDurationMinutes = Math.round((newEndTime.getTime() - newStartTime.getTime()) / (1000 * 60));
 
-        // 1. Update booking in database (removed updated_at reference)
+        // 1. Update booking in database
         const updateQuery = `
-            UPDATE hunters_hounds.bookings 
-            SET 
+            UPDATE hunters_hounds.bookings
+            SET
                 start_time = $2,
                 end_time = $3,
                 duration_minutes = $4
@@ -211,7 +199,6 @@ export async function POST(request: NextRequest) {
 
         if (booking.google_event_id) {
             try {
-                // Generate standardized calendar event using shared utility
                 const calendarEventData: CalendarEventData = {
                     service_type: serviceDisplayName,
                     dogNames,
@@ -237,16 +224,15 @@ export async function POST(request: NextRequest) {
                     requestBody: event,
                 });
                 calendarUpdated = true;
-                console.log("Google Calendar event updated:", booking.google_event_id);
+                console.log("[Admin] Google Calendar event updated:", booking.google_event_id);
             } catch (calendarError) {
                 console.error("Failed to update calendar event:", calendarError);
-                // Don't fail the whole operation if calendar update fails
             }
         } else {
-            console.warn(`Booking ${data.booking_id} has no google_event_id - calendar not updated`);
+            console.warn(`[Admin] Booking ${data.booking_id} has no google_event_id - calendar not updated`);
         }
 
-        // 3. Send reschedule confirmation email using new email service
+        // 3. Send reschedule confirmation email
         const oldFormattedDate = format(new Date(booking.old_start_time), "EEEE, MMMM d, yyyy");
         const oldFormattedTime = format(new Date(booking.old_start_time), "h:mm a");
         const newFormattedDate = format(newStartTime, "EEEE, MMMM d, yyyy");
@@ -257,11 +243,11 @@ export async function POST(request: NextRequest) {
             const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2 style="color: #059669;">Booking Rescheduled</h2>
-                    
+
                     <p>Dear ${booking.owner_name},</p>
-                    
+
                     <p>Your booking has been successfully rescheduled:</p>
-                    
+
                     <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                         <h3 style="margin-top: 0; color: #374151;">Updated Booking Details</h3>
                         <p><strong>Service:</strong> ${serviceDisplayName}</p>
@@ -270,17 +256,17 @@ export async function POST(request: NextRequest) {
                         <p><strong>Dogs:</strong> ${dogNames}</p>
                         ${booking.price_pounds ? `<p><strong>Price:</strong> £${parseFloat(booking.price_pounds).toFixed(2)}</p>` : ''}
                     </div>
-                    
+
                     <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
                         <p style="margin: 0; color: #92400e;"><strong>Previous booking time:</strong> ${oldFormattedDate} at ${oldFormattedTime}</p>
                     </div>
-                    
+
                     <p>Please make note of the new date and time. We look forward to seeing you and ${dogNames}!</p>
-                    
+
                     <p>If you need to make any further changes, please contact us as soon as possible.</p>
-                    
+
                     <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-                    
+
                     <p style="color: #6b7280; font-size: 14px;">
                         <strong>Hunter's Hounds</strong><br>
                         Professional Dog Walking Service<br>
@@ -291,13 +277,12 @@ export async function POST(request: NextRequest) {
             `;
 
             await sendBookingEmail(booking.id, emailSubject, emailContent);
-            console.log(`Reschedule confirmation emails sent to all recipients for booking ${booking.id}`);
+            console.log(`[Admin] Reschedule confirmation emails sent for booking ${booking.id}`);
         } catch (emailError) {
             console.error(`Failed to send reschedule emails for booking ${booking.id}:`, emailError);
-            // Don't fail the operation if email fails
         }
 
-        // 4. Send Telegram notification to business owner
+        // 4. Send Telegram notification
         try {
             const telegramMessage = `
 📅 **BOOKING RESCHEDULED** (ID: ${data.booking_id})
@@ -318,7 +303,6 @@ ${booking.price_pounds ? `**Price:** £${parseFloat(booking.price_pounds).toFixe
             await sendTelegramNotification(telegramMessage);
         } catch (telegramError) {
             console.error("Failed to send Telegram notification:", telegramError);
-            // Don't fail the operation if Telegram fails
         }
 
         await client.query("COMMIT");
@@ -334,7 +318,7 @@ ${booking.price_pounds ? `**Price:** £${parseFloat(booking.price_pounds).toFixe
 
     } catch (error) {
         await client.query("ROLLBACK");
-        console.error("Reschedule booking error:", error);
+        console.error("Admin reschedule booking error:", error);
         return NextResponse.json(
             { error: "Failed to reschedule booking. Please try again." },
             { status: 500 }

@@ -248,7 +248,7 @@ export default function ManageBookings() {
             setModalError(null);
             const newStartDate = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
             const newEndDate = new Date(newStartDate.getTime() + actionBooking.duration_minutes * 60 * 1000);
-            const response = await fetch('/api/dog-walking/reschedule-booking', {
+            const response = await fetch('/api/dog-walking/admin/reschedule-booking', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
