@@ -563,6 +563,14 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     style={{
                         ...styles.tab,
                     }}
+                    onClick={() => handleTabChange('media')}
+                >
+                    📷 My Media
+                </button>
+                <button
+                    style={{
+                        ...styles.tab,
+                    }}
                     onClick={() => handleTabChange('account')}
                 >
                     ⚙️ My Details
@@ -574,14 +582,6 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     onClick={() => handleTabChange('addresses')}
                 >
                     📍 Secondary Addresses
-                </button>
-                <button
-                    style={{
-                        ...styles.tab,
-                    }}
-                    onClick={() => handleTabChange('media')}
-                >
-                    📷 My Media
                 </button>
             </div>
 
