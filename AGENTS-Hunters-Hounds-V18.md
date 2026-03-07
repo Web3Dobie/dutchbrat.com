@@ -1,4 +1,4 @@
-# AGENTS-hunters-hounds-V17.md - AI Agent Documentation for Hunter's Hounds Professional Website
+# AGENTS-hunters-hounds-V18.md - AI Agent Documentation for Hunter's Hounds Professional Website
 
 ## 🐶 Business Overview for AI Agents
 
@@ -6,7 +6,7 @@
 **Architecture**: Independent Next.js Website + PostgreSQL + External Service Integrations
 **Purpose**: Complete professional dog walking business website with booking, customer management, and marketing platform
 **Domain**: **hunters-hounds.london** & **hunters-hounds.com** (independent professional website)
-**Status**: **V17 - Walk Limit During Sitting** 🎉
+**Status**: **V18 - Revolut Payment Automation** 🎉
 
 ## 🌐 Complete Domain Architecture & Independence
 
@@ -125,6 +125,9 @@ export function useClientDomainDetection() {
 
 # NEW V17: Walk Limit During Sitting API Routes
 🔗 /api/dog-walking/admin/walk-limit-override     → GET: Fetch overrides for date range, POST: Create/update override, DELETE: Remove override
+
+# NEW V18: Revolut Payment Automation API Routes
+🔗 /api/dog-walking/admin/payment-check           → POST: Poll Gmail for Revolut payment emails, auto-match to clients, mark bookings paid (Bearer token auth)
 ```
 
 ## 🔐 Admin Panel Authentication
@@ -337,6 +340,7 @@ CREATE TABLE hunters_hounds.owners (
     photo_sharing_consent BOOLEAN DEFAULT false, -- V8: Permission to share dog photos on website/social media
     payment_preference VARCHAR(20) DEFAULT 'per_service' -- V9: per_service, weekly, fortnightly, monthly
         CHECK (payment_preference IN ('per_service', 'weekly', 'fortnightly', 'monthly')),
+    payment_account_name VARCHAR(255),   -- V18: Exact name on Revolut/bank transfer for auto-matching incoming payments
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -3469,3 +3473,211 @@ app/dog-walking/admin/manage-bookings/page.tsx                → Walk Limit Ove
 ### **V17 Summary**
 
 **For AI Agents**: V17 adds a walk limit during multi-day sitting bookings. Key patterns: (1) The shared helper `getWalkLimitForDate()` in `lib/walkLimit.ts` is the single source of truth — it checks for active multi-day sittings, per-day overrides, and counts confirmed walks. All 5 enforcement routes call this same function. (2) The limit only applies when a confirmed multi-day sitting (`booking_type = 'multi_day'`, `status = 'confirmed'`) spans the date — if no sitting exists, there is no limit. (3) The default limit is configurable via `MAX_WALKS_DURING_SITTING` env var (default 4). (4) Per-day overrides are stored in `walk_limit_overrides` with `max_walks = NULL` meaning unlimited. (5) Admin create-booking (`/admin/create-booking`) completely bypasses the limit — it has no conflict checking at all. (6) The admin UI provides a per-day toggle modal accessible from the actions dropdown on multi-day bookings in the manage-bookings page. (7) If the sitting is cancelled (`status` changes from `confirmed`), the limit automatically stops applying since the query filters by `status = 'confirmed'`.
+
+---
+
+## 💰 V18: Revolut Payment Automation
+
+### **Feature Overview**
+
+**Problem**: Revolut Personal has no official webhook API. Every incoming payment had to be manually identified and bookings manually marked as paid in the admin console.
+
+**Solution**: Email parsing via IMAP. When a client pays via Revolut or bank transfer, Revolut sends an email notification to a dedicated Gmail inbox. A cron job polls that inbox every 5 minutes, parses each email for sender name and amount, matches the sender to a client in the database using their `payment_preference` to determine the expected booking window, and:
+- **Exact match** → automatically marks the relevant bookings as `completed & paid` and sends a Telegram success notification
+- **Amount mismatch** → sends a Telegram warning with the full breakdown for manual review — bookings are NOT touched
+- **Unknown sender** → sends a Telegram alert for manual action
+- **Unrecognised email format** → sends a Telegram debug alert with the raw subject line
+
+### **End-to-End Flow**
+
+```
+Client sends payment via Revolut / bank transfer
+      ↓
+Revolut sends email notification to dedicated Gmail inbox
+      ↓
+Cron job (every 5 min) calls POST /api/dog-walking/admin/payment-check
+      ↓
+IMAP: fetch all unread emails from Revolut sender
+      ↓
+Parse each email: extract amount + sender name
+      ↓
+Match sender name → owner in DB (two-tier lookup)
+      ↓
+Apply payment_preference window to find outstanding bookings
+      ↓
+Compare amounts → exact match or mismatch
+      ↓
+Mark bookings paid OR send mismatch warning to Telegram
+      ↓
+Mark email as read (idempotency — never processed twice)
+```
+
+### **Database Change**
+
+```sql
+ALTER TABLE hunters_hounds.owners
+ADD COLUMN IF NOT EXISTS payment_account_name VARCHAR(255);
+```
+
+- Stores the **exact name that appears on the client's Revolut/bank transfer** (e.g. `"J. Smith"`), which may differ from `owner_name`
+- Set automatically after the first payment is successfully matched via fallback name lookup
+- Once set, used as the **primary matching key** for all future payments — no fuzzy logic needed
+- Can be manually set or corrected in the admin console via the ClientEditor
+
+### **Two-Tier Payment Matching**
+
+| Tier | Method | Notes |
+|------|--------|-------|
+| **Primary** | `payment_account_name ILIKE senderName` | Exact stored account name — used once set |
+| **Fallback** | `owner_name ILIKE senderName` then first-name prefix | Used when `payment_account_name` not yet set |
+
+When matched via fallback AND the amounts match exactly (within £0.01), the `senderName` is automatically saved to `payment_account_name` for that owner, and the Telegram message includes a note confirming this.
+
+### **Payment Preference — Booking Window**
+
+| `payment_preference` | Bookings included in expected total |
+|---------------------|-------------------------------------|
+| `per_service` | Most recent single `completed` booking with `price_pounds > 0` |
+| `weekly` | All `completed` bookings in the past 7 days with `price_pounds > 0` |
+| `fortnightly` | All `completed` bookings in the past 14 days with `price_pounds > 0` |
+| `monthly` | All `completed` bookings in the current calendar month with `price_pounds > 0` |
+
+### **Amount Matching Rules**
+
+- **Exact match** (within £0.01 tolerance): auto-mark bookings as `completed & paid`, send success Telegram
+- **Any mismatch** (over or under): do NOT touch booking statuses, send warning Telegram with full breakdown — admin decides manually in admin console
+- **No outstanding bookings found for matched owner**: send warning Telegram, do nothing
+
+### **Telegram Notification Examples**
+
+**Exact match (known account name):**
+```
+💰 PAYMENT RECEIVED ✅
+
+From: J. Smith
+Amount: £75.00
+
+Matched to: John Smith (#12) — monthly payer
+Bookings marked as paid:
+  #45 Solo Walk 03 Feb £17.50
+  #46 Solo Walk 05 Feb £17.50
+  #47 Solo Walk 07 Feb £17.50
+  #48 Solo Walk 10 Feb £22.50
+
+Expected: £75.00 — Received: £75.00 ✅
+```
+
+**Exact match, first time (auto-saves account name):**
+```
+💰 PAYMENT RECEIVED ✅
+...
+📌 Account name 'J. Smith' saved to John Smith's profile.
+Future payments will match automatically.
+```
+
+**Amount mismatch (nothing auto-marked):**
+```
+⚠️ PAYMENT MISMATCH — action required
+
+From: John Smith
+Amount received: £60.00
+
+Matched to: John Smith (#12) — monthly payer
+Outstanding bookings this period:
+  #45 Solo Walk 03 Feb £17.50
+  ...
+
+Expected: £75.00 — Received: £60.00
+Bookings NOT marked paid. Please review in admin console.
+```
+
+**No client found:**
+```
+⚠️ UNMATCHED PAYMENT
+
+From: J. Davies
+Amount: £35.00
+
+No client found. Please mark manually in admin console.
+```
+
+### **Security — API Authentication**
+
+The `/api/dog-walking/admin/payment-check` endpoint uses Bearer token authentication (not the admin cookie), since it is called by a cron job rather than a browser:
+
+```typescript
+const authHeader = request.headers.get('Authorization');
+const secret = process.env.PAYMENT_CHECK_SECRET;
+if (!secret || authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+}
+```
+
+The secret is stored on the host at `~/.payment-check-secret` and read by the cron wrapper script.
+
+### **Cron Job**
+
+```bash
+# /home/hunter-dev/check-payments.sh — runs every 5 minutes
+*/5 * * * * /home/hunter-dev/check-payments.sh
+```
+
+The wrapper script reads `PAYMENT_CHECK_SECRET` from `~/.payment-check-secret` (chmod 600) and makes the POST request. Output is logged to `/home/hunter-dev/payment-check.log`.
+
+### **Environment Variables Required**
+
+```
+GMAIL_USER=hunters.hounds.payments@gmail.com
+GMAIL_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+PAYMENT_CHECK_SECRET=a-long-random-secret-string
+```
+
+### **One-Time Setup (Before Going Live)**
+
+1. Create dedicated Gmail account for Revolut notifications
+2. Enable IMAP: Gmail Settings → Forwarding and POP/IMAP → Enable IMAP
+3. Generate App Password (requires 2FA): Google Account → Security → App Passwords
+4. Configure Revolut: Profile → Notifications → enable "Receiving money" email → use Gmail address
+5. Add env vars to Next.js container configuration
+6. Save secret for cron: `echo "your-secret" > ~/.payment-check-secret && chmod 600 ~/.payment-check-secret`
+
+### **Admin UI — ClientEditor Enhancement**
+
+A **Payment Account Name** text field was added to the ClientEditor (below the payment preference radio buttons), allowing the admin to:
+- Manually set or correct the stored account name for any client at any time
+- View what name is currently stored (auto-populated after first matched payment)
+- Clear or update the name if a client changes their bank account details
+
+### **Files Created**
+
+```
+lib/emailPoller.ts                                        → IMAP client: connect Gmail, fetch unread Revolut emails, mark as read
+lib/paymentParser.ts                                      → Regex parser: extract { amountPounds, senderName } from subject/body
+lib/paymentMatcher.ts                                     → DB matcher: two-tier lookup + payment_preference booking window + auto-save account name
+app/api/dog-walking/admin/payment-check/route.ts          → Orchestration endpoint: wires together poller → parser → matcher → DB update → Telegram
+/home/hunter-dev/check-payments.sh                        → Cron wrapper script (reads secret from ~/.payment-check-secret)
+```
+
+### **Files Modified**
+
+```
+app/dog-walking/admin/manage-clients/components/ClientEditor.tsx  → Added payment_account_name text field
+app/api/dog-walking/admin/clients/[clientId]/route.ts             → Added payment_account_name to GET/PUT handler
+```
+
+### **Database Migration Applied**
+
+```sql
+ALTER TABLE hunters_hounds.owners
+ADD COLUMN IF NOT EXISTS payment_account_name VARCHAR(255);
+```
+
+### **Package Added**
+
+```
+imapflow@1.2.12  — promise-based IMAP client for Node.js
+```
+
+### **V18 Summary**
+
+**For AI Agents**: V18 adds fully automated Revolut payment processing via Gmail IMAP polling. Key patterns: (1) The payment-check endpoint at `/api/dog-walking/admin/payment-check` uses Bearer token auth (not the admin cookie) — it is called by cron, not a browser. The secret is in `process.env.PAYMENT_CHECK_SECRET`. (2) Email processing is idempotent — emails are marked as read (SEEN flag) immediately after fetching, so a second cron run will never re-process the same email. (3) The `payment_account_name` column on `hunters_hounds.owners` is the primary matching key. It is set automatically after the first successful fallback match where the amounts align, or can be set manually via the ClientEditor. If `payment_account_name` is empty, the system falls back to `owner_name` matching (exact, then first-name prefix). (4) Amount mismatch logic is conservative by design — if the received amount does not match expected total within £0.01, no bookings are auto-marked and a manual-review Telegram warning is sent. (5) The `payment_preference` field on the owner record determines which `completed` bookings are included in the expected total: `per_service` = most recent 1 booking, `weekly` = last 7 days, `fortnightly` = last 14 days, `monthly` = current calendar month. Only bookings with `status = 'completed'` and `price_pounds > 0` are included. (6) Three lib files handle distinct concerns: `emailPoller.ts` handles IMAP connection and email retrieval, `paymentParser.ts` handles regex extraction from email subjects/bodies, `paymentMatcher.ts` handles database lookup and booking aggregation. The route file orchestrates these three and handles all Telegram notifications and DB updates. (7) The cron wrapper script at `/home/hunter-dev/check-payments.sh` reads the secret from `~/.payment-check-secret` (chmod 600) to avoid exposing it in the crontab itself.

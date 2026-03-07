@@ -32,6 +32,8 @@ interface ClientDetails {
     extended_travel_time: boolean;
     // Payment preference
     payment_preference: string | null;
+    // Payment account name for auto-matching incoming payments
+    payment_account_name: string | null;
     dogs: Dog[];
 }
 
@@ -53,6 +55,8 @@ interface UpdateClientRequest {
     extended_travel_time?: boolean;
     // Payment preference
     payment_preference?: string;
+    // Payment account name for auto-matching incoming payments
+    payment_account_name?: string | null;
     dogs?: {
         id: number;
         dog_name?: string;
@@ -100,6 +104,7 @@ export async function GET(
                 o.photo_sharing_consent,
                 o.extended_travel_time,
                 o.payment_preference,
+                o.payment_account_name,
                 COALESCE(
                     json_agg(
                         CASE
@@ -120,7 +125,7 @@ export async function GET(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference, o.payment_account_name
         `;
 
         const result = await client.query(query, [clientId]);
@@ -190,7 +195,7 @@ export async function PUT(
         await client.query("BEGIN");
 
         // Update owner information if provided (INCLUDING PARTNER, VET, INSURANCE, PHOTO CONSENT, EXTENDED TRAVEL TIME, AND PAYMENT PREFERENCE FIELDS)
-        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone', 'vet_info', 'pet_insurance', 'photo_sharing_consent', 'extended_travel_time', 'payment_preference'];
+        const ownerFields = ['owner_name', 'phone', 'email', 'address', 'partner_name', 'partner_email', 'partner_phone', 'vet_info', 'pet_insurance', 'photo_sharing_consent', 'extended_travel_time', 'payment_preference', 'payment_account_name'];
         const hasOwnerUpdate = ownerFields.some(field => field in updateData);
 
         if (hasOwnerUpdate) {
@@ -266,6 +271,13 @@ export async function PUT(
             if (updateData.payment_preference !== undefined) {
                 ownerUpdates.push(`payment_preference = $${paramIndex}`);
                 ownerValues.push(updateData.payment_preference?.trim() || 'per_service');
+                paramIndex++;
+            }
+
+            // Payment account name
+            if (updateData.payment_account_name !== undefined) {
+                ownerUpdates.push(`payment_account_name = $${paramIndex}`);
+                ownerValues.push(updateData.payment_account_name?.trim() || null);
                 paramIndex++;
             }
 
@@ -352,6 +364,7 @@ export async function PUT(
                 o.photo_sharing_consent,
                 o.extended_travel_time,
                 o.payment_preference,
+                o.payment_account_name,
                 COALESCE(
                     json_agg(
                         CASE
@@ -372,7 +385,7 @@ export async function PUT(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference, o.payment_account_name
         `;
 
         const result = await client.query(updatedQuery, [clientId]);

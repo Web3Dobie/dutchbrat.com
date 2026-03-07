@@ -27,6 +27,8 @@ interface Client {
     extended_travel_time?: boolean;
     // Payment preference
     payment_preference?: string | null;
+    // Payment account name (exact name on bank transfer, for auto-matching)
+    payment_account_name?: string | null;
     dogs: Dog[];
 }
 
@@ -57,6 +59,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         photo_sharing_consent: client.photo_sharing_consent || false,
         extended_travel_time: client.extended_travel_time || false,
         payment_preference: client.payment_preference || 'per_service',
+        payment_account_name: client.payment_account_name || '',
         dogs: [...client.dogs]
     });
 
@@ -156,6 +159,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                     photo_sharing_consent: formData.photo_sharing_consent,
                     extended_travel_time: formData.extended_travel_time,
                     payment_preference: formData.payment_preference,
+                    payment_account_name: formData.payment_account_name || null,
                     dogs: formData.dogs
                 })
             });
@@ -554,6 +558,21 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                     </div>
                                 </label>
                             ))}
+                        </div>
+                        <div style={{ marginTop: "16px" }}>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Payment Account Name</label>
+                                <input
+                                    type="text"
+                                    value={formData.payment_account_name}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, payment_account_name: e.target.value }))}
+                                    style={styles.input}
+                                    placeholder="Exact name as it appears on their bank transfer (e.g. J. Smith)"
+                                />
+                                <span style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>
+                                    Used to automatically match incoming Revolut payments. Set automatically after the first matched payment.
+                                </span>
+                            </div>
                         </div>
                     </div>
 
