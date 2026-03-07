@@ -35,7 +35,7 @@ export async function fetchUnreadRevolutEmails(): Promise<RawEmail[]> {
 
         // Search for unread emails from Revolut
         const messages = await client.search({
-            unseen: true,
+            seen: false,
             from: 'revolut.com',
         });
 
