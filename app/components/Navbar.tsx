@@ -133,6 +133,12 @@ export default function Navbar() {
                             >
                                 Reviews
                             </Link>
+                            <Link
+                                href="/newsletters"
+                                className="text-gray-200 hover:text-white transition-colors duration-300"
+                            >
+                                Newsletter
+                            </Link>
                         </div>
 
                         {/* Mobile Menu Button */}
@@ -212,6 +218,13 @@ export default function Navbar() {
                                     onClick={closeMobileMenu}
                                 >
                                     Reviews
+                                </Link>
+                                <Link
+                                    href="/newsletters"
+                                    className="block text-gray-200 hover:text-white transition-colors duration-300 py-2"
+                                    onClick={closeMobileMenu}
+                                >
+                                    Newsletter
                                 </Link>
                             </div>
                         </div>
