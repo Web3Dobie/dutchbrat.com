@@ -39,7 +39,7 @@ export async function fetchUnreadRevolutEmails(): Promise<RawEmail[]> {
             from: 'revolut.com',
         });
 
-        if (messages.length === 0) {
+        if (!messages || messages.length === 0) {
             return emails;
         }
 

@@ -8,9 +8,6 @@ import { getServiceDisplayName } from '@/lib/serviceTypes';
 const pool = getPool();
 
 interface PaymentNotifyRequest {
-    sender_name: string;
-    amount_pounds: number;
-    // Optional raw notification fields for debugging unrecognised formats
     raw_title?: string;
     raw_text?: string;
 }
@@ -33,13 +30,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { sender_name, amount_pounds, raw_title, raw_text } = data;
+    const { raw_title = '', raw_text = '' } = data;
 
-    if (!sender_name || typeof amount_pounds !== 'number' || isNaN(amount_pounds)) {
-        await sendTelegramNotification(
-            `⚠️ PAYMENT NOTIFY — bad request\n\nMissing or invalid sender_name / amount_pounds.\nRaw title: ${raw_title || '(none)'}\nRaw text: ${raw_text || '(none)'}`
-        );
-        return NextResponse.json({ error: 'sender_name and amount_pounds are required' }, { status: 400 });
+    let sender_name = '';
+    let amount_pounds = NaN;
+
+    // Bank transfer: "You've received £25.00 from Client Name. Tap to view"
+    const bankMatch = raw_text.match(/received\s+\D{0,3}(\d+(?:\.\d+)?)\s+from\s+(.+?)(?:\.\s*tap\b.*)?$/i);
+    if (bankMatch) {
+        amount_pounds = parseFloat(bankMatch[1]);
+        sender_name = bankMatch[2].replace(/\.\s*tap\b.*/i, '').trim();
+    }
+
+    // Revolut-to-Revolut: body = "Sent you £25.00", title = sender name
+    if (!bankMatch) {
+        const p2pMatch = raw_text.match(/sent\s+you\s+\D{0,3}(\d+(?:\.\d+)?)/i);
+        if (p2pMatch) {
+            amount_pounds = parseFloat(p2pMatch[1]);
+            sender_name = raw_title.trim();
+        }
+    }
+
+    // Monzo: "💸 £25.00 from Ernesto Becker: Sent from Revolut"
+    if (!bankMatch && isNaN(amount_pounds)) {
+        const monzoMatch = raw_text.match(/\D{0,3}(\d+(?:\.\d+)?)\s+from\s+(.+?):/i);
+        if (monzoMatch) {
+            amount_pounds = parseFloat(monzoMatch[1]);
+            sender_name = monzoMatch[2].trim();
+        }
+    }
+
+    if (!sender_name || isNaN(amount_pounds)) {
+        // Silently ignore — not a recognised payment notification
+        return NextResponse.json({ ignored: true }, { status: 200 });
     }
 
     try {
