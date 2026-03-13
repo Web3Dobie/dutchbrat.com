@@ -63,7 +63,12 @@ export async function POST(request: NextRequest) {
                 );
 
                 const bookingLines = bookings
-                    .map(b => `  #${b.id} ${getServiceDisplayName(b.service_type)} ${format(new Date(b.start_time), 'd MMM')} £${b.price_pounds.toFixed(2)}`)
+                    .map(b => {
+                        const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
+                            ? `${format(new Date(b.start_time), 'd MMM')}–${format(new Date(b.end_time), 'd MMM')}`
+                            : format(new Date(b.start_time), 'd MMM');
+                        return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
+                    })
                     .join('\n');
 
                 const preferenceLabel = owner.payment_preference === 'per_service'
@@ -87,7 +92,12 @@ export async function POST(request: NextRequest) {
             } else {
                 // Amount mismatch — do NOT auto-mark anything
                 const bookingLines = bookings
-                    .map(b => `  #${b.id} ${getServiceDisplayName(b.service_type)} ${format(new Date(b.start_time), 'd MMM')} £${b.price_pounds.toFixed(2)}`)
+                    .map(b => {
+                        const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
+                            ? `${format(new Date(b.start_time), 'd MMM')}–${format(new Date(b.end_time), 'd MMM')}`
+                            : format(new Date(b.start_time), 'd MMM');
+                        return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
+                    })
                     .join('\n');
 
                 const preferenceLabel = owner.payment_preference === 'per_service'

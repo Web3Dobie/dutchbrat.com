@@ -1,5 +1,4 @@
 import { Pool } from 'pg';
-import { startOfMonth, subDays } from 'date-fns';
 
 export interface MatchedOwner {
     id: number;
@@ -12,6 +11,7 @@ export interface MatchedBooking {
     id: number;
     service_type: string;
     start_time: Date;
+    end_time: Date | null;
     price_pounds: number;
 }
 
@@ -74,56 +74,17 @@ export async function matchPaymentToOwner(
 
         const owner = ownerResult.rows[0];
 
-        // Determine the date window based on payment_preference
-        const now = new Date();
-        let windowStart: Date;
-
-        switch (owner.payment_preference) {
-            case 'weekly':
-                windowStart = subDays(now, 7);
-                break;
-            case 'fortnightly':
-                windowStart = subDays(now, 14);
-                break;
-            case 'monthly':
-                windowStart = startOfMonth(now);
-                break;
-            case 'per_service':
-            default:
-                // Most recent single completed booking
-                windowStart = new Date(0); // epoch — no date restriction, we'll take the latest
-                break;
-        }
-
-        // Fetch completed (unpaid) bookings in the window
-        let bookingsQuery: string;
-        let bookingsParams: any[];
-
-        if (owner.payment_preference === 'per_service') {
-            bookingsQuery = `
-                SELECT id, service_type, start_time, price_pounds::numeric::float8 as price_pounds
-                FROM hunters_hounds.bookings
-                WHERE owner_id = $1
-                  AND status = 'completed'
-                  AND price_pounds > 0
-                ORDER BY start_time DESC
-                LIMIT 1
-            `;
-            bookingsParams = [owner.id];
-        } else {
-            bookingsQuery = `
-                SELECT id, service_type, start_time, price_pounds::numeric::float8 as price_pounds
-                FROM hunters_hounds.bookings
-                WHERE owner_id = $1
-                  AND status = 'completed'
-                  AND price_pounds > 0
-                  AND start_time >= $2
-                ORDER BY start_time ASC
-            `;
-            bookingsParams = [owner.id, windowStart];
-        }
-
-        const bookingsResult = await client.query(bookingsQuery, bookingsParams);
+        // All outstanding unpaid bookings, oldest first — no date window
+        const bookingsResult = await client.query(`
+            SELECT id, service_type, start_time, end_time,
+                   price_pounds::numeric::float8 as price_pounds
+            FROM hunters_hounds.bookings
+            WHERE owner_id = $1
+              AND status IN ('completed', 'confirmed')
+              AND price_pounds > 0
+              AND COALESCE(end_time, start_time) <= NOW()
+            ORDER BY COALESCE(end_time, start_time) ASC
+        `, [owner.id]);
         const bookings: MatchedBooking[] = bookingsResult.rows;
 
         const expectedTotal = bookings.reduce((sum, b) => sum + b.price_pounds, 0);
