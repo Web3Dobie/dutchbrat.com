@@ -63,6 +63,15 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         dogs: [...client.dogs]
     });
 
+    // Mobile detection
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768);
+        check();
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    }, []);
+
     // State for photo statuses
     const [photoStatuses, setPhotoStatuses] = useState<Record<number, PhotoStatus>>({});
     const [loading, setLoading] = useState(false);
@@ -213,16 +222,16 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "20px"
+            padding: isMobile ? "0" : "20px",
         } as React.CSSProperties,
         modal: {
             backgroundColor: "#1f2937",
             border: "1px solid #374151",
-            borderRadius: "12px",
+            borderRadius: isMobile ? "0" : "12px",
             padding: "24px",
             maxWidth: "800px",
             width: "100%",
-            maxHeight: "90vh",
+            maxHeight: isMobile ? "100dvh" : "90vh",
             overflow: "auto",
             color: "#fff"
         } as React.CSSProperties,

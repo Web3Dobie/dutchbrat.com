@@ -129,6 +129,15 @@ export default function ClientManagement() {
         return new Date(dateString).toLocaleDateString('en-GB');
     };
 
+    // Responsive: reactive mobile detection
+    const [isMobile, setIsMobile] = useState(false);
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768);
+        check();
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    }, []);
+
     // Styles
     const styles = {
         container: {
@@ -165,10 +174,12 @@ export default function ClientManagement() {
             gap: "12px",
             alignItems: "center",
             flexWrap: "wrap",
+            flexDirection: isMobile ? "column" : "row",
         } as React.CSSProperties,
         searchInput: {
             flex: "1",
-            minWidth: "300px",
+            minWidth: isMobile ? "0" : "300px",
+            width: isMobile ? "100%" : undefined,
             padding: "12px",
             backgroundColor: "#374151",
             border: "1px solid #4b5563",
@@ -273,9 +284,6 @@ export default function ClientManagement() {
             marginBottom: "24px",
         } as React.CSSProperties,
     };
-
-    // Responsive styles
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
     if (loading) {
         return (
@@ -414,10 +422,88 @@ export default function ClientManagement() {
                 </div>
             )}
 
-            {/* Mobile Cards - Coming next */}
+            {/* Mobile Cards */}
             {isMobile && (
-                <div style={{ textAlign: "center", padding: "40px", color: "#9ca3af" }}>
-                    Mobile view coming soon...
+                <div>
+                    {clients.map((client) => {
+                        const loyalty = client.loyalty;
+                        const displayStamps = loyalty
+                            ? (loyalty.available_to_redeem > 0 ? 15 : loyalty.stamps_on_card)
+                            : 0;
+                        const loyaltyColor = !loyalty || loyalty.qualifying_walks === 0
+                            ? "#6b7280"
+                            : loyalty.available_to_redeem > 0 || displayStamps >= 12
+                            ? "#f59e0b"
+                            : "#10b981";
+                        const dogNames = client.dogs && client.dogs.length > 0
+                            ? client.dogs.map(d => d.dog_name).join(", ")
+                            : "No dogs";
+
+                        return (
+                            <div
+                                key={client.id}
+                                style={{
+                                    backgroundColor: "#1f2937",
+                                    border: "1px solid #374151",
+                                    borderRadius: "8px",
+                                    padding: "16px",
+                                    marginBottom: "12px",
+                                }}
+                            >
+                                {/* Name row */}
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                                    <div>
+                                        <span style={{ color: "#6b7280", fontSize: "12px", marginRight: "8px" }}>#{client.id}</span>
+                                        <span style={{ color: "#fff", fontWeight: "bold", fontSize: "17px" }}>{client.owner_name}</span>
+                                    </div>
+                                    <button
+                                        style={styles.editButton}
+                                        onClick={() => setEditingClient(client)}
+                                    >
+                                        Edit
+                                    </button>
+                                </div>
+
+                                {/* Contact */}
+                                <div style={{ marginBottom: "6px" }}>
+                                    <a href={`tel:${client.phone}`} style={{ color: "#60a5fa", textDecoration: "none", fontSize: "15px" }}>
+                                        📞 {client.phone}
+                                    </a>
+                                </div>
+                                <div style={{ marginBottom: "6px" }}>
+                                    <a href={`mailto:${client.email}`} style={{ color: "#60a5fa", textDecoration: "none", fontSize: "14px" }}>
+                                        ✉️ {client.email}
+                                    </a>
+                                </div>
+
+                                {/* Dogs */}
+                                <div style={{ color: "#d1d5db", fontSize: "14px", marginBottom: "6px" }}>
+                                    🐕 {dogNames}
+                                </div>
+
+                                {/* Loyalty */}
+                                <div style={{ fontSize: "14px" }}>
+                                    💳{" "}
+                                    <span style={{ color: loyaltyColor, fontWeight: "bold" }}>
+                                        {displayStamps}/15
+                                    </span>
+                                    {loyalty && loyalty.available_to_redeem > 0 && (
+                                        <span style={{
+                                            marginLeft: "8px",
+                                            backgroundColor: "#f59e0b",
+                                            color: "#000",
+                                            fontSize: "0.65rem",
+                                            padding: "2px 6px",
+                                            borderRadius: "4px",
+                                            fontWeight: "bold",
+                                        }}>
+                                            REDEEMABLE
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
