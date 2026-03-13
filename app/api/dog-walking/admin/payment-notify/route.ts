@@ -52,8 +52,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Monzo: "💸 £25.00 from Ernesto Becker: Sent from Revolut"
+    // Check both raw_text and raw_title — Monzo may put the amount/sender in the title
     if (!bankMatch && isNaN(amount_pounds)) {
-        const monzoMatch = raw_text.match(/\D{0,3}(\d+(?:\.\d+)?)\s+from\s+(.+?):/i);
+        const monzoPattern = /\D{0,3}(\d+(?:\.\d+)?)\s+from\s+(.+?):/i;
+        const monzoMatch = raw_text.match(monzoPattern) || raw_title.match(monzoPattern);
         if (monzoMatch) {
             amount_pounds = parseFloat(monzoMatch[1]);
             sender_name = monzoMatch[2].trim();
@@ -61,7 +63,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!sender_name || isNaN(amount_pounds)) {
-        // Silently ignore — not a recognised payment notification
+        // Silently ignore outbound notifications (e.g. Revolut "Transfer successful")
+        const isOutbound = /transfer successful|has been sent|you sent|payment sent/i.test(raw_title + ' ' + raw_text);
+        if (!isOutbound) {
+            // Send a debug Telegram for unrecognised inbound-looking notifications
+            await sendTelegramNotification(
+                `⚠️ UNRECOGNISED PAYMENT NOTIFICATION\n\nTitle: ${raw_title || '(empty)'}\nText: ${raw_text || '(empty)'}\n\nPlease check and update the parser if needed.`
+            );
+        }
         return NextResponse.json({ ignored: true }, { status: 200 });
     }
 
