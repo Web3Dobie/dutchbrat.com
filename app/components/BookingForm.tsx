@@ -46,7 +46,7 @@ interface BookingFormProps {
 }
 
 // --- Form States ---
-type View = "lookup" | "register" | "selectDog" | "selectAddress" | "addDog" | "finalBooking";
+type View = "lookup" | "register" | "selectDog" | "addDog" | "finalBooking";
 
 export default function BookingForm({
     serviceName,
@@ -122,10 +122,13 @@ export default function BookingForm({
     });
     const [selectedDogIds, setSelectedDogIds] = useState<number[]>([]);
 
-    // Auto-select dog when there is exactly one
+    // Auto-select dog when there is exactly one, and pre-load addresses
     useEffect(() => {
         if (currentUser?.dogs?.length === 1 && selectedDogIds.length === 0) {
             setSelectedDogIds([currentUser.dogs[0].id]);
+        }
+        if (currentUser) {
+            fetchSecondaryAddresses();
         }
     }, [currentUser]);
 
@@ -196,22 +199,14 @@ export default function BookingForm({
         });
     };
 
-    // --- NEW: Continue from Dog Selection to Address Selection ---
-    const handleContinueFromDogSelection = async () => {
+    // --- Continue from combined dog+address step ---
+    const handleContinueFromDogSelection = () => {
         if (selectedDogIds.length === 0) {
             setError("Please select at least one dog.");
             return;
         }
-
         setError(null);
-
-        const addresses = await fetchSecondaryAddresses();
-        if (addresses.length > 0) {
-            setView("selectAddress");
-        } else {
-            // No secondary addresses — primary is already selected (null), skip straight to confirmation
-            setView("finalBooking");
-        }
+        setView("finalBooking");
     };
 
     // --- NEW: Continue from Address Selection to Final Booking ---
@@ -269,7 +264,7 @@ export default function BookingForm({
                         ).join(', ')
                     }</p>
                 )}
-                {addressInfo && view !== "selectAddress" && (
+                {addressInfo && (
                     <>
                         <p><strong>Location:</strong> {addressInfo.label}</p>
                         <p style={{ fontSize: "0.8rem", color: "#9ca3af" }}>{addressInfo.address}</p>
@@ -823,6 +818,8 @@ export default function BookingForm({
     const renderSelectDogView = () => (
         <div>
             {renderSummary()}
+
+            {/* --- Dog Selection --- */}
             <h4>Select Dog(s) for Your Booking</h4>
 
             {currentUser?.dogs.map((dog) => (
@@ -868,7 +865,7 @@ export default function BookingForm({
                 </label>
             ))}
 
-            <div style={{ marginTop: "16px" }}>
+            <div style={{ marginTop: "8px", marginBottom: "28px" }}>
                 <button
                     style={styles.smallButton}
                     type="button"
@@ -878,29 +875,11 @@ export default function BookingForm({
                 </button>
             </div>
 
-            {error && <p style={styles.error}>{error}</p>}
-
-            <div style={{ marginTop: "20px" }}>
-                <button
-                    style={styles.button}
-                    type="button"
-                    onClick={handleContinueFromDogSelection}
-                    disabled={selectedDogIds.length === 0}
-                >
-                    Continue to Address Selection →
-                </button>
-                <button style={styles.cancelButton} type="button" onClick={() => setView("lookup")}>
-                    ← Back to Account
-                </button>
-            </div>
-        </div>
-    );
-
-    const renderSelectAddressView = () => (
-        <div>
-            {renderSummary()}
-            <h4>Select Service Address</h4>
-            <p>Where should your {getServiceActionText(serviceName)} take place?</p>
+            {/* --- Address Selection --- */}
+            <h4 style={{ marginTop: "8px" }}>Select Service Address</h4>
+            <p style={{ color: "#9ca3af", margin: "0 0 16px 0", fontSize: "0.9rem" }}>
+                Where should your {getServiceActionText(serviceName)} take place?
+            </p>
 
             {addressesLoading && (
                 <div style={{ textAlign: "center", padding: "20px", color: "#9ca3af" }}>
@@ -918,28 +897,30 @@ export default function BookingForm({
                             backgroundColor: selectedAddressId === null ? "#1e40af20" : "#1f2937",
                             borderRadius: "8px",
                             marginBottom: "12px",
-                            cursor: "pointer",
+                            cursor: secondaryAddresses.length > 0 ? "pointer" : "default",
                             transition: "all 0.2s",
                         }}
-                        onClick={() => setSelectedAddressId(null)}
+                        onClick={() => secondaryAddresses.length > 0 && setSelectedAddressId(null)}
                         onMouseEnter={(e) => {
-                            if (selectedAddressId !== null) {
+                            if (secondaryAddresses.length > 0 && selectedAddressId !== null) {
                                 e.currentTarget.style.borderColor = "#6b7280";
                             }
                         }}
                         onMouseLeave={(e) => {
-                            if (selectedAddressId !== null) {
+                            if (secondaryAddresses.length > 0 && selectedAddressId !== null) {
                                 e.currentTarget.style.borderColor = "#374151";
                             }
                         }}
                     >
                         <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-                            <input
-                                type="radio"
-                                checked={selectedAddressId === null}
-                                onChange={() => setSelectedAddressId(null)}
-                                style={{ marginTop: "4px" }}
-                            />
+                            {secondaryAddresses.length > 0 && (
+                                <input
+                                    type="radio"
+                                    checked={selectedAddressId === null}
+                                    onChange={() => setSelectedAddressId(null)}
+                                    style={{ marginTop: "4px" }}
+                                />
+                            )}
                             <div style={{ flex: 1 }}>
                                 <h5 style={{
                                     color: "#fff",
@@ -950,15 +931,9 @@ export default function BookingForm({
                                     gap: "8px"
                                 }}>
                                     🏠 Primary Address
-                                    {selectedAddressId === null && (
-                                        <span style={{
-                                            fontSize: "0.75rem",
-                                            color: "#3b82f6",
-                                            fontWeight: "normal"
-                                        }}>
-                                            (Selected)
-                                        </span>
-                                    )}
+                                    <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: "normal" }}>
+                                        (Selected)
+                                    </span>
                                 </h5>
                                 <p style={{ color: "#d1d5db", margin: "0 0 4px 0", fontSize: "0.9rem" }}>
                                     {currentUser?.address}
@@ -1013,11 +988,7 @@ export default function BookingForm({
                                     }}>
                                         📍 {address.address_label}
                                         {selectedAddressId === address.id && (
-                                            <span style={{
-                                                fontSize: "0.75rem",
-                                                color: "#3b82f6",
-                                                fontWeight: "normal"
-                                            }}>
+                                            <span style={{ fontSize: "0.75rem", color: "#3b82f6", fontWeight: "normal" }}>
                                                 (Selected)
                                             </span>
                                         )}
@@ -1030,12 +1001,7 @@ export default function BookingForm({
                                         {address.partner_name && ` & ${address.partner_name}`}
                                     </p>
                                     {address.notes && (
-                                        <p style={{
-                                            color: "#6b7280",
-                                            margin: "8px 0 0 0",
-                                            fontSize: "0.8rem",
-                                            fontStyle: "italic"
-                                        }}>
+                                        <p style={{ color: "#6b7280", margin: "8px 0 0 0", fontSize: "0.8rem", fontStyle: "italic" }}>
                                             Note: {address.notes}
                                         </p>
                                     )}
@@ -1043,41 +1009,24 @@ export default function BookingForm({
                             </div>
                         </div>
                     ))}
-
-                    {secondaryAddresses.length === 0 && !addressesLoading && (
-                        <div style={{
-                            textAlign: "center",
-                            padding: "20px",
-                            color: "#9ca3af",
-                            fontSize: "0.9rem"
-                        }}>
-                            <p>You only have your primary address configured.</p>
-                            <p style={{ fontSize: "0.8rem", marginTop: "8px" }}>
-                                You can add secondary addresses in your dashboard after booking.
-                            </p>
-                        </div>
-                    )}
                 </div>
             )}
 
             {error && <p style={styles.error}>{error}</p>}
 
-            <button
-                style={styles.button}
-                type="button"
-                onClick={handleContinueFromAddressSelection}
-                disabled={addressesLoading}
-            >
-                Continue to Booking Confirmation →
-            </button>
-
-            <button
-                style={styles.cancelButton}
-                type="button"
-                onClick={() => setView("selectDog")}
-            >
-                ← Back to Dog Selection
-            </button>
+            <div style={{ marginTop: "20px" }}>
+                <button
+                    style={styles.button}
+                    type="button"
+                    onClick={handleContinueFromDogSelection}
+                    disabled={selectedDogIds.length === 0 || addressesLoading}
+                >
+                    Continue to Booking Confirmation →
+                </button>
+                <button style={styles.cancelButton} type="button" onClick={() => setView("lookup")}>
+                    ← Back to Account
+                </button>
+            </div>
         </div>
     );
 
@@ -1128,9 +1077,9 @@ export default function BookingForm({
             <button
                 style={styles.cancelButton}
                 type="button"
-                onClick={() => setView("selectAddress")}
+                onClick={() => setView("selectDog")}
             >
-                ← Back to Address Selection
+                ← Back
             </button>
         </div>
     );
@@ -1190,7 +1139,6 @@ export default function BookingForm({
             {view === "lookup" && renderLookupView()}
             {view === "register" && renderRegisterView()}
             {view === "selectDog" && currentUser && renderSelectDogView()}
-            {view === "selectAddress" && currentUser && renderSelectAddressView()}
             {view === "finalBooking" && currentUser && renderFinalBookingView()}
             {view === "addDog" && renderAddDogView()}
         </div>
