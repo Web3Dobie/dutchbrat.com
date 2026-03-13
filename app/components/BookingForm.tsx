@@ -122,6 +122,13 @@ export default function BookingForm({
     });
     const [selectedDogIds, setSelectedDogIds] = useState<number[]>([]);
 
+    // Auto-select dog when there is exactly one
+    useEffect(() => {
+        if (currentUser?.dogs?.length === 1 && selectedDogIds.length === 0) {
+            setSelectedDogIds([currentUser.dogs[0].id]);
+        }
+    }, [currentUser]);
+
     // Helper functions
     const isSoloWalk = serviceName.toLowerCase().includes('solo walk');
 
@@ -147,8 +154,8 @@ export default function BookingForm({
     };
 
     // --- NEW: Fetch Secondary Addresses ---
-    const fetchSecondaryAddresses = async () => {
-        if (!currentUser) return;
+    const fetchSecondaryAddresses = async (): Promise<SecondaryAddress[]> => {
+        if (!currentUser) return [];
 
         setAddressesLoading(true);
         setError(null);
@@ -165,11 +172,13 @@ export default function BookingForm({
             const activeAddresses = data.addresses.filter((addr: SecondaryAddress) => addr.is_active);
             setSecondaryAddresses(activeAddresses);
             console.log(`[BookingForm] Loaded ${activeAddresses.length} active secondary addresses`);
+            return activeAddresses;
 
         } catch (err: any) {
             console.error("Failed to fetch secondary addresses:", err);
             setError("Could not load address options. Using primary address only.");
             setSecondaryAddresses([]);
+            return [];
         } finally {
             setAddressesLoading(false);
         }
@@ -196,9 +205,13 @@ export default function BookingForm({
 
         setError(null);
 
-        // Fetch secondary addresses before proceeding
-        await fetchSecondaryAddresses();
-        setView("selectAddress");
+        const addresses = await fetchSecondaryAddresses();
+        if (addresses.length > 0) {
+            setView("selectAddress");
+        } else {
+            // No secondary addresses — primary is already selected (null), skip straight to confirmation
+            setView("finalBooking");
+        }
     };
 
     // --- NEW: Continue from Address Selection to Final Booking ---
