@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const client = await pool.connect();
     try {
-        const [tradesResult, countResult, summaryResult] = await Promise.all([
+        const [tradesResult, countResult, summaryResult, halfClosedResult] = await Promise.all([
             client.query(`
                 SELECT
                     p.id,
@@ -74,29 +74,59 @@ export async function GET(request: NextRequest) {
                   ${strategy ? `AND strategy = $2` : ""}
                   ${dayFilter("closed_at", days)}
             `, strategy ? [mode, strategy] : [mode]),
+            client.query(`
+                SELECT
+                    p.id,
+                    p.epic,
+                    p.direction,
+                    t.size::float        AS size,
+                    p.entry_price::float,
+                    t.fill_price::float  AS current_price,
+                    p.partial_pnl::float AS realized_pnl,
+                    p.opened_at,
+                    t.executed_at        AS closed_at,
+                    p.mode,
+                    p.strategy,
+                    i.symbol,
+                    i.asset_type,
+                    s.signal_strength::float,
+                    s.timeframe
+                FROM ig_trading.positions p
+                JOIN LATERAL (
+                    SELECT fill_price, executed_at, size
+                    FROM ig_trading.trades
+                    WHERE position_id = p.id
+                      AND direction != p.direction
+                    ORDER BY executed_at DESC
+                    LIMIT 1
+                ) t ON TRUE
+                LEFT JOIN ig_trading.instruments i ON i.epic = p.epic
+                LEFT JOIN ig_trading.signals s     ON s.id  = p.signal_id
+                WHERE p.status = 'OPEN'
+                  AND p.half_closed = TRUE
+                  AND p.partial_pnl IS NOT NULL
+                  AND p.strategy IS NOT NULL
+                  AND p.mode = $1
+                  ${strategy ? `AND p.strategy = $2` : ""}
+                  ${dayFilter("t.executed_at", days)}
+            `, strategy ? [mode, strategy] : [mode]),
         ]);
 
-        const trades = tradesResult.rows.map(row => {
-            const entry        = row.entry_price;
-            const pnl          = row.realized_pnl;
-            const size         = row.size;
-            const close_price  = row.current_price ?? null;
-
+        const mapRow = (row: Record<string, unknown>, partial = false) => {
             const duration_secs = row.closed_at && row.opened_at
-                ? Math.round((new Date(row.closed_at).getTime() - new Date(row.opened_at).getTime()) / 1000)
+                ? Math.round((new Date(row.closed_at as string).getTime() - new Date(row.opened_at as string).getTime()) / 1000)
                 : null;
-
             return {
                 id:              row.id,
                 epic:            row.epic || "—",
                 symbol:          row.symbol || "—",
                 asset_type:      row.asset_type || "—",
                 direction:       row.direction,
-                size,
-                entry_price:     entry,
-                close_price,
-                realized_pnl:    pnl,
-                close_reason:    row.close_reason || "—",
+                size:            row.size,
+                entry_price:     row.entry_price,
+                close_price:     row.current_price ?? null,
+                realized_pnl:    row.realized_pnl,
+                close_reason:    partial ? "PARTIAL_TP" : (row.close_reason || "—"),
                 opened_at:       row.opened_at,
                 closed_at:       row.closed_at,
                 duration_secs,
@@ -104,16 +134,30 @@ export async function GET(request: NextRequest) {
                 signal_strength: row.signal_strength ?? null,
                 timeframe:       row.timeframe ?? null,
                 strategy:        row.strategy ?? null,
+                partial,
             };
-        });
+        }
+
+        const trades       = tradesResult.rows.map(r => mapRow(r, false));
+        const halfClosed   = halfClosedResult.rows.map(r => mapRow(r, true));
+
+        // Merge and sort by closed_at descending; half-closed rows appear inline
+        const allTrades = [...trades, ...halfClosed].sort(
+            (a, b) => new Date(b.closed_at as string).getTime() - new Date(a.closed_at as string).getTime()
+        );
+
+        // Include partial closes in summary stats
+        const hcPnl     = halfClosed.reduce((s, r) => s + (r.realized_pnl as number), 0);
+        const hcWinners = halfClosed.filter(r => (r.realized_pnl as number) > 0).length;
+        const hcLosers  = halfClosed.filter(r => (r.realized_pnl as number) < 0).length;
 
         return NextResponse.json({
-            trades,
+            trades:  allTrades,
             total:   countResult.rows[0].total,
             summary: {
-                total_pnl: summaryResult.rows[0].total_pnl,
-                winners:   summaryResult.rows[0].winners,
-                losers:    summaryResult.rows[0].losers,
+                total_pnl: summaryResult.rows[0].total_pnl + hcPnl,
+                winners:   summaryResult.rows[0].winners   + hcWinners,
+                losers:    summaryResult.rows[0].losers     + hcLosers,
             },
             limit,
             offset,

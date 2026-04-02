@@ -52,6 +52,7 @@ interface ClosedTrade {
     signal_strength: number | null;
     timeframe:       string | null;
     strategy:        string | null;
+    partial?:        boolean;
 }
 
 interface BreakdownRow {
@@ -109,6 +110,7 @@ function fmtDuration(secs: number | null): string {
 
 function closeReasonBadge(reason: string): React.CSSProperties {
     if (["TP_HIT", "TAKE_PROFIT"].includes(reason))          return { background: "#052e16", color: "#4ade80", border: "1px solid #166534" };
+    if (reason === "PARTIAL_TP")                             return { background: "#1a2e1a", color: "#86efac", border: "1px solid #166534" };
     if (["SL_HIT", "STOPPED_OUT"].includes(reason))          return { background: "#450a0a", color: "#f87171", border: "1px solid #7f1d1d" };
     if (reason === "STOPPED_PROFIT_GUARD")                   return { background: "#0c2340", color: "#38bdf8", border: "1px solid #0369a1" };
     if (["TA_REVERSAL", "DRAWDOWN_STOP"].includes(reason))   return { background: "#431407", color: "#fb923c", border: "1px solid #7c2d12" };
@@ -602,6 +604,9 @@ export default function IgTradingDashboard() {
                                                 >
                                                     <td style={{ padding: "8px 10px", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                         {t.symbol}
+                                                        {t.partial && (
+                                                            <span style={{ marginLeft: 4, fontSize: "0.65rem", fontWeight: 700, color: "#fbbf24", background: "rgba(251,191,36,0.15)", borderRadius: 3, padding: "1px 4px" }}>½</span>
+                                                        )}
                                                         <span style={{ marginLeft: 5, fontSize: "0.7rem", color: "#6b7280" }}>{t.asset_type}</span>
                                                     </td>
                                                     <td style={{ padding: "8px 10px" }}>

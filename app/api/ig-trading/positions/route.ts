@@ -41,12 +41,19 @@ export async function GET(request: NextRequest) {
         `);
 
         const todayResult = await client.query(`
-            SELECT COALESCE(SUM(realized_pnl), 0)::float AS today_closed_pnl
-            FROM ig_trading.positions
-            WHERE status = 'CLOSED'
-              AND mode = $1
-              AND strategy IS NOT NULL
-              AND closed_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+            SELECT (
+                COALESCE((
+                    SELECT SUM(realized_pnl) FROM ig_trading.positions
+                    WHERE status = 'CLOSED' AND mode = $1 AND strategy IS NOT NULL
+                      AND closed_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+                ), 0)
+                +
+                COALESCE((
+                    SELECT SUM(partial_pnl) FROM ig_trading.positions
+                    WHERE status = 'OPEN' AND half_closed = TRUE AND mode = $1
+                      AND strategy IS NOT NULL
+                ), 0)
+            )::float AS today_closed_pnl
         `, [mode]);
 
         const positions = result.rows.map(row => ({
