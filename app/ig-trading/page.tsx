@@ -227,11 +227,12 @@ export default function IgTradingDashboard() {
     const [loadingClosed, setLoadingClosed] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [closedTrades,  setClosedTrades]  = useState<ClosedTrade[]>([]);
-    const [closedTotal,   setClosedTotal]   = useState(0);
-    const [closedOffset,  setClosedOffset]  = useState(0);
+    const [closedTrades,   setClosedTrades]   = useState<ClosedTrade[]>([]);
+    const [closedTotal,    setClosedTotal]    = useState(0);
+    const [closedOffset,   setClosedOffset]   = useState(0);
     const [closedDays,     setClosedDays]     = useState(0);
     const [closedStrategy, setClosedStrategy] = useState("");
+    const [closedSummary,  setClosedSummary]  = useState<{ total_pnl: number; winners: number; losers: number } | null>(null);
     const [health,        setHealth]        = useState<ServiceHealth[]>([]);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; lines: [string, string][] } | null>(null);
     const [chartPeriod,   setChartPeriod]   = useState<"intraday"|"month"|"all">("intraday");
@@ -266,6 +267,7 @@ export default function IgTradingDashboard() {
             const data = await res.json();
             setClosedTrades(data.trades || []);
             setClosedTotal(data.total || 0);
+            setClosedSummary(data.summary ?? null);
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -529,6 +531,41 @@ export default function IgTradingDashboard() {
                             ))}
                         </div>
                     </div>
+                    {/* Filter P&L summary */}
+                    {closedSummary !== null && (
+                        <div style={{
+                            display: "flex", alignItems: "center", gap: 24,
+                            background: "#111827", border: "1px solid #374151",
+                            borderRadius: 6, padding: "10px 16px", marginBottom: 12,
+                            fontSize: "0.85rem", flexWrap: "wrap",
+                        }}>
+                            <div>
+                                <span style={{ color: "#6b7280", marginRight: 6 }}>P&L</span>
+                                <span style={{ fontWeight: 700, color: pnlColour(closedSummary.total_pnl), fontFamily: "monospace" }}>
+                                    {fmtPnl(closedSummary.total_pnl)}
+                                </span>
+                            </div>
+                            <div>
+                                <span style={{ color: "#6b7280", marginRight: 6 }}>Trades</span>
+                                <span style={{ fontWeight: 600, color: "#f9fafb" }}>{closedSummary.winners + closedSummary.losers}</span>
+                            </div>
+                            <div>
+                                <span style={{ color: "#34d399", marginRight: 4 }}>W</span>
+                                <span style={{ fontWeight: 600, color: "#34d399" }}>{closedSummary.winners}</span>
+                                <span style={{ color: "#6b7280", margin: "0 8px" }}>·</span>
+                                <span style={{ color: "#f87171", marginRight: 4 }}>L</span>
+                                <span style={{ fontWeight: 600, color: "#f87171" }}>{closedSummary.losers}</span>
+                            </div>
+                            {(closedSummary.winners + closedSummary.losers) > 0 && (
+                                <div>
+                                    <span style={{ color: "#6b7280", marginRight: 6 }}>Win rate</span>
+                                    <span style={{ fontWeight: 600, color: "#d1d5db" }}>
+                                        {Math.round(closedSummary.winners / (closedSummary.winners + closedSummary.losers) * 100)}%
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {loadingClosed ? (
                         <div style={{ color: "#6b7280", padding: "20px 0" }}>Loading…</div>
                     ) : closedTrades.length === 0 ? (

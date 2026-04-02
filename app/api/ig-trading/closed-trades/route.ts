@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const client = await pool.connect();
     try {
-        const [tradesResult, countResult] = await Promise.all([
+        const [tradesResult, countResult, summaryResult] = await Promise.all([
             client.query(`
                 SELECT
                     p.id,
@@ -57,6 +57,17 @@ export async function GET(request: NextRequest) {
             `, strategy ? [limit, offset, mode, strategy] : [limit, offset, mode]),
             client.query(`
                 SELECT COUNT(*)::int AS total
+                FROM ig_trading.positions
+                WHERE status = 'CLOSED' AND realized_pnl IS NOT NULL
+                  AND strategy IS NOT NULL AND mode = $1
+                  ${strategy ? `AND strategy = $2` : ""}
+                  ${dayFilter("closed_at", days)}
+            `, strategy ? [mode, strategy] : [mode]),
+            client.query(`
+                SELECT
+                    COALESCE(SUM(realized_pnl), 0)::float                              AS total_pnl,
+                    COUNT(CASE WHEN realized_pnl > 0 THEN 1 END)::int                  AS winners,
+                    COUNT(CASE WHEN realized_pnl < 0 THEN 1 END)::int                  AS losers
                 FROM ig_trading.positions
                 WHERE status = 'CLOSED' AND realized_pnl IS NOT NULL
                   AND strategy IS NOT NULL AND mode = $1
@@ -98,7 +109,12 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             trades,
-            total:  countResult.rows[0].total,
+            total:   countResult.rows[0].total,
+            summary: {
+                total_pnl: summaryResult.rows[0].total_pnl,
+                winners:   summaryResult.rows[0].winners,
+                losers:    summaryResult.rows[0].losers,
+            },
             limit,
             offset,
         });
