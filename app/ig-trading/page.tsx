@@ -216,8 +216,9 @@ const CLOSED_PAGE_SIZE = 50;
 export default function IgTradingDashboard() {
     const [account,   setAccount]   = useState<Account | null>(null);
     const [positions, setPositions] = useState<Position[]>([]);
-    const [totalUpnl,   setTotalUpnl]   = useState<number>(0);
-    const [totalMargin, setTotalMargin] = useState<number>(0);
+    const [totalUpnl,      setTotalUpnl]      = useState<number>(0);
+    const [totalMargin,    setTotalMargin]    = useState<number>(0);
+    const [todayClosedPnl, setTodayClosedPnl] = useState<number>(0);
     const [stats,     setStats]     = useState<Stats | null>(null);
     const [window_,   setWindow_]   = useState<number>(30);
     const [countdown, setCountdown] = useState<number>(REFRESH_SECS);
@@ -248,6 +249,7 @@ export default function IgTradingDashboard() {
             setPositions(posData.positions || []);
             setTotalUpnl(posData.total_unrealized_pnl || 0);
             setTotalMargin(posData.total_margin_used   || 0);
+            setTodayClosedPnl(posData.today_closed_pnl ?? 0);
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -414,6 +416,9 @@ export default function IgTradingDashboard() {
                     <StatCard label="Open P&L"
                         value={fmtPnl(totalUpnl)}
                         colour={pnlColour(totalUpnl)} />
+                    <StatCard label="P&L Today"
+                        value={fmtPnl(todayClosedPnl + totalUpnl)}
+                        colour={pnlColour(todayClosedPnl + totalUpnl)} />
                     <StatCard label="Margin Used"
                         value={`£${totalMargin.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                     <StatCard label="Win Rate"
