@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail, sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
         // Properly type the booking result
         const booking = bookingResult.rows[0] as BookingRow;
         const dogs = booking.dog_name_2 ? `${booking.dog_name_1} & ${booking.dog_name_2}` : booking.dog_name_1;
-        const displayDate = format(new Date(booking.start_time), "EEEE, dd MMMM 'at' HH:mm");
+        const displayDate = format(new TZDate(new Date(booking.start_time), "Europe/London"), "EEEE, dd MMMM 'at' HH:mm");
 
         // --- 2. Delete Google Calendar Event ---
         if (booking.google_event_id) {

@@ -4,6 +4,7 @@ import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { sendBookingEmail } from "@/lib/emailService";
 import { generateReviewRequestEmail } from "@/lib/emailTemplates";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { getPool } from '@/lib/database';
 
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
                 .map(img => `https://hunters-hounds.london/images/dogs/${img}`);
 
             // Format service date
-            const serviceDate = format(new Date(booking.start_time), 'EEEE, MMMM d');
+            const serviceDate = format(new TZDate(new Date(booking.start_time), "Europe/London"), 'EEEE, MMMM d');
 
             // Generate and send review request email
             const reviewUrl = `https://hunters-hounds.london/review/${reviewToken}`;

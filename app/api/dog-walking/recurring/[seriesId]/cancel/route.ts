@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
         // Send cancellation email
         const displayDate = cancel_type === 'single'
-            ? format(new Date(bookingsToCancel[0].start_time), "EEEE, d MMMM 'at' HH:mm")
+            ? format(new TZDate(new Date(bookingsToCancel[0].start_time), "Europe/London"), "EEEE, d MMMM 'at' HH:mm")
             : `${bookingsToCancel.length} appointments`;
 
         const cancelTypeLabel = cancel_type === 'single'
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     <p><strong>Cancelled Dates:</strong></p>
                     <ul>
                         ${bookingsToCancel.map(b =>
-                            `<li>${format(new Date(b.start_time), "EEE d MMM 'at' HH:mm")}</li>`
+                            `<li>${format(new TZDate(new Date(b.start_time), "Europe/London"), "EEE d MMM 'at' HH:mm")}</li>`
                         ).join('')}
                     </ul>
                 `}

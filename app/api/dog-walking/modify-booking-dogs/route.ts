@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
 import { getSoloWalkPrice } from "@/lib/pricing";
@@ -211,8 +212,8 @@ ${newPrice ? `Price: £${parseFloat(newPrice).toFixed(2)}` : ''}
         }
 
         // Send confirmation email
-        const formattedDate = format(new Date(booking.start_time), "EEEE, MMMM d, yyyy");
-        const formattedTime = format(new Date(booking.start_time), "h:mm a");
+        const formattedDate = format(new TZDate(new Date(booking.start_time), "Europe/London"), "EEEE, MMMM d, yyyy");
+        const formattedTime = format(new TZDate(new Date(booking.start_time), "Europe/London"), "h:mm a");
 
         try {
             const emailSubject = `Booking Updated - ${serviceDisplayName}`;

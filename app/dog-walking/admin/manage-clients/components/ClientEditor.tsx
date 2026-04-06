@@ -27,8 +27,8 @@ interface Client {
     extended_travel_time?: boolean;
     // Payment preference
     payment_preference?: string | null;
-    // Payment account name (exact name on bank transfer, for auto-matching)
-    payment_account_name?: string | null;
+    // Payment account names (exact names on bank transfers, for auto-matching — supports multiple accounts)
+    payment_account_names?: string[];
     dogs: Dog[];
 }
 
@@ -59,9 +59,27 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
         photo_sharing_consent: client.photo_sharing_consent || false,
         extended_travel_time: client.extended_travel_time || false,
         payment_preference: client.payment_preference || 'per_service',
-        payment_account_name: client.payment_account_name || '',
+        payment_account_names: client.payment_account_names || [],
         dogs: [...client.dogs]
     });
+
+    // Payment name input
+    const [newPaymentName, setNewPaymentName] = useState('');
+
+    const addPaymentName = () => {
+        const name = newPaymentName.trim();
+        if (name && !formData.payment_account_names.includes(name)) {
+            setFormData(prev => ({ ...prev, payment_account_names: [...prev.payment_account_names, name] }));
+        }
+        setNewPaymentName('');
+    };
+
+    const removePaymentName = (index: number) => {
+        setFormData(prev => ({
+            ...prev,
+            payment_account_names: prev.payment_account_names.filter((_, i) => i !== index)
+        }));
+    };
 
     // Mobile detection
     const [isMobile, setIsMobile] = useState(false);
@@ -168,7 +186,7 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                     photo_sharing_consent: formData.photo_sharing_consent,
                     extended_travel_time: formData.extended_travel_time,
                     payment_preference: formData.payment_preference,
-                    payment_account_name: formData.payment_account_name || null,
+                    payment_account_names: formData.payment_account_names,
                     dogs: formData.dogs
                 })
             });
@@ -570,16 +588,49 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                         </div>
                         <div style={{ marginTop: "16px" }}>
                             <div style={styles.inputGroup}>
-                                <label style={styles.label}>Payment Account Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.payment_account_name}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, payment_account_name: e.target.value }))}
-                                    style={styles.input}
-                                    placeholder="Exact name as it appears on their bank transfer (e.g. J. Smith)"
-                                />
+                                <label style={styles.label}>Payment Account Names</label>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                                    {formData.payment_account_names.map((name, i) => (
+                                        <span key={i} style={{
+                                            display: "inline-flex", alignItems: "center", gap: "4px",
+                                            padding: "4px 10px", borderRadius: "999px",
+                                            background: "#e5e7eb", fontSize: "13px", color: "#1f2937"
+                                        }}>
+                                            {name}
+                                            <button
+                                                type="button"
+                                                onClick={() => removePaymentName(i)}
+                                                style={{
+                                                    background: "none", border: "none", cursor: "pointer",
+                                                    padding: "0 0 0 2px", color: "#6b7280", fontSize: "15px",
+                                                    lineHeight: 1
+                                                }}
+                                                title="Remove"
+                                            >×</button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                    <input
+                                        type="text"
+                                        value={newPaymentName}
+                                        onChange={(e) => setNewPaymentName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPaymentName(); } }}
+                                        style={{ ...styles.input, flex: 1, marginBottom: 0 }}
+                                        placeholder="Exact name as it appears on bank transfer"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={addPaymentName}
+                                        style={{
+                                            padding: "8px 14px", borderRadius: "6px", border: "1px solid #d1d5db",
+                                            background: "#f9fafb", cursor: "pointer", fontSize: "13px",
+                                            color: "#374151", whiteSpace: "nowrap"
+                                        }}
+                                    >Add</button>
+                                </div>
                                 <span style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>
-                                    Used to automatically match incoming Revolut payments. Set automatically after the first matched payment.
+                                    Add one entry per bank account. Names must match exactly as they appear on Revolut transfers. Added automatically after the first matched payment.
                                 </span>
                             </div>
                         </div>

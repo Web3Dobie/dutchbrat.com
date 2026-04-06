@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/emailService";
 import { generatePaymentInvoiceEmail, type PaymentInvoiceEmailData } from "@/lib/emailTemplates";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 
 const pool = getPool();
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
 
         // Format services for email (serviceType display handled by email template)
         const services = bookingsResult.rows.map(row => ({
-            date: format(new Date(row.start_time), "EEEE, d MMMM yyyy"),
+            date: format(new TZDate(new Date(row.start_time), "Europe/London"), "EEEE, d MMMM yyyy"),
             serviceType: row.service_type,
             price: parseFloat(row.price_pounds)
         }));

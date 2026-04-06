@@ -3,6 +3,7 @@ import { getPool } from '@/lib/database';
 import { matchPaymentToOwner } from '@/lib/paymentMatcher';
 import { sendTelegramNotification } from '@/lib/telegram';
 import { format } from 'date-fns';
+import { TZDate } from "@date-fns/tz";
 import { getServiceDisplayName } from '@/lib/serviceTypes';
 
 const pool = getPool();
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
             );
 
             const bookingLines = bookings
-                .map(b => `  #${b.id} ${getServiceDisplayName(b.service_type)} ${format(new Date(b.start_time), 'd MMM')} £${b.price_pounds.toFixed(2)}`)
+                .map(b => `  #${b.id} ${getServiceDisplayName(b.service_type)} ${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')} £${b.price_pounds.toFixed(2)}`)
                 .join('\n');
 
             const preferenceLabel = owner.payment_preference === 'per_service'
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
         } else {
             // Amount mismatch — do NOT auto-mark anything
             const bookingLines = bookings
-                .map(b => `  #${b.id} ${getServiceDisplayName(b.service_type)} ${format(new Date(b.start_time), 'd MMM')} £${b.price_pounds.toFixed(2)}`)
+                .map(b => `  #${b.id} ${getServiceDisplayName(b.service_type)} ${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')} £${b.price_pounds.toFixed(2)}`)
                 .join('\n');
 
             const preferenceLabel = owner.payment_preference === 'per_service'

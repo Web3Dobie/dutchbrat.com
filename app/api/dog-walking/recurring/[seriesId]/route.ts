@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { getPool } from '@/lib/database';
 
 // --- Database Connection ---
@@ -130,9 +131,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
             bookings: allBookings.map(b => ({
                 id: b.id,
-                date: format(new Date(b.start_time), 'yyyy-MM-dd'),
-                display_date: format(new Date(b.start_time), 'EEE d MMM'),
-                time: format(new Date(b.start_time), 'HH:mm'),
+                date: format(new TZDate(new Date(b.start_time), "Europe/London"), 'yyyy-MM-dd'),
+                display_date: format(new TZDate(new Date(b.start_time), "Europe/London"), 'EEE d MMM'),
+                time: format(new TZDate(new Date(b.start_time), "Europe/London"), 'HH:mm'),
                 duration_minutes: b.duration_minutes,
                 price: b.price_pounds ? parseFloat(b.price_pounds) : null,
                 status: b.status,

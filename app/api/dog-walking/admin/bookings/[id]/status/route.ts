@@ -4,6 +4,7 @@ import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail } from "@/lib/emailService";
 import { generateNoShowEmail } from "@/lib/emailTemplates";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 
@@ -127,14 +128,14 @@ export async function PUT(
             await client.query('COMMIT');
 
             const dogNames = booking.dog_names.join(', ');
-            const appointmentDateForTelegram = format(new Date(booking.start_time), "EEEE, dd MMMM 'at' HH:mm");
+            const appointmentDateForTelegram = format(new TZDate(new Date(booking.start_time), "Europe/London"), "EEEE, dd MMMM 'at' HH:mm");
 
             // Send no-show email if status is 'no_show'
             if (data.status === 'no_show') {
                 try {
                     const emailSubject = `Missed Appointment - Hunter's Hounds`;
-                    const appointmentDate = format(new Date(booking.start_time), "EEEE, dd MMMM yyyy");
-                    const appointmentTime = format(new Date(booking.start_time), "HH:mm");
+                    const appointmentDate = format(new TZDate(new Date(booking.start_time), "Europe/London"), "EEEE, dd MMMM yyyy");
+                    const appointmentTime = format(new TZDate(new Date(booking.start_time), "Europe/London"), "HH:mm");
 
                     const emailContent = generateNoShowEmail({
                         ownerName: booking.owner_name,

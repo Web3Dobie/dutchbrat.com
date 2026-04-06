@@ -3681,3 +3681,149 @@ imapflow@1.2.12  — promise-based IMAP client for Node.js
 ### **V18 Summary**
 
 **For AI Agents**: V18 adds fully automated Revolut payment processing via Gmail IMAP polling. Key patterns: (1) The payment-check endpoint at `/api/dog-walking/admin/payment-check` uses Bearer token auth (not the admin cookie) — it is called by cron, not a browser. The secret is in `process.env.PAYMENT_CHECK_SECRET`. (2) Email processing is idempotent — emails are marked as read (SEEN flag) immediately after fetching, so a second cron run will never re-process the same email. (3) The `payment_account_name` column on `hunters_hounds.owners` is the primary matching key. It is set automatically after the first successful fallback match where the amounts align, or can be set manually via the ClientEditor. If `payment_account_name` is empty, the system falls back to `owner_name` matching (exact, then first-name prefix). (4) Amount mismatch logic is conservative by design — if the received amount does not match expected total within £0.01, no bookings are auto-marked and a manual-review Telegram warning is sent. (5) The `payment_preference` field on the owner record determines which `completed` bookings are included in the expected total: `per_service` = most recent 1 booking, `weekly` = last 7 days, `fortnightly` = last 14 days, `monthly` = current calendar month. Only bookings with `status = 'completed'` and `price_pounds > 0` are included. (6) Three lib files handle distinct concerns: `emailPoller.ts` handles IMAP connection and email retrieval, `paymentParser.ts` handles regex extraction from email subjects/bodies, `paymentMatcher.ts` handles database lookup and booking aggregation. The route file orchestrates these three and handles all Telegram notifications and DB updates. (7) The cron wrapper script at `/home/hunter-dev/check-payments.sh` reads the secret from `~/.payment-check-secret` (chmod 600) to avoid exposing it in the crontab itself.
+
+---
+
+## V19: BST Timezone Fix, Multiple Payment Account Names & Calendar Emoji Enhancement
+
+### **Status**: V19 — BST/Timezone Hardening + Multi-Account Payment Matching
+
+---
+
+### BST / Europe/London Timezone Fix (All Email & Notification Routes)
+
+**Problem**: The Docker container runs in UTC. All `format(new Date(timestamp), ...)` calls using `date-fns` displayed times in UTC — 1 hour early during British Summer Time (BST, late March–October).
+
+**Fix Pattern (Next.js API routes)**: Wrap every `new Date(timestamp)` passed to `format()` with `new TZDate(new Date(timestamp), "Europe/London")` from `@date-fns/tz` (already a project dependency at v1.4.1).
+
+```typescript
+// Before (UTC — wrong during BST)
+format(new Date(booking.start_time), "EEEE, dd MMMM 'at' HH:mm")
+
+// After (London local time — correct year-round)
+format(new TZDate(new Date(booking.start_time), "Europe/London"), "EEEE, dd MMMM 'at' HH:mm")
+```
+
+**Fix Pattern (standalone Node.js cron scripts)**: These run on the host and have no access to `@date-fns/tz`. Use Node.js built-in `Intl` API:
+
+```javascript
+function toLondonDate(date) {
+    const s = date.toLocaleString('en-US', {
+        timeZone: 'Europe/London',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    });
+    const m = s.match(/(\d+)\/(\d+)\/(\d+),\s+(\d+):(\d+):(\d+)/);
+    if (!m) return date;
+    return new Date(+m[3], +m[1] - 1, +m[2], +m[4] % 24, +m[5], +m[6]);
+}
+// Usage:
+const displayTime = format(toLondonDate(new Date(booking.start_time)), "HH:mm");
+```
+
+**All files fixed**:
+
+| File | What was wrong |
+|------|---------------|
+| `app/api/dog-walking/book/route.ts` | Confirmation emails (all 3 booking types) + all 3 Telegram notification types |
+| `app/api/dog-walking/cancel/route.ts` | Cancellation email + Telegram |
+| `app/api/dog-walking/admin/create-booking/route.ts` | Admin-created booking confirmation emails (all 3 types) + Telegram |
+| `app/api/dog-walking/admin/send-reminder/route.ts` | Manual reminder email date |
+| `app/api/dog-walking/admin/send-invoice/route.ts` | Invoice email date |
+| `app/api/dog-walking/reschedule-booking/route.ts` | Already fixed in previous session |
+| `app/api/dog-walking/admin/reschedule-booking/route.ts` | Already fixed in previous session |
+| `app/api/dog-walking/modify-booking-dogs/route.ts` | "Booking Updated" email time |
+| `app/api/dog-walking/admin/bookings/[id]/dogs/route.ts` | "Booking Updated" email time |
+| `app/api/dog-walking/admin/bookings/[id]/status/route.ts` | No-show email + Telegram |
+| `app/api/dog-walking/recurring/[seriesId]/cancel/route.ts` | Recurring cancellation email times |
+| `app/api/dog-walking/recurring/[seriesId]/route.ts` | Recurring series API response (display_date, time fields) |
+| `app/api/dog-walking/admin/request-review/route.ts` | Review request email date |
+| `app/api/dog-walking/admin/payment-check/route.ts` | Payment Telegram date labels |
+| `app/api/dog-walking/admin/payment-notify/route.ts` | Payment Telegram date labels |
+| `scripts/send-reminders.js` | Cron reminder email time + date; DB query range |
+| `scripts/send-payment-reminders.js` | Payment reminder email date |
+
+**Cron script DB query fix** (`scripts/send-reminders.js`): The "tomorrow" date range was calculated using UTC date components, causing the wrong UTC window during BST. Fixed by using PostgreSQL `AT TIME ZONE`:
+
+```javascript
+// Before — UTC boundary, misses bookings around midnight London time
+const startOfTomorrow = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 0, 0, 0);
+// WHERE b.start_time >= $1 AND b.start_time <= $2
+
+// After — London date boundary, correct year-round
+const tomorrowDateStr = addDays(now, 1).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }); // YYYY-MM-DD
+// WHERE (b.start_time AT TIME ZONE 'Europe/London')::date = $1::date
+```
+
+---
+
+### Multiple Payment Account Names
+
+**Problem**: A single `payment_account_name TEXT` column could only store one bank account name per client. Clients paying from multiple accounts always fell through to fuzzy name matching.
+
+**Database Migration**:
+```sql
+ALTER TABLE hunters_hounds.owners
+    ADD COLUMN payment_account_names TEXT[] NOT NULL DEFAULT '{}';
+
+UPDATE hunters_hounds.owners
+SET payment_account_names = ARRAY[payment_account_name]
+WHERE payment_account_name IS NOT NULL AND payment_account_name != '';
+
+ALTER TABLE hunters_hounds.owners
+    DROP COLUMN payment_account_name;
+```
+
+**Payment Matching** (`lib/paymentMatcher.ts`):
+- Tier 1 query changed from `WHERE payment_account_name ILIKE $1` → `WHERE $1 ILIKE ANY(payment_account_names)`
+- Auto-save on fuzzy match now **appends** to the array rather than overwriting: `array_append(payment_account_names, $1)` with a guard to skip if already present
+- `MatchedOwner` interface: `payment_account_name: string | null` → `payment_account_names: string[]`
+
+**Admin UI** (`app/dog-walking/admin/manage-clients/components/ClientEditor.tsx`):
+- Replaced single text input with a tag-pill interface
+- Existing names shown as removable grey pills (× button)
+- New names added via text input + Add button (or Enter key)
+- PUT body sends `payment_account_names: string[]`
+
+**API Route** (`app/api/dog-walking/admin/clients/[clientId]/route.ts`):
+- Both GET and PUT SELECT queries updated to `o.payment_account_names`
+- GROUP BY updated accordingly
+- UPDATE block: `payment_account_names = $n` with `filter(n => n.trim())` to strip blank entries
+
+**For AI Agents**: The `payment_account_names` column is a PostgreSQL `TEXT[]` array. When checking a payment sender name against stored names, use `$1 ILIKE ANY(payment_account_names)` (case-insensitive). When auto-saving a new name learned from a fuzzy match, use `array_append` with a `NOT ($1 ILIKE ANY(payment_account_names))` guard to avoid duplicates.
+
+---
+
+### Files Modified (V19)
+
+```
+lib/paymentMatcher.ts                                              → Array-based multi-name matching + append on auto-save
+app/api/dog-walking/book/route.ts                                  → TZDate fix (confirmation emails + Telegram)
+app/api/dog-walking/cancel/route.ts                                → TZDate fix (cancellation email + Telegram)
+app/api/dog-walking/admin/create-booking/route.ts                  → TZDate fix (all booking type emails + Telegram)
+app/api/dog-walking/admin/send-reminder/route.ts                   → TZDate fix
+app/api/dog-walking/admin/send-invoice/route.ts                    → TZDate fix
+app/api/dog-walking/modify-booking-dogs/route.ts                   → TZDate fix
+app/api/dog-walking/admin/bookings/[id]/dogs/route.ts              → TZDate fix
+app/api/dog-walking/admin/bookings/[id]/status/route.ts            → TZDate fix (no-show email + Telegram)
+app/api/dog-walking/recurring/[seriesId]/cancel/route.ts           → TZDate fix
+app/api/dog-walking/recurring/[seriesId]/route.ts                  → TZDate fix (API response times)
+app/api/dog-walking/admin/request-review/route.ts                  → TZDate fix
+app/api/dog-walking/admin/payment-check/route.ts                   → TZDate fix + payment_account_names
+app/api/dog-walking/admin/payment-notify/route.ts                  → TZDate fix + payment_account_names
+app/api/dog-walking/admin/clients/[clientId]/route.ts              → payment_account_names array support
+app/dog-walking/admin/manage-clients/components/ClientEditor.tsx   → Tag-pill UI for multiple payment names
+scripts/send-reminders.js                                          → toLondonDate() helper + AT TIME ZONE DB query
+scripts/send-payment-reminders.js                                  → toLondonDate() helper
+```
+
+### **V19 Summary**
+
+**For AI Agents**: V19 hardens timezone handling across the entire platform and upgrades payment name matching to support multiple bank accounts per client.
+
+Key rules going forward:
+1. **Never use `format(new Date(timestamp), ...)` directly** in any route or script — always wrap with `TZDate` (Next.js routes) or `toLondonDate()` (cron scripts).
+2. **`payment_account_names` is a `TEXT[]` array** — use `ANY()` for lookups, `array_append()` for additions.
+3. The cron reminder script (`scripts/send-reminders.js`) uses `AT TIME ZONE 'Europe/London'` in its DB query to correctly identify tomorrow's bookings regardless of DST.
+4. Standalone scripts in `scripts/` run on the host with `node` directly (not in Docker) — they use `date-fns` from `production-stack/node_modules/` which does **not** include `@date-fns/tz`. Use the `toLondonDate()` helper instead.

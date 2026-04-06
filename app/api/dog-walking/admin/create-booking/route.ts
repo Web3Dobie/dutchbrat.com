@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { format, isPast, addMinutes, differenceInDays, differenceInHours, isSameDay } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { sendEmail } from "@/lib/emailService";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // ← ADDED getSoloWalkPrice
@@ -243,8 +244,8 @@ export async function POST(request: NextRequest) {
                     <h1>Multi-Day Dog Sitting Confirmed!</h1>
                     <p>Hi ${customer.owner_name},</p>
                     <p>Your <strong>${numDays}-day dog sitting booking</strong> is confirmed!</p>
-                    <p><strong>Start:</strong> ${format(startTime, "EEEE, MMMM d 'at' HH:mm")}</p>
-                    <p><strong>End:</strong> ${format(endTime, "EEEE, MMMM d 'at' HH:mm")}</p>
+                    <p><strong>Start:</strong> ${format(new TZDate(startTime, "Europe/London"), "EEEE, MMMM d 'at' HH:mm")}</p>
+                    <p><strong>End:</strong> ${format(new TZDate(endTime, "Europe/London"), "EEEE, MMMM d 'at' HH:mm")}</p>
                     <p><strong>Dog(s):</strong> ${dogNamesForEmail}</p>
                     <p><strong>Duration:</strong> ${numDays} days</p>
                     <p><strong>Address:</strong> ${customer.address}</p>
@@ -267,9 +268,9 @@ export async function POST(request: NextRequest) {
                 `;
             } else if (booking_type === 'single_day_sitting') {
                 const numHours = differenceInHours(endTime, startTime);
-                const displayDate = format(startTime, "EEEE, dd MMMM");
-                const startTimeOnly = format(startTime, "HH:mm");
-                const endTimeOnly = format(endTime, "HH:mm");
+                const displayDate = format(new TZDate(startTime, "Europe/London"), "EEEE, dd MMMM");
+                const startTimeOnly = format(new TZDate(startTime, "Europe/London"), "HH:mm");
+                const endTimeOnly = format(new TZDate(endTime, "Europe/London"), "HH:mm");
                 emailSubject = `Hunter's Hounds ${numHours} Hour Dog Sitting Confirmed`;
                 emailContent = `
                     <h1>${numHours} Hour Dog Sitting Confirmed!</h1>
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
                     <p>Thank you!</p>
                 `;
             } else {
-                const displayDate = format(startTime, "EEEE, dd MMMM 'at' HH:mm");
+                const displayDate = format(new TZDate(startTime, "Europe/London"), "EEEE, dd MMMM 'at' HH:mm");
                 emailSubject = `Hunter's Hounds Booking Confirmation: ${displayDate}`;
                 const priceDisplay = finalPrice ? `<p><strong>Total Price:</strong> £${finalPrice.toFixed(2)}</p>` : '';
                 emailContent = `
@@ -335,7 +336,7 @@ export async function POST(request: NextRequest) {
                 const telegramMessage = `
 ${isHistorical ? '📋 HISTORICAL BOOKING ADDED' : '🐕 NEW ADMIN BOOKING'} (#${bookingId})
 
-📅 ${format(startTime, "EEE, MMM d 'at' HH:mm")} ${booking_type === 'multi_day' ? `→ ${format(endTime, "MMM d 'at' HH:mm")}` : `(${data.duration_minutes}min)`}
+📅 ${format(new TZDate(startTime, "Europe/London"), "EEE, MMM d 'at' HH:mm")} ${booking_type === 'multi_day' ? `→ ${format(new TZDate(endTime, "Europe/London"), "MMM d 'at' HH:mm")}` : `(${data.duration_minutes}min)`}
 👤 ${customer.owner_name} (${customer.phone})
 🐾 ${dogNames}
 🎯 ${serviceDisplayName}

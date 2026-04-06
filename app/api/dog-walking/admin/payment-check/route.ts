@@ -5,6 +5,7 @@ import { parseRevolutEmail } from '@/lib/paymentParser';
 import { matchPaymentToOwner, type MatchedBooking } from '@/lib/paymentMatcher';
 import { sendTelegramNotification } from '@/lib/telegram';
 import { format } from 'date-fns';
+import { TZDate } from "@date-fns/tz";
 import { getServiceDisplayName } from '@/lib/serviceTypes';
 
 const pool = getPool();
@@ -65,8 +66,8 @@ export async function POST(request: NextRequest) {
                 const bookingLines = bookings
                     .map(b => {
                         const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
-                            ? `${format(new Date(b.start_time), 'd MMM')}–${format(new Date(b.end_time), 'd MMM')}`
-                            : format(new Date(b.start_time), 'd MMM');
+                            ? `${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')}–${format(new TZDate(new Date(b.end_time), "Europe/London"), 'd MMM')}`
+                            : format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM');
                         return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
                     })
                     .join('\n');
@@ -94,8 +95,8 @@ export async function POST(request: NextRequest) {
                 const bookingLines = bookings
                     .map(b => {
                         const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
-                            ? `${format(new Date(b.start_time), 'd MMM')}–${format(new Date(b.end_time), 'd MMM')}`
-                            : format(new Date(b.start_time), 'd MMM');
+                            ? `${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')}–${format(new TZDate(new Date(b.end_time), "Europe/London"), 'd MMM')}`
+                            : format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM');
                         return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
                     })
                     .join('\n');

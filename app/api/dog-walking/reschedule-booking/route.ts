@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sendEmail } from "@/lib/emailService";
 import { format } from "date-fns";
+import { TZDate } from "@date-fns/tz";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
@@ -247,10 +248,10 @@ export async function POST(request: NextRequest) {
         }
 
         // 3. Send reschedule confirmation email using new email service
-        const oldFormattedDate = format(new Date(booking.old_start_time), "EEEE, MMMM d, yyyy");
-        const oldFormattedTime = format(new Date(booking.old_start_time), "h:mm a");
-        const newFormattedDate = format(newStartTime, "EEEE, MMMM d, yyyy");
-        const newFormattedTime = format(newStartTime, "h:mm a");
+        const oldFormattedDate = format(new TZDate(new Date(booking.old_start_time), "Europe/London"), "EEEE, MMMM d, yyyy");
+        const oldFormattedTime = format(new TZDate(new Date(booking.old_start_time), "Europe/London"), "h:mm a");
+        const newFormattedDate = format(new TZDate(newStartTime, "Europe/London"), "EEEE, MMMM d, yyyy");
+        const newFormattedTime = format(new TZDate(newStartTime, "Europe/London"), "h:mm a");
 
         try {
             const emailSubject = `Booking Rescheduled - ${serviceDisplayName}`;
