@@ -358,10 +358,11 @@ export default function IgTradingDashboard() {
                 setCountdown(REFRESH_SECS);
                 fetchLive();
                 fetchHealth();
+                fetchClosed(closedOffset, closedDays, closedStrategy);
             }
         }, 1000);
         return () => clearInterval(tick);
-    }, [fetchLive]);
+    }, [fetchLive, fetchClosed, closedOffset, closedDays, closedStrategy]);
 
     // Fetch stats when window changes
     useEffect(() => { fetchStats(window_); }, [window_, fetchStats]);
