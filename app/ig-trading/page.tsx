@@ -192,15 +192,10 @@ function HealthDot({ svc }: { svc: ServiceHealth }) {
         svc.state === "dead"       ? "#f87171" : "#6b7280";
     const glow = svc.state !== "unknown" && svc.state !== "missing"
         ? `0 0 5px ${colour}` : "none";
-    const label = svc.name.replace("ig-", "");
     return (
-        <div title={`${svc.name}: ${svc.status}`}
-             style={{ display: "flex", alignItems: "center", gap: 5, cursor: "default" }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%",
-                           background: colour, display: "inline-block",
-                           boxShadow: glow }} />
-            <span style={{ fontSize: "0.72rem", color: "#9ca3af" }}>{label}</span>
-        </div>
+        <span title={`${svc.name}: ${svc.status}`}
+              style={{ width: 8, height: 8, borderRadius: "50%", display: "inline-block",
+                       background: colour, boxShadow: glow, cursor: "default", flexShrink: 0 }} />
     );
 }
 
@@ -382,7 +377,7 @@ export default function IgTradingDashboard() {
             <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 20px" }}>
 
                 {/* Header */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
                     <div>
                         <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: "#f9fafb", margin: 0 }}>
                             IG Trading Dashboard
@@ -391,7 +386,7 @@ export default function IgTradingDashboard() {
                             {account ? `Last snapshot: ${new Date(account.snapshot_at).toLocaleTimeString("en-GB")}` : loadingLive ? "Loading…" : "No live data — streamer may be in paper mode"}
                         </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <a href="/ig-trading/investor-report" style={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 6, padding: "4px 12px", fontSize: "0.8rem", fontWeight: 600, color: "#d1d5db", textDecoration: "none" }}>
                             Investor Report
                         </a>
@@ -521,7 +516,7 @@ export default function IgTradingDashboard() {
                                 </button>
                             ))}
                             <div style={{ width: 1, background: "#374151", margin: "0 2px" }} />
-                            {([{ label: "All Strategies", value: "" }, { label: "DI_CROSSOVER", value: "DI_CROSSOVER" }, { label: "DI_SPREAD", value: "DI_SPREAD" }, { label: "ATR_TREND", value: "ATR_TREND" }, { label: "TREND_EARLY", value: "TREND_EARLY" }, { label: "EXHAUSTION", value: "EXHAUSTION" }]).map(f => (
+                            {([{ label: "All Strategies", value: "" }, { label: "DI_CROSSOVER", value: "DI_CROSSOVER" }, { label: "DI_SPREAD", value: "DI_SPREAD" }, { label: "ATR_TREND", value: "ATR_TREND" }, { label: "TREND_EARLY", value: "TREND_EARLY" }, { label: "BREAKOUT", value: "BREAKOUT" }, { label: "EXHAUSTION", value: "EXHAUSTION" }]).map(f => (
                                 <button key={f.value}
                                     onClick={() => { setClosedStrategy(f.value); setClosedOffset(0); }}
                                     style={{
