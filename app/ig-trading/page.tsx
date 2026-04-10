@@ -123,7 +123,9 @@ function strategyBadge(strategy: string | null): React.CSSProperties {
     if (strategy === "DI_CROSSOVER") return { background: "#1e1b4b", color: "#a5b4fc", border: "1px solid #4338ca" };
     if (strategy === "DI_SPREAD")    return { background: "#1e1b4b", color: "#a5b4fc", border: "1px solid #4338ca" };
     if (strategy === "ATR_TREND")    return { background: "#052e16", color: "#86efac", border: "1px solid #166534" };
+    if (strategy === "TREND_EARLY")  return { background: "#042f2e", color: "#5eead4", border: "1px solid #0d9488" };
     if (strategy === "EXHAUSTION")   return { background: "#431407", color: "#fb923c", border: "1px solid #7c2d12" };
+    if (strategy === "BREAKOUT")     return { background: "#1e3a5f", color: "#60a5fa", border: "1px solid #2563eb" };
     return { background: "#111827", color: "#9ca3af", border: "1px solid #374151" };
 }
 
@@ -519,7 +521,7 @@ export default function IgTradingDashboard() {
                                 </button>
                             ))}
                             <div style={{ width: 1, background: "#374151", margin: "0 2px" }} />
-                            {([{ label: "All Strategies", value: "" }, { label: "DI_CROSSOVER", value: "DI_CROSSOVER" }, { label: "DI_SPREAD", value: "DI_SPREAD" }, { label: "ATR_TREND", value: "ATR_TREND" }, { label: "EXHAUSTION", value: "EXHAUSTION" }]).map(f => (
+                            {([{ label: "All Strategies", value: "" }, { label: "DI_CROSSOVER", value: "DI_CROSSOVER" }, { label: "DI_SPREAD", value: "DI_SPREAD" }, { label: "ATR_TREND", value: "ATR_TREND" }, { label: "TREND_EARLY", value: "TREND_EARLY" }, { label: "EXHAUSTION", value: "EXHAUSTION" }]).map(f => (
                                 <button key={f.value}
                                     onClick={() => { setClosedStrategy(f.value); setClosedOffset(0); }}
                                     style={{
