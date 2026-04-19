@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sendEmail } from "@/lib/emailService";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
@@ -117,6 +117,34 @@ export async function POST(request: NextRequest) {
                 await client.query("ROLLBACK");
                 return NextResponse.json(
                     { error: `Walk limit reached for this date (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting). Cannot reschedule to this date.` },
+                    { status: 409 }
+                );
+            }
+        }
+
+        // Reject if a holiday/personal all-day calendar block covers the new date
+        {
+            const rescheduleDate = new Date(data.new_start_time);
+            const blockCheckRes = await calendar.events.list({
+                calendarId: getCalendarId(),
+                timeMin: startOfDay(rescheduleDate).toISOString(),
+                timeMax: endOfDay(rescheduleDate).toISOString(),
+                singleEvents: true,
+            });
+            const hasHolidayBlock = (blockCheckRes.data.items || []).some(event => {
+                if (!event.start?.date || !event.end?.date) return false;
+                const summary = event.summary || '';
+                const description = event.description || '';
+                if (summary.includes('Multi-Day Dog Sitting')) return false;
+                if (summary.includes('Dog Sitting')) return false;
+                if (description.includes('Multi-day booking')) return false;
+                if (description.includes('Booking Type: Multi-Day')) return false;
+                return true;
+            });
+            if (hasHolidayBlock) {
+                await client.query("ROLLBACK");
+                return NextResponse.json(
+                    { error: "This date is not available for bookings" },
                     { status: 409 }
                 );
             }

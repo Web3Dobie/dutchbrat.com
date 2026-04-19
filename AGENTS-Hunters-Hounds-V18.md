@@ -3827,3 +3827,54 @@ Key rules going forward:
 2. **`payment_account_names` is a `TEXT[]` array** — use `ANY()` for lookups, `array_append()` for additions.
 3. The cron reminder script (`scripts/send-reminders.js`) uses `AT TIME ZONE 'Europe/London'` in its DB query to correctly identify tomorrow's bookings regardless of DST.
 4. Standalone scripts in `scripts/` run on the host with `node` directly (not in Docker) — they use `date-fns` from `production-stack/node_modules/` which does **not** include `@date-fns/tz`. Use the `toLondonDate()` helper instead.
+
+---
+
+## 🔧 V19.1: Holiday Block Enforcement Fix
+
+### **Bug Fixed**
+
+Customers could book dog sitting (single-day and multi-day) during periods the admin had blocked on Google Calendar as a holiday (e.g., a 3-week all-day event titled "Holiday"). Walk bookings and recurring bookings were already protected; sitting and direct booking submission were not.
+
+### **Root Cause**
+
+Google Calendar all-day events use `event.start.date` (not `event.start.dateTime`). Three routes filtered these out silently, making holiday blocks invisible:
+
+- `sitting-availability/route.ts` — both `checkSingleDayAvailability` and `checkMultiDayAvailability` skipped events without `dateTime`.
+- `book/route.ts` — no server-side calendar holiday check at all (relied solely on frontend gating).
+- `reschedule-booking/route.ts` (customer) — DB conflict check only; no calendar check for holiday blocks.
+
+### **Fix Applied**
+
+**Pattern**: An all-day event is a holiday block if it has `event.start.date` AND its summary/description does not identify it as a business Dog Sitting event. Business sitting events are excluded with these checks:
+
+```typescript
+if (summary.includes('Multi-Day Dog Sitting')) return false;
+if (summary.includes('Dog Sitting')) return false;
+if (description.includes('Multi-day booking')) return false;
+if (description.includes('Booking Type: Multi-Day')) return false;
+return true; // any other all-day event = holiday block
+```
+
+**Files changed:**
+
+`app/api/dog-walking/sitting-availability/route.ts`
+- Added `isAllDayHolidayBlock()` helper function
+- `checkSingleDayAvailability`: returns unavailable immediately if any holiday block covers the day
+- `checkMultiDayAvailability`: checks each day in the loop before the timed-event conflict check; uses `startOfDay(parseISO(event.end.date))` because GCal all-day `end.date` is exclusive
+
+`app/api/dog-walking/book/route.ts`
+- Added server-side guard before DB insert: queries calendar for the full booking date range and rejects with 409 if a holiday block is found
+- Covers all booking types: walks, single-day sitting, multi-day sitting
+
+`app/api/dog-walking/reschedule-booking/route.ts` (customer route only)
+- Added holiday block check against the new reschedule target date before DB conflict query
+- Returns 409 if the target date is blocked
+
+### **Admin Bypass (Intentional)**
+
+`admin/create-booking` and `admin/reschedule-booking` have **no** calendar conflict checking by design — admin can always book on any date regardless of holiday blocks. Do not add holiday checks to these routes.
+
+### **Prior Related Fix**
+
+V14.1 fixed the same all-day event blind spot in `recurring/check-availability/route.ts`. The `availability/route.ts` (walk availability) also has the correct `hasAllDayBlock` check. This fix brings sitting availability and direct booking submission in line with those.

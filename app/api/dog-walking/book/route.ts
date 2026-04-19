@@ -2,7 +2,7 @@
 // This is the updated /app/api/dog-walking/book/route.ts
 
 import { NextResponse, type NextRequest } from "next/server";
-import { format, differenceInDays, differenceInHours, isSameDay } from "date-fns";
+import { format, differenceInDays, differenceInHours, isSameDay, startOfDay, endOfDay } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { sendEmail } from "@/lib/emailService";
 import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
@@ -97,6 +97,34 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json(
                     { error: `Multi-day bookings are only available for Dog Sitting. Service received: ${service_type}` },
                     { status: 400 }
+                );
+            }
+        }
+
+        // Server-side guard: reject if a holiday/personal all-day calendar block covers any part of the booking
+        {
+            const blockCheckStart = startOfDay(new Date(start_time));
+            const blockCheckEnd = endOfDay(end_time ? new Date(end_time) : new Date(start_time));
+            const blockCheckRes = await calendar.events.list({
+                calendarId: getCalendarId(),
+                timeMin: blockCheckStart.toISOString(),
+                timeMax: blockCheckEnd.toISOString(),
+                singleEvents: true,
+            });
+            const hasHolidayBlock = (blockCheckRes.data.items || []).some(event => {
+                if (!event.start?.date || !event.end?.date) return false;
+                const summary = event.summary || '';
+                const description = event.description || '';
+                if (summary.includes('Multi-Day Dog Sitting')) return false;
+                if (summary.includes('Dog Sitting')) return false;
+                if (description.includes('Multi-day booking')) return false;
+                if (description.includes('Booking Type: Multi-Day')) return false;
+                return true;
+            });
+            if (hasHolidayBlock) {
+                return NextResponse.json(
+                    { error: "This date is not available for bookings" },
+                    { status: 409 }
                 );
             }
         }

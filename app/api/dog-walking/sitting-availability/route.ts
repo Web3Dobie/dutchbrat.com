@@ -17,6 +17,7 @@ import {
     TZDate
 } from "@date-fns/tz";
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import type { calendar_v3 } from 'googleapis';
 
 // --- Configuration ---
 const TIMEZONE = "Europe/London";
@@ -44,6 +45,19 @@ interface AvailabilityResult {
     conflictDetails?: string[];
     hasWalks?: boolean;
     message?: string;
+}
+
+// Returns true for all-day calendar events that represent a holiday/personal block
+// (not business Dog Sitting events which are stored as all-day for multi-day bookings)
+function isAllDayHolidayBlock(event: calendar_v3.Schema$Event): boolean {
+    if (!event.start?.date || !event.end?.date) return false;
+    const summary = event.summary || '';
+    const description = event.description || '';
+    if (summary.includes('Multi-Day Dog Sitting')) return false;
+    if (summary.includes('Dog Sitting')) return false;
+    if (description.includes('Multi-day booking')) return false;
+    if (description.includes('Booking Type: Multi-Day')) return false;
+    return true;
 }
 
 // Function to get busy events for a date range
@@ -88,6 +102,16 @@ async function checkSingleDayAvailability(date: string): Promise<AvailabilityRes
     workDayEnd.setHours(23, 59, 59, 999); // End of day
 
     const busyEvents = await getBusyEvents(dayStart, dayEnd);
+
+    // Block the day if there's a holiday/personal all-day calendar block
+    if (busyEvents.some(isAllDayHolidayBlock)) {
+        return {
+            available: false,
+            type: 'single' as const,
+            availableRanges: [],
+            message: `Not available on ${format(targetDate, 'MMM d')} - unavailable`
+        };
+    }
 
     // Check if there are walks on this day (for 6-hour minimum enforcement)
     const hasWalks = busyEvents.some(event => {
@@ -222,6 +246,21 @@ async function checkMultiDayAvailability(startDate: string, endDate: string): Pr
             // Check overlap with this day
             return !(bufferedEnd <= dayStart || bufferedStart >= dayEnd);
         });
+
+        // Check for an all-day holiday/personal block covering this day
+        const hasHolidayBlock = busyEvents.some(event => {
+            if (!isAllDayHolidayBlock(event)) return false;
+            const blockStart = startOfDay(parseISO(event.start!.date!));
+            const blockEnd = startOfDay(parseISO(event.end!.date!)); // GCal end.date is exclusive
+            return !(blockEnd <= dayStart || blockStart >= dayEnd);
+        });
+
+        if (hasHolidayBlock) {
+            conflicts.push(dateKey);
+            conflictDetails.push(`${dateKey}: Unavailable`);
+            currentDate = addDays(currentDate, 1);
+            continue;
+        }
 
         if (dayConflicts.length > 0) {
             // ✨ NEW: Analyze the TYPE of conflicts
