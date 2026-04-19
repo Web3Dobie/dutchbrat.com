@@ -302,6 +302,32 @@ const COMPONENT_SIZES = {
 }
 ```
 
+---
+
+## IG Trading Dashboard (`/ig-trading`)
+
+Live trading monitor for the IG spread-betting algo bot. All routes require cookie auth (`isAuthenticated` from `@/lib/auth`).
+
+### API Routes (`app/api/ig-trading/`)
+
+| Route | Purpose |
+|---|---|
+| `positions/route.ts` | Open positions with margin calc; `?mode=LIVE\|PAPER` filter |
+| `account/route.ts` | Account equity, margin, and session snapshots |
+| `closed-trades/route.ts` | Historical closed positions; `?mode=` filter |
+| `equity-chart/route.ts` | Equity curve time-series; `?mode=` filter |
+| `stats/route.ts` | Win rate, net P&L, trade count; `?mode=` filter |
+
+### LIVE/PAPER toggle (v3.7)
+
+The dashboard (`app/ig-trading/page.tsx`) holds a `viewMode` state (`"LIVE" | "PAPER"`, default `"LIVE"`). All 5 fetch functions pass `?mode=${viewMode}` in their URLs and include `viewMode` in their `useCallback` dependency arrays. A top-level `useEffect([viewMode])` triggers a full data re-fetch when the toggle changes.
+
+The mode badge in the header is a clickable `<button>` that calls `setViewMode(m => m === "LIVE" ? "PAPER" : "LIVE")`. Before v3.7 the badge was a read-only `<span>` — toggling was silently ignored.
+
+### Positions API mode filter (v3.7)
+
+`app/api/ig-trading/positions/route.ts` — the open positions query now includes `AND p.mode = $1` with `[mode]` as a parameter. Before v3.7 this clause was missing, so the query returned ALL open positions regardless of mode, causing paper positions to appear in the Live dashboard view.
+
 ## 🧪 Testing Approach
 
 ### Manual Testing Requirements
