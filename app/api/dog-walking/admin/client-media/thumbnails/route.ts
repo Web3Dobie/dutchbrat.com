@@ -101,11 +101,12 @@ export async function POST(request: NextRequest) {
         const ffmpegAvailable = await isFFmpegAvailable();
         console.log(`FFmpeg available: ${ffmpegAvailable}`);
 
-        // Get all media without thumbnails (images and videos)
+        // Get distinct files without thumbnails — one row per filename to avoid duplicate processing
         const result = await client.query(`
-            SELECT id, filename, file_path, media_type
+            SELECT DISTINCT ON (filename) id, filename, file_path, media_type
             FROM hunters_hounds.client_media
             WHERE (thumbnail_path IS NULL OR thumbnail_path = '')
+            ORDER BY filename, id
         `);
 
         let generated = 0;
@@ -154,10 +155,10 @@ export async function POST(request: NextRequest) {
                     continue;
                 }
 
-                // Update database
+                // Update all rows for this filename (handles multi-client assignments)
                 await client.query(
-                    "UPDATE hunters_hounds.client_media SET thumbnail_path = $1 WHERE id = $2",
-                    [thumbRelativePath, row.id]
+                    "UPDATE hunters_hounds.client_media SET thumbnail_path = $1 WHERE filename = $2",
+                    [thumbRelativePath, row.filename]
                 );
 
                 generated++;

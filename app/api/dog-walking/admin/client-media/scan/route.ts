@@ -12,6 +12,21 @@ const execAsync = promisify(exec);
 // Database connection
 const pool = getPool();
 
+// Background optimization state — persists between requests in same process
+let optimizationRunning = false;
+let optimizationStats = { queued: 0, completed: 0, failed: 0 };
+
+async function runBackgroundOptimization(videos: Array<{ filename: string; filePath: string }>) {
+    optimizationRunning = true;
+    optimizationStats = { queued: videos.length, completed: 0, failed: 0 };
+    for (const { filename, filePath } of videos) {
+        const ok = await optimizeVideoForStreaming(filePath, filename);
+        if (ok) optimizationStats.completed++;
+        else optimizationStats.failed++;
+    }
+    optimizationRunning = false;
+}
+
 const CLIENT_MEDIA_DIR = "/app/client-media";
 const ORIGINALS_DIR = path.join(CLIENT_MEDIA_DIR, "originals");
 const OPTIMIZED_DIR = path.join(CLIENT_MEDIA_DIR, "optimized");
@@ -163,9 +178,9 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // FIRST PASS: Optimize ALL videos in originals directory (regardless of assignment)
+        // FIRST PASS: Collect unoptimized videos and start background optimization
         const allFiles = await fs.readdir(ORIGINALS_DIR);
-        let videosOptimized = 0;
+        const unoptimizedVideos: Array<{ filename: string; filePath: string }> = [];
 
         for (const filename of allFiles) {
             const ext = path.extname(filename).toLowerCase();
@@ -175,14 +190,19 @@ export async function POST(request: NextRequest) {
             try {
                 const stats = await fs.stat(filePath);
                 if (stats.isDirectory()) continue;
-
                 if (!(await isVideoOptimized(filename))) {
-                    const optimized = await optimizeVideoForStreaming(filePath, filename);
-                    if (optimized) videosOptimized++;
+                    unoptimizedVideos.push({ filename, filePath });
                 }
             } catch (err) {
-                console.warn(`Could not optimize video ${filename}:`, err);
+                console.warn(`Could not check video ${filename}:`, err);
             }
+        }
+
+        // Fire optimization in background — does not block the response
+        if (unoptimizedVideos.length > 0 && !optimizationRunning) {
+            runBackgroundOptimization(unoptimizedVideos).catch(err =>
+                console.error('Background video optimization error:', err)
+            );
         }
 
         // SECOND PASS: Process pending files for assignment
@@ -256,7 +276,9 @@ export async function POST(request: NextRequest) {
             success: true,
             pending: pendingFiles,
             total: pendingFiles.length,
-            videosOptimized
+            optimizationInProgress: optimizationRunning,
+            videosQueued: optimizationStats.queued,
+            videosOptimized: optimizationStats.completed,
         });
 
     } catch (error) {

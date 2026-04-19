@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 
@@ -44,11 +44,13 @@ export default function ClientMediaPage() {
     const [isReoptimizing, setIsReoptimizing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [optimizationInProgress, setOptimizationInProgress] = useState(false);
+    const [videosQueued, setVideosQueued] = useState(0);
 
     // For assigning files
     const [assigningFile, setAssigningFile] = useState<string | null>(null);
-    const [assignClientId, setAssignClientId] = useState<number | null>(null);
-    const [assignDate, setAssignDate] = useState<string>("");
+    const [pendingSelections, setPendingSelections] = useState<Record<string, number[]>>({});
+    const [pendingDates, setPendingDates] = useState<Record<string, string>>({});
 
     // Styles
     const styles = {
@@ -200,12 +202,14 @@ export default function ClientMediaPage() {
 
             if (data.success) {
                 setPendingFiles(data.pending || []);
-                if (data.total === 0) {
+                setOptimizationInProgress(data.optimizationInProgress ?? false);
+                setVideosQueued(data.videosQueued ?? 0);
+                if (data.total === 0 && !data.optimizationInProgress) {
                     setSuccessMessage("No new files to assign");
                     setTimeout(() => setSuccessMessage(null), 3000);
-                } else if (data.videosOptimized > 0) {
-                    setSuccessMessage(`Found ${data.total} files (${data.videosOptimized} videos optimized for streaming)`);
-                    setTimeout(() => setSuccessMessage(null), 5000);
+                } else if (data.total > 0) {
+                    setSuccessMessage(`Found ${data.total} file${data.total !== 1 ? 's' : ''} to assign`);
+                    setTimeout(() => setSuccessMessage(null), 4000);
                 }
             } else {
                 throw new Error(data.error);
@@ -243,47 +247,66 @@ export default function ClientMediaPage() {
     };
 
     const handleAssign = async (filename: string, extractedDate: string | null) => {
-        if (!assignClientId) {
-            setError("Please select a client");
+        const selectedIds = pendingSelections[filename] ?? [];
+        if (selectedIds.length === 0) {
+            setError("Please select at least one client");
             return;
         }
 
         setAssigningFile(filename);
         setError(null);
 
-        // Use manually entered date, or fall back to extracted date from EXIF/filename
-        const dateToUse = assignDate || extractedDate || null;
+        const dateToUse = pendingDates?.[filename] || extractedDate || null;
 
         try {
-            const response = await fetch("/api/dog-walking/admin/client-media", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    filename,
-                    owner_id: assignClientId,
-                    taken_at: dateToUse,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setSuccessMessage(`Assigned ${filename} successfully`);
-                setTimeout(() => setSuccessMessage(null), 3000);
-                // Remove from pending list
-                setPendingFiles(prev => prev.filter(f => f.filename !== filename));
-                // Reset assignment form
-                setAssignClientId(null);
-                setAssignDate("");
-            } else {
-                throw new Error(data.error);
+            for (const ownerId of selectedIds) {
+                const response = await fetch("/api/dog-walking/admin/client-media", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ filename, owner_id: ownerId, taken_at: dateToUse }),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error);
             }
+            setSuccessMessage(`Assigned ${filename} to ${selectedIds.length} client${selectedIds.length > 1 ? 's' : ''}`);
+            setTimeout(() => setSuccessMessage(null), 3000);
+            setPendingFiles(prev => prev.filter(f => f.filename !== filename));
+            setPendingSelections(prev => { const n = { ...prev }; delete n[filename]; return n; });
+            setPendingDates(prev => { const n = { ...prev }; delete n[filename]; return n; });
         } catch (err: any) {
             setError(err.message || "Failed to assign file");
         } finally {
             setAssigningFile(null);
         }
     };
+
+    const handleAlsoAssign = async (filename: string, ownerId: number, takenAt: string | null) => {
+        try {
+            const response = await fetch("/api/dog-walking/admin/client-media", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename, owner_id: ownerId, taken_at: takenAt }),
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error);
+            setSuccessMessage(`Added assignment successfully`);
+            setTimeout(() => setSuccessMessage(null), 3000);
+            fetchAssignedMedia();
+        } catch (err: any) {
+            setError(err.message || "Failed to add assignment");
+        }
+    };
+
+    // Group assigned media by filename for the "all clients" view
+    const groupedMedia = useMemo(() => {
+        if (selectedClient) return assignedMedia.map(m => ({ ...m, allAssignments: [m] }));
+        const map = new Map<string, AssignedMedia[]>();
+        assignedMedia.forEach(m => {
+            if (!map.has(m.filename)) map.set(m.filename, []);
+            map.get(m.filename)!.push(m);
+        });
+        return Array.from(map.values()).map(group => ({ ...group[0], allAssignments: group }));
+    }, [assignedMedia, selectedClient]);
 
     const handleDelete = async (id: number) => {
         if (!confirm("Remove this media assignment? (The file will remain on disk)")) {
@@ -393,6 +416,24 @@ export default function ClientMediaPage() {
                     ← Back to Admin
                 </Link>
             </div>
+
+            {/* Background optimisation banner */}
+            {optimizationInProgress && (
+                <div style={{
+                    ...styles.card,
+                    backgroundColor: "#1e3a5f",
+                    borderColor: "#3b82f6",
+                    marginBottom: "16px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px"
+                }}>
+                    <span style={{ fontSize: "1.2rem" }}>⚙️</span>
+                    <p style={{ color: "#93c5fd", margin: 0 }}>
+                        Optimising {videosQueued} video{videosQueued !== 1 ? 's' : ''} for streaming in the background. The page is fully usable — scan again to check progress.
+                    </p>
+                </div>
+            )}
 
             {/* Success/Error Messages */}
             {successMessage && (
@@ -523,33 +564,42 @@ export default function ClientMediaPage() {
 
                                     {/* Assignment Form */}
                                     <div style={{ marginTop: "12px" }}>
-                                        <select
-                                            style={{ ...styles.select, marginBottom: "8px" }}
-                                            value={assignClientId || ""}
-                                            onChange={(e) => setAssignClientId(parseInt(e.target.value) || null)}
-                                        >
-                                            <option value="">Select client...</option>
+                                        <p style={{ color: "#9ca3af", fontSize: "11px", margin: "0 0 6px 0" }}>Select clients:</p>
+                                        <div style={{ maxHeight: "120px", overflowY: "auto", marginBottom: "8px", padding: "4px", background: "#111827", borderRadius: "4px" }}>
                                             {clients.map((c) => (
-                                                <option key={c.id} value={c.id}>
-                                                    {c.owner_name}
-                                                </option>
+                                                <label key={c.id} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px", cursor: "pointer" }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(pendingSelections[file.filename] ?? []).includes(c.id)}
+                                                        onChange={(e) => {
+                                                            setPendingSelections(prev => {
+                                                                const cur = prev[file.filename] ?? [];
+                                                                return { ...prev, [file.filename]: e.target.checked ? [...cur, c.id] : cur.filter(id => id !== c.id) };
+                                                            });
+                                                        }}
+                                                    />
+                                                    <span style={{ color: "#e5e7eb", fontSize: "0.8rem" }}>{c.owner_name}</span>
+                                                </label>
                                             ))}
-                                        </select>
+                                        </div>
 
                                         <input
                                             type="date"
                                             style={{ ...styles.input, marginBottom: "8px" }}
-                                            value={assignDate}
-                                            onChange={(e) => setAssignDate(e.target.value)}
+                                            value={pendingDates?.[file.filename] ?? ""}
+                                            onChange={(e) => setPendingDates(prev => ({ ...prev, [file.filename]: e.target.value }))}
                                             placeholder="Date taken (optional)"
                                         />
 
                                         <button
                                             style={{ ...styles.button, ...styles.successButton, width: "100%" }}
                                             onClick={() => handleAssign(file.filename, file.takenAt)}
-                                            disabled={assigningFile === file.filename || !assignClientId}
+                                            disabled={assigningFile === file.filename || !(pendingSelections[file.filename]?.length)}
                                         >
-                                            {assigningFile === file.filename ? "Assigning..." : "Assign to Client"}
+                                            {assigningFile === file.filename ? "Assigning..." :
+                                                (pendingSelections[file.filename]?.length ?? 0) > 0
+                                                    ? `Assign to ${pendingSelections[file.filename].length} client${pendingSelections[file.filename].length > 1 ? 's' : ''}`
+                                                    : "Select clients above"}
                                         </button>
                                     </div>
                                 </div>
@@ -592,8 +642,8 @@ export default function ClientMediaPage() {
                         </div>
                     ) : (
                         <div style={styles.grid}>
-                            {assignedMedia.map((media) => (
-                                <div key={media.id} style={styles.fileCard}>
+                            {groupedMedia.map((media) => (
+                                <div key={media.filename} style={styles.fileCard}>
                                     {/* Preview */}
                                     <div style={{
                                         height: "120px",
@@ -622,10 +672,21 @@ export default function ClientMediaPage() {
                                         )}
                                     </div>
 
-                                    {/* Media Info */}
-                                    <p style={{ color: "#3b82f6", fontSize: "14px", fontWeight: "600", margin: "0 0 4px 0" }}>
-                                        {media.owner_name}
-                                    </p>
+                                    {/* Owner tags */}
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "6px" }}>
+                                        {media.allAssignments.map(a => (
+                                            <span key={a.id} style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#1e3a5f", color: "#93c5fd", borderRadius: "4px", padding: "2px 6px", fontSize: "0.75rem" }}>
+                                                {a.owner_name}
+                                                <button
+                                                    onClick={() => handleDelete(a.id)}
+                                                    style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 0, fontSize: "0.85rem", lineHeight: 1 }}
+                                                    title="Remove this assignment"
+                                                >×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+
+                                    {/* File info */}
                                     <p style={{ color: "#fff", fontSize: "13px", margin: "0 0 4px 0", wordBreak: "break-all" }}>
                                         {media.filename}
                                     </p>
@@ -634,13 +695,25 @@ export default function ClientMediaPage() {
                                         {media.taken_at && ` • ${format(new Date(media.taken_at), "MMM d, yyyy")}`}
                                     </p>
 
-                                    {/* Actions */}
-                                    <button
-                                        style={{ ...styles.button, ...styles.dangerButton, width: "100%" }}
-                                        onClick={() => handleDelete(media.id)}
-                                    >
-                                        Remove Assignment
-                                    </button>
+                                    {/* Also assign to another client */}
+                                    {!selectedClient && clients.filter(c => !media.allAssignments.some(a => a.owner_id === c.id)).length > 0 && (
+                                        <select
+                                            defaultValue=""
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    handleAlsoAssign(media.filename, parseInt(e.target.value), media.taken_at);
+                                                    e.target.value = "";
+                                                }
+                                            }}
+                                            style={{ ...styles.select, fontSize: "0.8rem", marginTop: "4px" }}
+                                        >
+                                            <option value="" disabled>Also assign to…</option>
+                                            {clients
+                                                .filter(c => !media.allAssignments.some(a => a.owner_id === c.id))
+                                                .map(c => <option key={c.id} value={c.id}>{c.owner_name}</option>)
+                                            }
+                                        </select>
+                                    )}
                                 </div>
                             ))}
                         </div>

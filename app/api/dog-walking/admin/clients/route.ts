@@ -33,7 +33,7 @@ interface Client {
     extended_travel_time?: boolean;
     // Payment preference
     payment_preference?: string | null;
-    payment_account_name?: string | null;
+    payment_account_names?: string[];
     dogs: Dog[];
     // Loyalty card data
     loyalty?: {
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
                 o.created_at,
                 o.extended_travel_time,
                 o.payment_preference,
-                o.payment_account_name,
+                o.payment_account_names,
                 COALESCE(
                     json_agg(
                         CASE
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             ${searchCondition}
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.extended_travel_time, o.payment_preference, o.payment_account_name
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.extended_travel_time, o.payment_preference, o.payment_account_names
             ORDER BY ${orderBy}
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
@@ -203,7 +203,7 @@ export async function GET(request: NextRequest) {
             created_at: row.created_at,
             extended_travel_time: row.extended_travel_time || false,
             payment_preference: row.payment_preference || 'per_service',
-            payment_account_name: row.payment_account_name || null,
+            payment_account_names: row.payment_account_names || [],
             dogs: Array.isArray(row.dogs) ? row.dogs : [],
             loyalty: loyaltyMap[row.id] || { qualifying_walks: 0, stamps_on_card: 0, available_to_redeem: 0 },
         }));

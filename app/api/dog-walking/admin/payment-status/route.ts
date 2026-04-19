@@ -12,6 +12,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const view = searchParams.get("view") || "awaiting_payment"; // awaiting_payment, paid, all
 
+    const now = new Date();
+    const statsMonthParam = searchParams.get('stats_month');
+    const statsYearParam  = searchParams.get('stats_year');
+    const qStatsMonth = statsMonthParam ? parseInt(statsMonthParam) : now.getMonth() + 1;
+    const qStatsYear  = statsYearParam  ? parseInt(statsYearParam)  : now.getFullYear();
+
     const client = await pool.connect();
 
     try {
@@ -115,8 +121,8 @@ export async function GET(request: NextRequest) {
                     COALESCE(SUM(CASE
                         WHEN status = 'confirmed'
                         AND price_pounds > 0
-                        AND EXTRACT(YEAR FROM start_time) = EXTRACT(YEAR FROM CURRENT_DATE)
-                        AND EXTRACT(MONTH FROM start_time) = EXTRACT(MONTH FROM CURRENT_DATE)
+                        AND EXTRACT(YEAR  FROM start_time) = $2
+                        AND EXTRACT(MONTH FROM start_time) = $1
                         THEN price_pounds
                         ELSE 0
                     END), 0) as confirmed_this_month_total,
@@ -124,8 +130,8 @@ export async function GET(request: NextRequest) {
                     COUNT(CASE
                         WHEN status = 'confirmed'
                         AND price_pounds > 0
-                        AND EXTRACT(YEAR FROM start_time) = EXTRACT(YEAR FROM CURRENT_DATE)
-                        AND EXTRACT(MONTH FROM start_time) = EXTRACT(MONTH FROM CURRENT_DATE)
+                        AND EXTRACT(YEAR  FROM start_time) = $2
+                        AND EXTRACT(MONTH FROM start_time) = $1
                         THEN 1
                     END) as confirmed_this_month_count
 
@@ -134,7 +140,7 @@ export async function GET(request: NextRequest) {
             SELECT * FROM payment_stats;
         `;
 
-        const statsResult = await client.query(statsQuery);
+        const statsResult = await client.query(statsQuery, [qStatsMonth, qStatsYear]);
 
         // Transform bookings data
         const bookings = bookingsResult.rows.map(row => ({

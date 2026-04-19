@@ -67,7 +67,8 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
     const [newPaymentName, setNewPaymentName] = useState('');
 
     const addPaymentName = () => {
-        const name = newPaymentName.trim();
+        // Normalize whitespace (matches what the payment matcher does on incoming names)
+        const name = newPaymentName.trim().replace(/\s+/g, ' ');
         if (name && !formData.payment_account_names.includes(name)) {
             setFormData(prev => ({ ...prev, payment_account_names: [...prev.payment_account_names, name] }));
         }

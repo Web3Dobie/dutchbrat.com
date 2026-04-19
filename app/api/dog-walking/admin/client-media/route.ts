@@ -105,35 +105,48 @@ export async function POST(request: NextRequest) {
     const client = await pool.connect();
 
     try {
-        // Check if file already exists in database
-        const existingResult = await client.query(
-            'SELECT id FROM hunters_hounds.client_media WHERE filename = $1',
-            [filename]
+        // Check if this exact (filename, owner_id) combination already exists
+        const duplicateCheck = await client.query(
+            'SELECT id FROM hunters_hounds.client_media WHERE filename = $1 AND owner_id = $2',
+            [filename, owner_id]
         );
 
-        if (existingResult.rows.length > 0) {
+        if (duplicateCheck.rows.length > 0) {
             return NextResponse.json(
-                { error: "File already assigned to a client" },
+                { error: "File already assigned to this client" },
                 { status: 409 }
             );
         }
 
-        // Determine media type from extension
+        // If file has prior assignments, copy shared metadata from existing row
+        const priorRow = await client.query(
+            `SELECT file_path, media_type, file_size, thumbnail_path
+             FROM hunters_hounds.client_media WHERE filename = $1 LIMIT 1`,
+            [filename]
+        );
+        const prior = priorRow.rows[0] ?? null;
+
+        // Derive media type from extension if this is the first assignment
         const ext = filename.toLowerCase().split('.').pop();
         const videoExts = ['mp4', 'mov', 'avi', 'm4v'];
-        const mediaType = videoExts.includes(ext || '') ? 'video' : 'image';
+        const mediaType = prior?.media_type ?? (videoExts.includes(ext || '') ? 'video' : 'image');
+        const filePath = prior?.file_path ?? `originals/${filename}`;
+        const fileSize = prior?.file_size ?? null;
+        const thumbnailPath = prior?.thumbnail_path ?? null;
 
-        // Insert the media record
+        // Insert the assignment row
         const result = await client.query(
             `INSERT INTO hunters_hounds.client_media
-            (owner_id, filename, file_path, media_type, taken_at, description)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            (owner_id, filename, file_path, media_type, file_size, thumbnail_path, taken_at, description)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *`,
             [
                 owner_id,
                 filename,
-                `originals/${filename}`,
+                filePath,
                 mediaType,
+                fileSize,
+                thumbnailPath,
                 taken_at || null,
                 description || null
             ]

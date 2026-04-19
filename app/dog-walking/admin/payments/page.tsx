@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, addMonths, startOfMonth, isSameMonth } from "date-fns";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 
 interface BookingForPayment {
@@ -65,17 +65,25 @@ export default function AdminPaymentManagement() {
     const [filterClient, setFilterClient] = useState<string>('');
     const [filterDateFrom, setFilterDateFrom] = useState<string>('');
     const [filterDateTo, setFilterDateTo] = useState<string>('');
+    const [revenueMonth, setRevenueMonth] = useState<Date>(startOfMonth(new Date()));
+
+    const revenueMonthOptions = Array.from({ length: 6 }, (_, i) => addMonths(startOfMonth(new Date()), i));
 
     useEffect(() => {
         fetchPaymentData();
-    }, [viewMode]);
+    }, [viewMode, revenueMonth]);
 
     const fetchPaymentData = async () => {
         setIsLoading(true);
         setError(null);
 
         try {
-            const response = await fetch(`/api/dog-walking/admin/payment-status?view=${viewMode}`, {
+            const params = new URLSearchParams({ view: viewMode });
+            if (!isSameMonth(revenueMonth, new Date())) {
+                params.set('stats_month', String(revenueMonth.getMonth() + 1));
+                params.set('stats_year',  String(revenueMonth.getFullYear()));
+            }
+            const response = await fetch(`/api/dog-walking/admin/payment-status?${params}`, {
                 credentials: 'include'
             });
 
@@ -698,8 +706,19 @@ export default function AdminPaymentManagement() {
                     </div>
                     <div style={styles.statCard}>
                         <div style={{ ...styles.statValue, color: "#3b82f6" }}>{formatCurrency(paymentStats.confirmed_this_month_total)}</div>
-                        <div style={styles.statLabel}>Estimated Revenue This Month</div>
-                        <div style={{ ...styles.statLabel, marginTop: "4px" }}>
+                        <div style={styles.statLabel}>Estimated Revenue</div>
+                        <select
+                            value={format(revenueMonth, 'yyyy-MM')}
+                            onChange={e => setRevenueMonth(new Date(e.target.value + '-01'))}
+                            style={{ marginTop: '8px', background: '#1f2937', color: '#e5e7eb', border: '1px solid #374151', borderRadius: '4px', padding: '2px 6px', fontSize: '0.8rem', cursor: 'pointer', width: '100%' }}
+                        >
+                            {revenueMonthOptions.map(d => (
+                                <option key={format(d, 'yyyy-MM')} value={format(d, 'yyyy-MM')}>
+                                    {format(d, 'MMMM yyyy')}
+                                </option>
+                            ))}
+                        </select>
+                        <div style={{ ...styles.statLabel, marginTop: '4px' }}>
                             ({paymentStats.confirmed_this_month_count} confirmed bookings)
                         </div>
                     </div>

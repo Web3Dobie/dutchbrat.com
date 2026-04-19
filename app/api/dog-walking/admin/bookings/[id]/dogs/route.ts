@@ -63,7 +63,7 @@ export async function PUT(
                 o.address
             FROM hunters_hounds.bookings b
             JOIN hunters_hounds.owners o ON b.owner_id = o.id
-            WHERE b.id = $1 AND b.status = 'confirmed';
+            WHERE b.id = $1 AND b.status IN ('confirmed', 'completed');
         `;
 
         const bookingResult = await client.query(bookingQuery, [bookingId]);
@@ -71,7 +71,7 @@ export async function PUT(
         if (bookingResult.rows.length === 0) {
             await client.query("ROLLBACK");
             return NextResponse.json(
-                { error: "Booking not found or not confirmed" },
+                { error: "Booking not found or already paid" },
                 { status: 404 }
             );
         }
