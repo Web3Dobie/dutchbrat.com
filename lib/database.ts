@@ -29,9 +29,11 @@ export function getPool(): Pool {
       password: config.database.password,
       ssl: config.database.ssl,
       // Connection pool settings
-      max: 20, // Maximum number of clients in the pool
-      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-      connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection not available
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     };
 
     pool = new Pool(poolConfig);
