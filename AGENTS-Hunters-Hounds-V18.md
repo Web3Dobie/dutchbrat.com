@@ -3878,3 +3878,39 @@ return true; // any other all-day event = holiday block
 ### **Prior Related Fix**
 
 V14.1 fixed the same all-day event blind spot in `recurring/check-availability/route.ts`. The `availability/route.ts` (walk availability) also has the correct `hasAllDayBlock` check. This fix brings sitting availability and direct booking submission in line with those.
+
+---
+
+## 🔧 V19.2: Admin Reschedule Modal — End Date/Time for Sitting Bookings
+
+### **Problem**
+
+The admin reschedule modal only collected a new start date and time, then auto-calculated end time by adding `duration_minutes`. Dog sitting bookings (single-day and multi-day) store `duration_minutes = NULL`, so end time was calculated as `NaN` — making it impossible to reschedule or extend sitting bookings via the UI.
+
+### **Fix**
+
+**File:** `app/dog-walking/admin/manage-bookings/page.tsx`
+
+The modal now detects sitting bookings and conditionally shows end date/time fields.
+
+**Sitting detection** (used in openModal, handleRescheduleSubmit, and JSX):
+```typescript
+const isSitting = booking.booking_type === 'single_day_sitting'
+    || booking.booking_type === 'multi_day'
+    || (booking.service_type || '').toLowerCase().includes('sitting');
+```
+The `service_type` fallback handles older bookings where `booking_type` may be null.
+
+**Modal behaviour:**
+- **Walks**: unchanged — shows "New Date" + "New Time" only; end time auto-calculated from `duration_minutes`
+- **Sitting (single-day or multi-day)**: labels change to "New Start Date / Time" and "New End Date / Time"; all four fields pre-filled from the existing booking's `start_time` / `end_time`; admin can change start, end, or both independently
+
+**Validation added:** client-side check that end > start before submitting, returning a clear error message.
+
+**API unchanged** — `admin/reschedule-booking` already accepted arbitrary `new_start_time` / `new_end_time` ISO strings; only the frontend needed updating.
+
+**New state variables added:**
+```typescript
+const [rescheduleEndDate, setRescheduleEndDate] = useState<string>('');
+const [rescheduleEndTime, setRescheduleEndTime] = useState<string>('');
+```

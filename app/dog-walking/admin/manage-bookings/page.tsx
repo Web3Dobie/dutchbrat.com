@@ -68,6 +68,8 @@ export default function ManageBookings() {
     // Reschedule modal state
     const [rescheduleDate, setRescheduleDate] = useState<string>('');
     const [rescheduleTime, setRescheduleTime] = useState<string>('');
+    const [rescheduleEndDate, setRescheduleEndDate] = useState<string>('');
+    const [rescheduleEndTime, setRescheduleEndTime] = useState<string>('');
 
     // Modify Dogs modal state
     const [ownerDogs, setOwnerDogs] = useState<OwnerDog[]>([]);
@@ -165,6 +167,17 @@ export default function ManageBookings() {
             const startDate = new Date(booking.start_time);
             setRescheduleDate(startDate.toISOString().split('T')[0]);
             setRescheduleTime(startDate.toTimeString().slice(0, 5));
+            const isSitting = booking.booking_type === 'single_day_sitting'
+                || booking.booking_type === 'multi_day'
+                || (booking.service_type || '').toLowerCase().includes('sitting');
+            if (isSitting && booking.end_time) {
+                const endDate = new Date(booking.end_time);
+                setRescheduleEndDate(endDate.toISOString().split('T')[0]);
+                setRescheduleEndTime(endDate.toTimeString().slice(0, 5));
+            } else {
+                setRescheduleEndDate('');
+                setRescheduleEndTime('');
+            }
         }
 
         if (modal === 'modify-dogs') {
@@ -243,11 +256,25 @@ export default function ManageBookings() {
             setModalError("Please select both date and time");
             return;
         }
+        const isSitting = actionBooking.booking_type === 'single_day_sitting'
+            || actionBooking.booking_type === 'multi_day'
+            || (actionBooking.service_type || '').toLowerCase().includes('sitting');
+        if (isSitting && (!rescheduleEndDate || !rescheduleEndTime)) {
+            setModalError("Please select both end date and end time");
+            return;
+        }
         try {
             setModalLoading(true);
             setModalError(null);
             const newStartDate = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
-            const newEndDate = new Date(newStartDate.getTime() + actionBooking.duration_minutes * 60 * 1000);
+            const newEndDate = isSitting
+                ? new Date(`${rescheduleEndDate}T${rescheduleEndTime}:00`)
+                : new Date(newStartDate.getTime() + actionBooking.duration_minutes * 60 * 1000);
+            if (newEndDate <= newStartDate) {
+                setModalError("End time must be after start time");
+                setModalLoading(false);
+                return;
+            }
             const response = await fetch('/api/dog-walking/admin/reschedule-booking', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1000,29 +1027,47 @@ export default function ManageBookings() {
             {/* ─── MODALS ─── */}
 
             {/* Reschedule Modal */}
-            {activeModal === 'reschedule' && actionBooking && (
-                <div style={styles.modalOverlay}>
-                    <div style={styles.modal}>
-                        <h2 style={styles.modalTitle}>Reschedule Booking</h2>
-                        {bookingSummary(actionBooking)}
-                        {modalError && <div style={{ color: "#ef4444", marginBottom: "16px", fontSize: "0.875rem" }}>{modalError}</div>}
-                        <div style={{ marginBottom: "16px" }}>
-                            <label style={styles.modalLabel}>New Date</label>
-                            <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} style={styles.modalInput} />
-                        </div>
-                        <div style={{ marginBottom: "24px" }}>
-                            <label style={styles.modalLabel}>New Time</label>
-                            <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} style={styles.modalInput} />
-                        </div>
-                        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-                            <button onClick={closeModal} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#6b7280", opacity: modalLoading ? 0.5 : 1 }}>Cancel</button>
-                            <button onClick={handleRescheduleSubmit} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#3b82f6", opacity: modalLoading ? 0.5 : 1 }}>
-                                {modalLoading ? "Rescheduling..." : "Confirm Reschedule"}
-                            </button>
+            {activeModal === 'reschedule' && actionBooking && (() => {
+                const isSitting = actionBooking.booking_type === 'single_day_sitting'
+                    || actionBooking.booking_type === 'multi_day'
+                    || (actionBooking.service_type || '').toLowerCase().includes('sitting');
+                return (
+                    <div style={styles.modalOverlay}>
+                        <div style={styles.modal}>
+                            <h2 style={styles.modalTitle}>Reschedule Booking</h2>
+                            {bookingSummary(actionBooking)}
+                            {modalError && <div style={{ color: "#ef4444", marginBottom: "16px", fontSize: "0.875rem" }}>{modalError}</div>}
+                            <div style={{ marginBottom: "16px" }}>
+                                <label style={styles.modalLabel}>{isSitting ? "New Start Date" : "New Date"}</label>
+                                <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} style={styles.modalInput} />
+                            </div>
+                            <div style={{ marginBottom: "16px" }}>
+                                <label style={styles.modalLabel}>{isSitting ? "New Start Time" : "New Time"}</label>
+                                <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} style={styles.modalInput} />
+                            </div>
+                            {isSitting && (
+                                <>
+                                    <div style={{ marginBottom: "16px" }}>
+                                        <label style={styles.modalLabel}>New End Date</label>
+                                        <input type="date" value={rescheduleEndDate} onChange={(e) => setRescheduleEndDate(e.target.value)} style={styles.modalInput} />
+                                    </div>
+                                    <div style={{ marginBottom: "24px" }}>
+                                        <label style={styles.modalLabel}>New End Time</label>
+                                        <input type="time" value={rescheduleEndTime} onChange={(e) => setRescheduleEndTime(e.target.value)} style={styles.modalInput} />
+                                    </div>
+                                </>
+                            )}
+                            {!isSitting && <div style={{ marginBottom: "8px" }} />}
+                            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                                <button onClick={closeModal} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#6b7280", opacity: modalLoading ? 0.5 : 1 }}>Cancel</button>
+                                <button onClick={handleRescheduleSubmit} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#3b82f6", opacity: modalLoading ? 0.5 : 1 }}>
+                                    {modalLoading ? "Rescheduling..." : "Confirm Reschedule"}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Cancel Modal */}
             {activeModal === 'cancel' && actionBooking && (
