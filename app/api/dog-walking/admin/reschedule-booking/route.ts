@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sendEmail } from "@/lib/emailService";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { sendBookingEmail } from "@/lib/emailService";
@@ -211,6 +211,7 @@ export async function POST(request: NextRequest) {
 
         if (booking.google_event_id) {
             try {
+                const isMultiDay = booking.booking_type === 'multi_day';
                 const calendarEventData: CalendarEventData = {
                     service_type: serviceDisplayName,
                     dogNames,
@@ -218,8 +219,9 @@ export async function POST(request: NextRequest) {
                     phone: booking.phone,
                     email: booking.email,
                     address: booking.address,
-                    duration_minutes: newDurationMinutes,
-                    booking_type: 'single',
+                    duration_minutes: isMultiDay ? undefined : newDurationMinutes,
+                    duration_days: isMultiDay ? differenceInDays(newEndTime, newStartTime) + 1 : undefined,
+                    booking_type: isMultiDay ? 'multi_day' : 'single',
                     start_time: newStartTime,
                     end_time: newEndTime,
                     price: booking.price_pounds ? parseFloat(booking.price_pounds) : undefined,
