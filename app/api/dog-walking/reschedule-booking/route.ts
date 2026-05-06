@@ -177,6 +177,10 @@ export async function POST(request: NextRequest) {
         // 1. The booking being rescheduled (shouldn't happen due to SQL, but double-check)
         // 2. Long dog sittings (6+ hours) - walks can coexist with these (V11.1)
         // 3. Multi-day dog sittings - walks can coexist with these
+        // 4. Walk/quick/meet bookings never block a sitting reschedule (V11.1 bidirectional)
+        const reschedulingServiceType = (booking.service_type || '').toLowerCase();
+        const reschedulingIsSitting = reschedulingServiceType.includes('sitting');
+
         const actualConflicts = conflictResult.rows.filter(row => {
             // Exclude the booking being rescheduled
             if (Number(row.id) === bookingIdNum) return false;
@@ -184,6 +188,10 @@ export async function POST(request: NextRequest) {
             // Check if this is a dog sitting that allows walk coexistence
             const serviceType = (row.service_type || '').toLowerCase();
             const isSitting = serviceType.includes('sitting');
+            const isWalk = serviceType.includes('walk') || serviceType.includes('solo') || serviceType.includes('quick') || serviceType.includes('meet');
+
+            // Rescheduling a sitting: walks can always coexist (bidirectional V11.1 rule)
+            if (reschedulingIsSitting && isWalk) return false;
 
             if (isSitting) {
                 // Calculate duration in hours
