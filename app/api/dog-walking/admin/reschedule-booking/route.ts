@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
             SELECT
                 b.id,
                 b.service_type,
+                b.booking_type,
                 b.start_time as old_start_time,
                 b.end_time as old_end_time,
                 b.duration_minutes,
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.id = $1 AND b.status = 'confirmed'
-            GROUP BY b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes,
+            GROUP BY b.id, b.service_type, b.booking_type, b.start_time, b.end_time, b.duration_minutes,
                      b.status, b.price_pounds, b.google_event_id, o.owner_name, o.phone, o.email, o.address;
         `;
 
@@ -181,8 +182,10 @@ export async function POST(request: NextRequest) {
 
         console.log(`[Admin] Reschedule check passed: no conflicts found for booking ${bookingIdNum}`);
 
-        // Calculate new duration (in case it's different)
+        // Calculate new duration — only stored for single (walk) bookings;
+        // multi_day and single_day_sitting must keep duration_minutes = NULL (DB constraint)
         const newDurationMinutes = Math.round((newEndTime.getTime() - newStartTime.getTime()) / (1000 * 60));
+        const durationToStore = booking.booking_type === 'single' ? newDurationMinutes : null;
 
         // 1. Update booking in database
         const updateQuery = `
@@ -198,7 +201,7 @@ export async function POST(request: NextRequest) {
             data.booking_id,
             data.new_start_time,
             data.new_end_time,
-            newDurationMinutes
+            durationToStore
         ]);
 
         // 2. Update Google Calendar event
