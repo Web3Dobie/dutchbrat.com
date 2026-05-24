@@ -177,7 +177,7 @@ export default function ClientMediaPage() {
 
     const fetchClients = async () => {
         try {
-            const response = await fetch("/api/dog-walking/admin/clients");
+            const response = await fetch("/api/dog-walking/admin/clients?limit=100");
             const data = await response.json();
             if (data.success) {
                 setClients(data.clients.map((c: any) => ({

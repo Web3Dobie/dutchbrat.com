@@ -89,7 +89,7 @@ export default function RevenueDashboard() {
     const fetchClients = async () => {
         setIsLoadingClients(true);
         try {
-            const response = await fetch("/api/dog-walking/admin/clients", {
+            const response = await fetch("/api/dog-walking/admin/clients?limit=100", {
                 credentials: 'include'
             });
 
