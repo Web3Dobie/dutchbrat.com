@@ -10,8 +10,9 @@ export interface ServicePricing {
       twoDogs: number;
     };
   }[];
-  duration?: number | null; // For simple services
+  duration?: number | null;
   price?: number | null;
+  twoDogPrice?: number;
   priceDisplay: string;
 }
 
@@ -46,7 +47,8 @@ export const SERVICE_PRICING: Record<string, ServicePricing> = {
     description: "A fun, quick play in the park.",
     duration: 30,
     price: 10.00,
-    priceDisplay: "£10 / 30-mins"
+    twoDogPrice: 14.00,
+    priceDisplay: "£10 (1 dog) / £14 (2 dogs) - 30 mins"
   },
   sitting: {
     id: "sitting",
@@ -83,6 +85,10 @@ export const getSoloWalkPrice = (duration: number, dogCount: number): number => 
   if (!soloPricing) return 0;
   
   return dogCount === 2 ? soloPricing.pricing.twoDogs : soloPricing.pricing.oneDog;
+};
+
+export const getQuickWalkPrice = (dogCount: number): number => {
+  return dogCount === 2 ? (SERVICE_PRICING.quick.twoDogPrice ?? 14.00) : (SERVICE_PRICING.quick.price ?? 10.00);
 };
 
 export const getSoloWalkOptions = () => {

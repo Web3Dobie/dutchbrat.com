@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { format, differenceInDays, differenceInHours, isSameDay, startOfDay, endOfDay } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { sendEmail } from "@/lib/emailService";
-import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing';
+import { getServicePrice, getSoloWalkPrice, getQuickWalkPrice } from '@/lib/pricing';
 import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
@@ -180,23 +180,22 @@ export async function POST(request: NextRequest) {
         // --- Calculate Price Based on Service Type (UPDATED for Duration-Based Pricing) ---
         let finalPrice: number | null = null;
 
-        // NEW: Check if this is a solo walk with duration-based pricing
         const isSoloWalk = service_type.toLowerCase().includes('solo walk');
+        const isQuickWalk = service_type.toLowerCase().includes('quick walk');
+        const dogCount = dog_id_2 ? 2 : 1;
 
         if (isSoloWalk && duration_minutes) {
-            // NEW: Calculate solo walk price based on duration and dog count
-            const dogCount = dog_id_2 ? 2 : 1;
             finalPrice = getSoloWalkPrice(duration_minutes, dogCount);
             console.log(`Solo Walk Duration Pricing: ${duration_minutes}min, ${dogCount} dogs -> £${finalPrice}`);
+        } else if (isQuickWalk) {
+            finalPrice = getQuickWalkPrice(dogCount);
+            console.log(`Quick Walk Pricing: ${dogCount} dogs -> £${finalPrice}`);
         } else {
-            // Fallback to static pricing for other services
             const serviceTypeMap: Record<string, string> = {
                 'Meet & Greet - for new clients': 'meetgreet',
-                'Solo Walk (60 min)': 'solo', // Legacy compatibility
-                'Quick Walk (30 min)': 'quick',
+                'Solo Walk (60 min)': 'solo',
                 'Dog Sitting (Variable)': 'sitting'
             };
-
             const pricingServiceId = serviceTypeMap[service_type];
             if (pricingServiceId) {
                 finalPrice = getServicePrice(pricingServiceId);

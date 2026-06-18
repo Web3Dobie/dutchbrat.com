@@ -3,7 +3,7 @@ import { format, isPast, addMinutes, differenceInDays, differenceInHours, isSame
 import { TZDate } from "@date-fns/tz";
 import { sendEmail } from "@/lib/emailService";
 import { sendTelegramNotification } from "@/lib/telegram";
-import { getServicePrice, getSoloWalkPrice } from '@/lib/pricing'; // ← ADDED getSoloWalkPrice
+import { getServicePrice, getSoloWalkPrice, getQuickWalkPrice } from '@/lib/pricing';
 import { sendBookingEmail } from "@/lib/emailService";
 import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
@@ -76,24 +76,23 @@ export async function POST(request: NextRequest) {
         // --- Calculate Price Based on Service Type (UPDATED for Duration-Based Pricing) ---
         let finalPrice: number | null = null;
 
-        // NEW: Check if this is a solo walk with duration-based pricing
         const isSoloWalk = data.service_type.toLowerCase().includes('solo walk');
+        const isQuickWalk = data.service_type.toLowerCase().includes('quick walk');
+        const dogCount = data.dog_id_2 ? 2 : 1;
 
         if (isSoloWalk && data.duration_minutes) {
-            // NEW: Calculate solo walk price based on duration and dog count
-            const dogCount = data.dog_id_2 ? 2 : 1;
             finalPrice = getSoloWalkPrice(data.duration_minutes, dogCount);
             console.log(`Admin Solo Walk Duration Pricing: ${data.duration_minutes}min, ${dogCount} dogs -> £${finalPrice}`);
+        } else if (isQuickWalk) {
+            finalPrice = getQuickWalkPrice(dogCount);
+            console.log(`Admin Quick Walk Pricing: ${dogCount} dogs -> £${finalPrice}`);
         } else {
-            // UPDATED: Enhanced service type map with new solo walk durations
             const serviceTypeMap: Record<string, string> = {
                 'Meet & Greet - for new clients': 'meetgreet',
-                'Solo Walk (60 min)': 'solo',   // Legacy compatibility
-                'Solo Walk (120 min)': 'solo',  // NEW: 2-hour option
-                'Quick Walk (30 min)': 'quick',
+                'Solo Walk (60 min)': 'solo',
+                'Solo Walk (120 min)': 'solo',
                 'Dog Sitting (Variable)': 'sitting'
             };
-
             const pricingServiceId = serviceTypeMap[data.service_type];
             finalPrice = pricingServiceId ? getServicePrice(pricingServiceId) : null;
         }
