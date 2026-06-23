@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { format, addMinutes, isPast } from "date-fns";
-import { getSoloWalkPrice } from "@/lib/pricing";
+import { getSoloWalkPrice, getQuickWalkPrice } from "@/lib/pricing";
 
 // Updated service options with both solo walk durations
 const SERVICE_OPTIONS = [
     { id: "Meet & Greet - for new clients", name: "Meet & Greet (30 min, FREE)", duration: 30, type: "fixed" },
-    { id: "Quick Walk (30 min)", name: "Quick Walk (30 min, £10)", duration: 30, type: "fixed" },
+    { id: "Quick Walk (30 min)", name: "Quick Walk (30 min)", duration: 30, type: "quick_walk" },
     { id: "Solo Walk (60 min)", name: "Solo Walk (1 hour)", duration: 60, type: "solo_walk" },
     { id: "Solo Walk (120 min)", name: "Solo Walk (2 hours)", duration: 120, type: "solo_walk" },
     { id: "Dog Sitting (Variable)", name: "Dog Sitting (Variable, POA)", duration: null, type: "variable" },
@@ -120,9 +120,14 @@ export default function AdminCreateBooking() {
             return ` - ${price} (${dogCount} dog${dogCount > 1 ? 's' : ''})`;
         }
 
+        if (service.type === "quick_walk") {
+            const dogCount = selectedDogs.length || 1;
+            const price = getQuickWalkPrice(dogCount);
+            return ` - £${price.toFixed(2)} (${dogCount} dog${dogCount > 1 ? 's' : ''})`;
+        }
+
         // Return default pricing for other services
         if (service.name.includes("FREE")) return " - FREE";
-        if (service.name.includes("£10")) return " - £10";
         if (service.name.includes("POA")) return " - POA";
 
         return "";
