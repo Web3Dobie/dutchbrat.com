@@ -1882,12 +1882,19 @@ DELETE /api/dog-walking/admin/client-media/reoptimize
 
 ### Video Streaming Solution
 
-**Root Cause**: HTTP/2 protocol errors with Next.js API routes serving large binary content through Cloudflare (520 errors)
+**Root Cause**: HTTP/2 protocol errors with Next.js API routes serving large binary content through Cloudflare (520 errors). Also: Cloudflare 520 if the video's moov atom is at the END of the file (the default when recorded on a phone). Cloudflare starts a cache-fill, cannot parse the video without moov at front, drops the connection, and caches the failure — causing persistent 520s even after the underlying server is fixed.
 
 **Solution**:
 1. **Direct nginx serving**: Videos served via `nginx-media` container, bypassing Next.js
-2. **Video optimization**: Apply `ffmpeg -movflags +faststart` to move moov atom to file beginning
+2. **Video optimization**: Apply `ffmpeg -movflags +faststart` to move moov atom to file beginning — REQUIRED for both client-media and newsletter videos. Without this, Cloudflare returns 520.
 3. **Range request support**: API route handles HTTP Range headers for proper seeking/streaming
+4. **After fixing**: Purge the Cloudflare cache for the video URL (Caching → Cache Purge → Custom Purge → URL). The 520 will persist until the cache is cleared even after the server-side fix.
+
+**Newsletter video faststart**: The `generate-thumbnail` API route now automatically applies faststart when generating thumbnails. For existing videos without faststart, run manually:
+```bash
+cd /home/hunter-dev/hunter-media/newsletter
+ffmpeg -i video.mp4 -c copy -movflags +faststart video-fast.mp4 && mv video-fast.mp4 video.mp4
+```
 
 **nginx-media volume mount** (docker-compose.yml):
 ```yaml

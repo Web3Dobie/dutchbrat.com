@@ -46,6 +46,16 @@ interface NewsletterContent {
     notionBlocks?: any[];
     notionHtml?: string;
     includeNewPackMembers?: boolean;
+    includeBirthdays?: boolean;
+    birthdayDogs?: {
+        dog_id: number;
+        dog_name: string;
+        breed: string;
+        dog_birthday: string;
+        image_filename: string | null;
+        owner_name: string;
+        age_years: number;
+    }[];
 }
 
 interface Newsletter {
@@ -113,14 +123,37 @@ export default function NewsletterPage() {
     const [includeNewPackMembers, setIncludeNewPackMembers] = useState(true);
     const [notionImageCount, setNotionImageCount] = useState(0);
 
+    // Newsletter media / thumbnail state
+    interface VideoStatus { filename: string; thumbnailFilename: string; hasThumbnail: boolean; }
+    const [newsletterVideos, setNewsletterVideos] = useState<VideoStatus[]>([]);
+    const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+    const [isGeneratingThumbnails, setIsGeneratingThumbnails] = useState<Record<string, boolean>>({});
+
+    // Birthday dogs state
+    interface BirthdayDog {
+        dog_id: number;
+        dog_name: string;
+        breed: string;
+        dog_birthday: string;
+        image_filename: string | null;
+        owner_id: number;
+        owner_name: string;
+        age_years: number;
+        selected: boolean;
+    }
+    const [birthdayDogs, setBirthdayDogs] = useState<BirthdayDog[]>([]);
+    const [includeBirthdays, setIncludeBirthdays] = useState(true);
+    const [isLoadingBirthdays, setIsLoadingBirthdays] = useState(false);
+
     // Fetch initial data
     useEffect(() => {
         fetchData();
     }, []);
 
-    // Re-fetch new dogs when month changes
+    // Re-fetch new dogs and birthday dogs when month changes
     useEffect(() => {
         fetchNewDogs(selectedYear, selectedMonth);
+        fetchBirthdayDogs(selectedMonth);
     }, [selectedYear, selectedMonth]);
 
     const fetchNewDogs = async (year: number, month: number) => {
@@ -191,6 +224,70 @@ export default function NewsletterPage() {
     const handleOpenNotionImport = () => {
         setShowNotionImport(true);
         fetchNotionPages();
+    };
+
+    const fetchBirthdayDogs = async (month: number) => {
+        setIsLoadingBirthdays(true);
+        try {
+            const res = await fetch(
+                `/api/dog-walking/admin/newsletter/birthday-dogs?month=${month}`,
+                { credentials: "include" }
+            );
+            const data = await res.json();
+            setBirthdayDogs(
+                (data.birthday_dogs || []).map((d: any) => ({ ...d, selected: true }))
+            );
+        } catch {
+            setBirthdayDogs([]);
+        } finally {
+            setIsLoadingBirthdays(false);
+        }
+    };
+
+    const fetchNewsletterVideos = async () => {
+        setIsLoadingVideos(true);
+        try {
+            const res = await fetch("/api/dog-walking/admin/newsletter/generate-thumbnail", {
+                credentials: "include"
+            });
+            const data = await res.json();
+            setNewsletterVideos(data.videos || []);
+        } catch {
+            setNewsletterVideos([]);
+        } finally {
+            setIsLoadingVideos(false);
+        }
+    };
+
+    const handleGenerateThumbnail = async (filename?: string) => {
+        const key = filename || "__all__";
+        setIsGeneratingThumbnails(prev => ({ ...prev, [key]: true }));
+        try {
+            const res = await fetch("/api/dog-walking/admin/newsletter/generate-thumbnail", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(filename ? { filename } : {}),
+            });
+            const data = await res.json();
+            if (data.success) {
+                await fetchNewsletterVideos();
+                if (filename) {
+                    setSuccessMessage(`Thumbnail created & video optimised for Cloudflare: ${filename}`);
+                } else {
+                    const parts: string[] = [];
+                    if (data.generated > 0) parts.push(`${data.generated} thumbnail(s) created`);
+                    if (data.optimized > 0) parts.push(`${data.optimized} video(s) optimised for streaming`);
+                    setSuccessMessage(parts.join(', ') || 'All videos up to date');
+                }
+            } else {
+                setError(data.error || "Failed to generate thumbnail");
+            }
+        } catch {
+            setError("Failed to generate & optimise");
+        } finally {
+            setIsGeneratingThumbnails(prev => ({ ...prev, [key]: false }));
+        }
     };
 
     const handleImportNotionPage = async (pageId: string) => {
@@ -295,6 +392,10 @@ export default function NewsletterPage() {
                 firstServiceDate: m.first_service_date
             }));
 
+        const selectedBirthdays = birthdayDogs
+            .filter(d => d.selected)
+            .map(({ selected: _s, ...d }) => d);
+
         if (importMode === "notion") {
             return {
                 title,
@@ -305,6 +406,8 @@ export default function NewsletterPage() {
                 notionHtml,
                 includeNewPackMembers,
                 newPackMembers: includeNewPackMembers ? selectedMembers : [],
+                includeBirthdays,
+                birthdayDogs: includeBirthdays ? selectedBirthdays : [],
                 // These fields are required by the interface but unused in Notion mode
                 packFarewells: "",
                 walkHighlights: { text: "", images: [] },
@@ -402,6 +505,31 @@ export default function NewsletterPage() {
                 `;
             }
 
+            let birthdaysPreview = "";
+            if (includeBirthdays) {
+                const selectedBdays = birthdayDogs.filter(d => d.selected);
+                if (selectedBdays.length > 0) {
+                    birthdaysPreview = `
+                        <div style="background: #fffbeb; border: 2px solid #fde68a; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                            <h3 style="color: #92400e; margin-top: 0;">🎂 Birthday Pups This Month!</h3>
+                            <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
+                                ${selectedBdays.map(d => `
+                                    <div style="text-align: center;">
+                                        ${d.image_filename ? `
+                                            <img src="/api/dog-images/${d.image_filename}"
+                                                 style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #f59e0b;">
+                                        ` : `
+                                            <div style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #fbbf24); display: flex; align-items: center; justify-content: center; font-size: 40px;">🎂</div>
+                                        `}
+                                        <p style="margin: 8px 0 2px; font-weight: bold;">${d.dog_name}</p>
+                                        <p style="margin: 0; color: #92400e; font-size: 13px;">${d.breed}${d.age_years > 0 ? ` — turning ${d.age_years}!` : ''}</p>
+                                    </div>
+                                `).join("")}
+                            </div>
+                        </div>`;
+                }
+            }
+
             const previewContent = `
                 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #fff;">
                     <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); padding: 20px; text-align: center; color: white; border-radius: 8px 8px 0 0;">
@@ -411,6 +539,7 @@ export default function NewsletterPage() {
                     <div style="padding: 20px 30px; border: 1px solid #e5e7eb; border-top: none;">
                         ${notionHtml}
                         ${newMembersPreview}
+                        ${birthdaysPreview}
                     </div>
                     <div style="background: #f9fafb; padding: 15px; text-align: center; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
                         <p style="color: #6b7280; font-size: 12px; margin: 0;">
@@ -628,6 +757,10 @@ export default function NewsletterPage() {
             setNotionBlocks(newsletter.content.notionBlocks || []);
             setNotionPageId(newsletter.content.notionPageId || "");
             setIncludeNewPackMembers(newsletter.content.includeNewPackMembers !== false);
+            setIncludeBirthdays(newsletter.content.includeBirthdays !== false);
+            setBirthdayDogs(
+                (newsletter.content.birthdayDogs || []).map((d: any) => ({ ...d, selected: true }))
+            );
         } else {
             // Restore editor mode
             setImportMode("editor");
@@ -929,6 +1062,93 @@ export default function NewsletterPage() {
                                 />
                             </div>
 
+                            {/* Newsletter Media — video thumbnails */}
+                            <div style={styles.card}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                                    <label style={{ ...styles.sectionTitle, marginBottom: 0 }}>
+                                        🎬 Newsletter Media
+                                    </label>
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                        {newsletterVideos.length > 0 && (
+                                            <button
+                                                onClick={() => handleGenerateThumbnail()}
+                                                disabled={!!isGeneratingThumbnails["__all__"]}
+                                                style={{
+                                                    ...styles.button,
+                                                    ...styles.successButton,
+                                                    padding: "6px 14px",
+                                                    fontSize: "13px",
+                                                    opacity: isGeneratingThumbnails["__all__"] ? 0.5 : 1,
+                                                }}
+                                            >
+                                                {isGeneratingThumbnails["__all__"] ? "Processing..." : "Generate All & Optimise"}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={fetchNewsletterVideos}
+                                            disabled={isLoadingVideos}
+                                            style={{
+                                                ...styles.button,
+                                                ...styles.secondaryButton,
+                                                padding: "6px 14px",
+                                                fontSize: "13px",
+                                                opacity: isLoadingVideos ? 0.5 : 1,
+                                            }}
+                                        >
+                                            {isLoadingVideos ? "Scanning..." : "Scan"}
+                                        </button>
+                                    </div>
+                                </div>
+                                {newsletterVideos.length === 0 ? (
+                                    <p style={{ color: "#94a3b8", fontSize: "13px", margin: 0 }}>
+                                        {isLoadingVideos ? "Scanning for videos..." : "Click Scan to check for videos in the newsletter media folder."}
+                                    </p>
+                                ) : (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                        {newsletterVideos.map(v => (
+                                            <div key={v.filename} style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                padding: "8px 12px",
+                                                backgroundColor: "#0f172a",
+                                                borderRadius: "6px",
+                                                fontSize: "13px",
+                                            }}>
+                                                <div>
+                                                    <span style={{ color: "#e2e8f0" }}>{v.filename}</span>
+                                                    <span style={{
+                                                        marginLeft: "10px",
+                                                        fontSize: "11px",
+                                                        color: v.hasThumbnail ? "#4ade80" : "#f87171",
+                                                    }}>
+                                                        {v.hasThumbnail ? `✓ ${v.thumbnailFilename}` : "no thumbnail"}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleGenerateThumbnail(v.filename)}
+                                                    disabled={!!isGeneratingThumbnails[v.filename]}
+                                                    style={{
+                                                        ...styles.button,
+                                                        ...(v.hasThumbnail ? styles.secondaryButton : styles.successButton),
+                                                        padding: "4px 12px",
+                                                        fontSize: "12px",
+                                                        opacity: isGeneratingThumbnails[v.filename] ? 0.5 : 1,
+                                                    }}
+                                                >
+                                                    {isGeneratingThumbnails[v.filename]
+                                                        ? "Processing..."
+                                                        : v.hasThumbnail ? "Re-generate & Optimise" : "Generate & Optimise"}
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <p style={{ color: "#64748b", fontSize: "12px", margin: "4px 0 0 0" }}>
+                                            Generates a .jpg thumbnail and applies ffmpeg faststart (moves moov atom to front) so Cloudflare can stream the video without errors.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* New Pack Members Toggle */}
                             <div style={styles.card}>
                                 <label style={{
@@ -1018,6 +1238,71 @@ export default function NewsletterPage() {
                                                             <div style={{ color: "#fff", fontWeight: "600" }}>{dog.dog_name}</div>
                                                             <div style={{ color: "#94a3b8", fontSize: "12px" }}>
                                                                 {dog.breed} • First walk: {format(new Date(dog.first_service_date), "MMM d")}
+                                                            </div>
+                                                        </div>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Birthday Dogs */}
+                            <div style={styles.card}>
+                                <label style={{ ...styles.sectionTitle, cursor: "pointer" }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={includeBirthdays}
+                                        onChange={e => setIncludeBirthdays(e.target.checked)}
+                                        style={{ marginRight: "4px" }}
+                                    />
+                                    🎂 Include Birthday Pups
+                                    <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px", marginLeft: "8px" }}>
+                                        (auto-generated from dog birthdays)
+                                    </span>
+                                </label>
+                                {includeBirthdays && (
+                                    <>
+                                        {isLoadingBirthdays ? (
+                                            <p style={{ color: "#94a3b8", fontSize: "13px" }}>Loading...</p>
+                                        ) : birthdayDogs.length === 0 ? (
+                                            <p style={{ color: "#64748b", fontSize: "14px" }}>No birthdays this month</p>
+                                        ) : (
+                                            <div>
+                                                {birthdayDogs.map(dog => (
+                                                    <label
+                                                        key={dog.dog_id}
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: "12px",
+                                                            padding: "10px",
+                                                            backgroundColor: dog.selected ? "#3b1f06" : "#0f172a",
+                                                            borderRadius: "6px",
+                                                            marginBottom: "8px",
+                                                            cursor: "pointer",
+                                                        }}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={dog.selected}
+                                                            onChange={e => setBirthdayDogs(prev =>
+                                                                prev.map(d => d.dog_id === dog.dog_id ? { ...d, selected: e.target.checked } : d)
+                                                            )}
+                                                        />
+                                                        {dog.image_filename && (
+                                                            <img
+                                                                src={`/api/dog-images/${dog.image_filename}`}
+                                                                alt={dog.dog_name}
+                                                                style={{ width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" }}
+                                                            />
+                                                        )}
+                                                        <div>
+                                                            <div style={{ color: "#fff", fontWeight: "600" }}>{dog.dog_name}</div>
+                                                            <div style={{ color: "#94a3b8", fontSize: "12px" }}>
+                                                                {dog.breed}
+                                                                {dog.age_years > 0 && ` • Turning ${dog.age_years} 🎂`}
                                                             </div>
                                                         </div>
                                                     </label>

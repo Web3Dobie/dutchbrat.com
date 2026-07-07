@@ -4,12 +4,14 @@
  */
 
 import { getServiceDisplayName } from './serviceTypes';
+import { formatDogAge, formatDogBirthday } from './dogAge';
 
 export interface WelcomeEmailData {
     ownerName: string;
     dogName: string;
     dogBreed: string;
-    dogAge: number;
+    dogAge?: number | null;
+    dogBirthday?: string;
 }
 
 export interface NoShowEmailData {
@@ -65,7 +67,14 @@ export function formatDurationForEmail(minutes: number | null, startTime?: Date,
 }
 
 export function generateWelcomeEmail(data: WelcomeEmailData): string {
-    const { ownerName, dogName, dogBreed, dogAge } = data;
+    const { ownerName, dogName, dogBreed, dogBirthday, dogAge } = data;
+    const birthdayText = dogBirthday ? formatDogBirthday(dogBirthday) : null;
+    const ageText = formatDogAge(dogBirthday, dogAge);
+    const dogDesc = birthdayText
+        ? `${ageText}-old ${dogBreed} (born ${birthdayText})`
+        : ageText
+            ? `${ageText}-old ${dogBreed}`
+            : dogBreed;
 
     return `
     <!DOCTYPE html>
@@ -92,7 +101,7 @@ export function generateWelcomeEmail(data: WelcomeEmailData): string {
                 
                 <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 20px 0;">
                     We're absolutely delighted to welcome you and <strong>${dogName}</strong> to the Hunter's Hounds family! 
-                    I'm Ernesto, and I can't wait to meet your beautiful ${dogAge}-year-old ${dogBreed}.
+                    I'm Ernesto, and I can't wait to meet your beautiful ${dogDesc}.
                 </p>
 
                 <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 25px 0;">
@@ -854,6 +863,16 @@ export interface NewsletterContent {
     notionBlocks?: any[];
     notionHtml?: string;
     includeNewPackMembers?: boolean;
+    includeBirthdays?: boolean;
+    birthdayDogs?: {
+        dog_id: number;
+        dog_name: string;
+        breed: string;
+        dog_birthday: string;
+        image_filename: string | null;
+        owner_name: string;
+        age_years: number;
+    }[];
 }
 
 /**
@@ -1236,6 +1255,31 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
     `;
 }
 
+function buildBirthdayHtml(dogs: NewsletterContent['birthdayDogs']): string {
+    if (!dogs || dogs.length === 0) return '';
+    const cards = dogs.map(dog => {
+        const age = dog.age_years > 0 ? ` — turned ${dog.age_years}!` : '';
+        return `
+            <div style="display: inline-block; width: 180px; text-align: center; margin: 10px; vertical-align: top;">
+                ${dog.image_filename
+                    ? `<img src="https://hunters-hounds.london/api/dog-images/${dog.image_filename}" alt="${dog.dog_name}" style="width: 130px; height: 130px; border-radius: 50%; object-fit: cover; border: 3px solid #f59e0b; margin-bottom: 10px;">`
+                    : `<div style="width: 130px; height: 130px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #fbbf24); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 48px;">&#127874;</div>`
+                }
+                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${dog.dog_name}</div>
+                <div style="color: #92400e; font-size: 13px;">${dog.breed}${age}</div>
+            </div>
+        `;
+    }).join('');
+    return `
+        <div style="margin: 30px 0; padding: 25px; background-color: #fffbeb; border-radius: 12px; border: 2px solid #fde68a;">
+            <h2 style="color: #92400e; margin: 0 0 8px 0; font-size: 20px;">&#127874; Birthday Pups This Month!</h2>
+            <p style="color: #78350f; margin: 0 0 20px 0; font-size: 15px;">
+                Wishing a very happy birthday to ${dogs.length === 1 ? 'this special pup' : 'these special pups'}!
+            </p>
+            <div style="text-align: center;">${cards}</div>
+        </div>`;
+}
+
 function generateNotionNewsletterEmail(content: NewsletterContent): string {
     const { title, month, notionHtml } = content;
 
@@ -1302,6 +1346,8 @@ function generateNotionNewsletterEmail(content: NewsletterContent): string {
                 ${notionHtml}
 
                 ${newMembersHtml}
+
+                ${content.includeBirthdays !== false ? buildBirthdayHtml(content.birthdayDogs) : ''}
             </div>
 
             <!-- Footer -->

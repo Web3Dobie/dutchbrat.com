@@ -150,6 +150,32 @@ function blockToHtml(block: NotionBlock): string {
                 </div>`;
         }
 
+        case 'video': {
+            const url = block.content.url || '';
+            const caption = richTextToHtml(block.content.caption);
+            const captionPlain = block.content.caption ? getPlainText(block.content.caption) : '';
+
+            if (!url) return '';
+
+            // Thumbnail convention: upload myvideo.mp4 + myvideo.jpg side by side.
+            // Replace the video extension with .jpg to get the thumbnail URL.
+            const thumbnailUrl = url.replace(/\.(mp4|mov|webm|avi|m4v)$/i, '.jpg');
+            const hasThumbnail = thumbnailUrl !== url;
+
+            const imgBlock = hasThumbnail
+                ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(captionPlain || 'Video thumbnail')}" style="max-width: 100%; height: auto; border-radius: 8px; border: 2px solid #e5e7eb; display: block; margin: 0 auto 16px auto;">`
+                : `<div style="background-color: #1f2937; border-radius: 8px; padding: 40px; margin-bottom: 16px; text-align: center;"><span style="color: white; font-size: 48px; line-height: 1;">&#9654;</span></div>`;
+
+            return `
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="${escapeHtml(url)}" style="display: block; text-decoration: none;">
+                        ${imgBlock}
+                        <span style="display: inline-block; background-color: #2563eb; color: white; padding: 10px 24px; border-radius: 24px; font-size: 15px; font-weight: 600;">&#9654;&nbsp; Watch Video</span>
+                    </a>
+                    ${caption ? `<p style="color: #6b7280; font-size: 14px; margin: 12px 0 0 0; font-style: italic;">${caption}</p>` : ''}
+                </div>`;
+        }
+
         case 'callout': {
             const text = richTextToHtml(block.content.richText);
             const icon = block.content.icon;
