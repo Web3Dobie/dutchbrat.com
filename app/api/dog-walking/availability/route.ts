@@ -125,26 +125,69 @@ export async function GET(request: NextRequest) {
         });
 
         // Filter out the excluded event (for rescheduling)
-        const busyEvents = (res.data.items || []).filter(event =>
+        const rawBusyEvents = (res.data.items || []).filter(event =>
             !excludedEventId || event.id !== excludedEventId
         );
 
-        // 5. Check for all-day blocking events (vacations, holidays, personal time)
-        const hasAllDayBlock = busyEvents.some((event) => {
-            if (event.start?.date && event.end?.date) {
-                const description = event.description || '';
-                const summary = event.summary || '';
-
-                // Allow walks during Dog Sitting events (check both summary and description)
-                if (summary.includes('Multi-Day Dog Sitting')) return false;
-                if (summary.includes('Dog Sitting')) return false;
-                if (description.includes('Multi-day booking')) return false;
-                if (description.includes('Booking Type: Multi-Day')) return false;
-
-                // Any other all-day event is a blocking event (vacation, personal time, etc.)
-                return true;
+        // Cross-check DB: exclude events that belong to cancelled bookings.
+        // Guards against Google Calendar deletion failures leaving stale events.
+        let cancelledEventIds = new Set<string>();
+        const calendarEventIds = rawBusyEvents.map(e => e.id).filter(Boolean) as string[];
+        if (calendarEventIds.length > 0) {
+            const cancelCheckClient = await pool.connect();
+            try {
+                const cancelResult = await cancelCheckClient.query(
+                    `SELECT google_event_id FROM hunters_hounds.bookings
+                     WHERE google_event_id = ANY($1) AND status = 'cancelled'`,
+                    [calendarEventIds]
+                );
+                cancelledEventIds = new Set(cancelResult.rows.map((r: { google_event_id: string }) => r.google_event_id));
+            } finally {
+                cancelCheckClient.release();
             }
-            return false;
+        }
+        const busyEvents = rawBusyEvents.filter(e => !cancelledEventIds.has(e.id!));
+
+        // Build a per-event travel buffer map: each existing booking uses ITS OWN client's
+        // travel time, not the requesting client's. This prevents a short-travel-time client
+        // from booking a slot that leaves insufficient gap before a far-away client's booking.
+        const eventTravelBuffers = new Map<string, number>();
+        if (calendarEventIds.length > 0) {
+            const travelClient = await pool.connect();
+            try {
+                const travelResult = await travelClient.query(
+                    `SELECT b.google_event_id, o.extended_travel_time
+                     FROM hunters_hounds.bookings b
+                     JOIN hunters_hounds.owners o ON b.owner_id = o.id
+                     WHERE b.google_event_id = ANY($1)
+                       AND b.status != 'cancelled'`,
+                    [calendarEventIds]
+                );
+                for (const row of travelResult.rows) {
+                    eventTravelBuffers.set(
+                        row.google_event_id,
+                        row.extended_travel_time ? 30 : TRAVEL_BUFFER_MINUTES
+                    );
+                }
+            } finally {
+                travelClient.release();
+            }
+        }
+
+        // 5. Check for all-day blocking events (vacations, holidays, personal time)
+        // Compare date strings directly to avoid BST/UTC overlap false positives —
+        // Google all-day events use exclusive end date, so event covers [start.date, end.date)
+        const hasAllDayBlock = busyEvents.some((event) => {
+            if (!event.start?.date || !event.end?.date) return false;
+            if (event.start.date > dateQuery) return false;   // starts after the requested date
+            if (event.end.date <= dateQuery) return false;    // ends on or before the requested date
+            const description = event.description || '';
+            const summary = event.summary || '';
+            if (summary.includes('Multi-Day Dog Sitting')) return false;
+            if (summary.includes('Dog Sitting')) return false;
+            if (description.includes('Multi-day booking')) return false;
+            if (description.includes('Booking Type: Multi-Day')) return false;
+            return true;
         });
 
         if (hasAllDayBlock) {
@@ -188,20 +231,20 @@ export async function GET(request: NextRequest) {
                 const start = new Date(event.start!.dateTime!);
                 const end = new Date(event.end!.dateTime!);
 
-                // Check if event starts at the beginning of the workday
-                const isFirstBooking = start.getTime() === workDayStart.getTime();
+                // Use this booking's own client's travel time as the buffer.
+                // Falls back to 15 min for non-booking calendar events (holidays, etc.)
+                const eventBuffer = eventTravelBuffers.get(event.id!) ?? TRAVEL_BUFFER_MINUTES;
 
-                // Check if event ends at the end of the workday
+                const isFirstBooking = start.getTime() === workDayStart.getTime();
                 const isLastBooking = end.getTime() === workDayEnd.getTime();
 
-                // Conditionally apply buffers (using dynamic travel buffer based on client preference)
                 const paddedStart = isFirstBooking
-                    ? start // Don't add *before* buffer
-                    : new Date(start.getTime() - travelBufferMinutes * 60000);
+                    ? start
+                    : new Date(start.getTime() - eventBuffer * 60000);
 
                 const paddedEnd = isLastBooking
-                    ? end // Don't add *after* buffer
-                    : new Date(end.getTime() + travelBufferMinutes * 60000);
+                    ? end
+                    : new Date(end.getTime() + eventBuffer * 60000);
 
                 return {
                     start: paddedStart,
@@ -247,11 +290,13 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // 9. Format the final ranges
+        // 9. Format the final ranges in London time.
+        // range boundaries derived from calendar events are plain Date objects (UTC);
+        // wrapping in TZDate ensures BST is respected when formatting.
         const finalRanges = availableRanges.map((range) => {
             return {
-                start: format(range.start, "HH:mm"),
-                end: format(range.end, "HH:mm"),
+                start: format(new TZDate(range.start, TIMEZONE), "HH:mm"),
+                end: format(new TZDate(range.end, TIMEZONE), "HH:mm"),
             };
         });
 
