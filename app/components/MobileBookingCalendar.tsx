@@ -23,7 +23,8 @@ interface User {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }>;
 }
 
@@ -42,9 +43,15 @@ type ViewState = "picker" | "form" | "success";
 // --- Updated Service Definitions ---
 const ALL_SERVICES = [
     { id: "meetgreet", name: "Meet & Greet - for new clients", duration: 30 },
-    { id: "solo", name: "Solo Walk", duration: null }, // ← UPDATED: Remove hardcoded duration
+    { id: "solo", name: "Solo Walk", duration: null },
     { id: "quick", name: "Quick Walk (30 min)", duration: 30 },
-    { id: "sitting", name: "Dog Sitting (Variable)", duration: null },
+    {
+        id: "sitting",
+        name: "Dog Sitting (Variable)",
+        duration: null,
+        disabled: true,
+        disabledMessage: "Due to high demand, please contact us directly to arrange.",
+    },
 ] as const;
 
 // --- NEW: Component Props ---
@@ -124,6 +131,8 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
 
     // --- Service Change Handler ---
     const handleServiceChange = (serviceId: ServiceId) => {
+        const svc = ALL_SERVICES.find(s => s.id === serviceId);
+        if (svc && 'disabled' in svc && svc.disabled) return; // sitting is by arrangement only
         console.log("Service changing from", selectedServiceId, "to", serviceId);
         setSelectedServiceId(serviceId);
         setSelectedBookingStart(null);
