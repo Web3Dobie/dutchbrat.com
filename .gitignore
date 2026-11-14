@@ -22,3 +22,9 @@ pnpm-debug.log*
 
 
 release.zip
+
+# Archived IG trading frontend — superseded by the GCP trading box
+_archive/
+
+# TypeScript incremental build artifact (rewritten on every build)
+tsconfig.tsbuildinfo
