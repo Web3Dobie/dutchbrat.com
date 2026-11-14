@@ -44,12 +44,22 @@ export const SERVICE_DURATIONS = {
 
 /**
  * Cancellation Policy
+ *
+ * Walks and single-day services stay fee-free and cancellable at any time.
+ * Multi-day sittings longer than `sittingMinDurationHours` carry a notice
+ * period, because a cancelled week-long sitting cannot be refilled at short
+ * notice the way an hour's walk can.
  */
 export const CANCELLATION_POLICY = {
-  advanceNoticeDays: 1,
-  advanceNoticeHours: 2,
-  cancellationFeePercent: 50,
-  lateNoticeFeePercent: 100,
+  /** Walks / single-day: no fee, any notice. */
+  walkFeePercent: 0,
+
+  /** Only sittings longer than this fall under the notice period (i.e. 3+ nights). */
+  sittingMinDurationHours: 48,
+  /** Free cancellation up to this many days before the start. */
+  sittingNoticeDays: 7,
+  /** Charged on the booking price when cancelled inside the notice period. */
+  sittingLateFeePercent: 50,
 } as const;
 
 /**
