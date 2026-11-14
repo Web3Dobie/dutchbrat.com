@@ -43,22 +43,27 @@ export async function GET() {
 
   } catch (error) {
     console.error('Error fetching latest tweet:', error)
-    
-    // Return fallback in the same format
+
+    // Return an EMPTY tweets array, never a synthesised one.
+    //
+    // This previously returned a placeholder tweet ("Latest tweet from Web3
+    // Dobie", id '0') stamped with `new Date()`. Because the timestamp was
+    // generated per request, a hardcoded stub rendered as a real tweet posted
+    // seconds ago — on every page load, indefinitely. The Web3 Dobie pipeline
+    // is discontinued and hunter-agent correctly reports "No tweets found", so
+    // the honest answer is that there is nothing to show.
+    //
+    // TweetCard already handles this: it maps an empty array to null and
+    // renders the configured `fallbackMessage` ("No tweet available"), with the
+    // follow link intact. No fabricated content required.
     return NextResponse.json({
       user: {
         id: 'web3_dobie',
         username: 'Web3_Dobie',
         name: 'Web3 Dobie'
       },
-      tweets: [{
-        id: '0',
-        text: 'Latest tweet from Web3 Dobie',
-        created_at: new Date().toISOString(),
-        url: 'https://x.com/Web3_Dobie',
-        public_metrics: { like_count: 0, retweet_count: 0, reply_count: 0 }
-      }],
-      source: 'fallback'
+      tweets: [],
+      source: 'unavailable'
     })
   }
 }

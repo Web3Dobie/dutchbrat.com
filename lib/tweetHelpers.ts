@@ -37,6 +37,7 @@ interface TweetSourceConfig {
   source: string
   fallbackText?: string
   typePropertyName?: string  // NEW: Configurable property name
+  filterOutReplies?: boolean  // Whether to filter out 'reply' type entries (only if 'reply' is a valid select option)
 }
 
 // Helper function to extract title from Notion title property
@@ -106,31 +107,23 @@ export async function fetchLatestTweetFromNotion(config: TweetSourceConfig): Pro
       throw new Error(`Database ID not provided for ${config.source}`)
     }
 
+    const filterConditions: any[] = [
+      { property: 'URL', url: { is_not_empty: true } },
+    ]
+    if (config.filterOutReplies !== false && config.typePropertyName === undefined) {
+      // Only filter out replies for the default 'Type' property (Hunter agent),
+      // not for custom typePropertyName DBs (e.g. HedgeFund 'Category') where 'reply' is not a valid option
+      filterConditions.push({
+        property: 'Type',
+        select: { does_not_equal: 'reply' },
+      })
+    }
+
     const response = await notion.databases.query({
       database_id: config.databaseId,
-      sorts: [
-        {
-          property: 'Date',
-          direction: 'descending',
-        },
-      ],
-      page_size: 1, // We only want the latest tweet
-              filter: {
-        and: [
-          {
-            property: 'URL',
-            url: {
-              is_not_empty: true,
-            },
-          },
-          {
-            property: config.typePropertyName || 'Type',  // Use configurable property name
-            select: {
-              does_not_equal: 'reply', // Exclude replies
-            },
-          },
-        ],
-      },
+      sorts: [{ property: 'Date', direction: 'descending' }],
+      page_size: 1,
+      filter: { and: filterConditions },
     })
 
     if (!response.results || response.results.length === 0) {

@@ -70,6 +70,23 @@ function escapeHtml(text: string): string {
         .replace(/\n/g, '<br>');
 }
 
+// Extract the 11-character video ID from any common YouTube URL shape.
+// Notion turns a pasted YouTube link into a video (or embed) block holding the raw URL.
+function parseYouTubeId(url: string): string | null {
+    const patterns = [
+        /youtube\.com\/watch\?(?:.*&)?v=([A-Za-z0-9_-]{11})/,
+        /youtu\.be\/([A-Za-z0-9_-]{11})/,
+        /youtube(?:-nocookie)?\.com\/embed\/([A-Za-z0-9_-]{11})/,
+        /youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/,
+        /youtube\.com\/live\/([A-Za-z0-9_-]{11})/,
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+    }
+    return null;
+}
+
 function getCalloutStyle(icon?: any): { bg: string; border: string; textColor: string } {
     // Map common emoji to colors for visual variety
     const emoji = icon?.emoji || '';
@@ -150,14 +167,40 @@ function blockToHtml(block: NotionBlock): string {
                 </div>`;
         }
 
-        case 'video': {
+        case 'video':
+        case 'embed': {
             const url = block.content.url || '';
             const caption = richTextToHtml(block.content.caption);
             const captionPlain = block.content.caption ? getPlainText(block.content.caption) : '';
 
             if (!url) return '';
 
-            // Thumbnail convention: upload myvideo.mp4 + myvideo.jpg side by side.
+            // Email clients strip iframes, so a YouTube embed can never play inline.
+            // Render the real video thumbnail linking out to YouTube instead.
+            const youTubeId = parseYouTubeId(url);
+            if (youTubeId) {
+                // hqdefault always exists; maxresdefault 404s on older/SD uploads
+                const posterUrl = `https://img.youtube.com/vi/${youTubeId}/hqdefault.jpg`;
+                const watchUrl = `https://www.youtube.com/watch?v=${youTubeId}`;
+                return `
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="${watchUrl}" style="display: block; text-decoration: none;">
+                        <img src="${posterUrl}" alt="${escapeHtml(captionPlain || 'Watch on YouTube')}" style="max-width: 480px; width: 100%; height: auto; border-radius: 8px; border: 2px solid #e5e7eb; display: block; margin: 0 auto 16px auto;">
+                        <span style="display: inline-block; background-color: #ff0000; color: #ffffff; padding: 10px 24px; border-radius: 24px; font-size: 15px; font-weight: 600;">&#9654;&nbsp; Watch on YouTube</span>
+                    </a>
+                    ${caption ? `<p style="color: #6b7280; font-size: 14px; margin: 12px 0 0 0; font-style: italic;">${caption}</p>` : ''}
+                </div>`;
+            }
+
+            // A non-video embed (map, tweet, doc) has no poster frame — link out plainly
+            if (block.type === 'embed') {
+                return `
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="${escapeHtml(url)}" style="color: #2563eb; font-size: 15px; font-weight: 600; text-decoration: underline;">${escapeHtml(captionPlain || url)}</a>
+                </div>`;
+            }
+
+            // Self-hosted convention: upload myvideo.mp4 + myvideo.jpg side by side.
             // Replace the video extension with .jpg to get the thumbnail URL.
             const thumbnailUrl = url.replace(/\.(mp4|mov|webm|avi|m4v)$/i, '.jpg');
             const hasThumbnail = thumbnailUrl !== url;

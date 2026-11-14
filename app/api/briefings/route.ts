@@ -155,7 +155,10 @@ async function getTreeMetadata(): Promise<any> {
             TO_CHAR(published_at, 'YYYY-MM-DD') as date,
             COUNT(*)::INTEGER as count
         FROM hedgefund_agent.briefings
-        WHERE published_at IS NOT NULL
+        -- json_content IS NOT NULL: 177 of 830 rows were never backfilled from
+        -- Notion, and that integration is no longer shared, so they can never
+        -- render. Excluding them keeps the tree honest.
+        WHERE published_at IS NOT NULL AND json_content IS NOT NULL
         GROUP BY year, month, date
         ORDER BY year DESC, month DESC, date DESC
     `);
@@ -199,7 +202,7 @@ async function getBriefingsByDate(date: string): Promise<BriefingData[]> {
         SELECT id, title, briefing_type, notion_page_id, 
                website_url, tweet_url, published_at, json_content
         FROM hedgefund_agent.briefings
-        WHERE DATE(published_at) = $1
+        WHERE DATE(published_at) = $1 AND json_content IS NOT NULL
         ORDER BY published_at ASC
     `, [date]);
 
@@ -335,6 +338,7 @@ export async function GET(req: NextRequest) {
                    website_url as "pageUrl", tweet_url as "tweetUrl", 
                    created_at, json_content
             FROM hedgefund_agent.briefings
+            WHERE json_content IS NOT NULL
             ORDER BY created_at DESC
             LIMIT 10
         `);
