@@ -192,3 +192,95 @@ button {
     background: #4b5563 !important;
     color: #e5e7eb !important;
 }
+/* ===== DASHBOARD BOOKING CALENDAR ===== */
+.rdp-dashboard-calendar { width: 100%; }
+
+.rdp-dashboard-calendar .rdp-root {
+    --rdp-accent-color: #d4af37;
+    --rdp-accent-background-color: rgba(212,175,55,0.15);
+    background: transparent !important;
+    color: #e5e7eb !important;
+    width: fit-content;
+    margin: 0 auto;
+}
+.rdp-dashboard-calendar .rdp-caption_label {
+    color: #f9fafb !important;
+    font-weight: 600 !important;
+}
+.rdp-dashboard-calendar .rdp-weekday {
+    color: #9ca3af !important;
+    font-weight: 600 !important;
+    font-size: 0.75rem !important;
+}
+.rdp-dashboard-calendar .rdp-month_grid {
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 2px !important;
+}
+.rdp-dashboard-calendar .rdp-day_button {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 6px !important;
+    color: #e5e7eb !important;
+    font-size: 0.875rem !important;
+    position: relative !important;
+}
+.rdp-dashboard-calendar .rdp-today > .rdp-day_button {
+    background: #1e3a8a !important;
+    color: #93c5fd !important;
+    border-color: #3b82f6 !important;
+    font-weight: 700 !important;
+}
+.rdp-dashboard-calendar .rdp-button_previous,
+.rdp-dashboard-calendar .rdp-button_next {
+    background: #374151 !important;
+    border: 1px solid #4b5563 !important;
+    color: #9ca3af !important;
+    border-radius: 4px !important;
+}
+.rdp-dashboard-calendar .rdp-button_previous:hover,
+.rdp-dashboard-calendar .rdp-button_next:hover {
+    background: #4b5563 !important;
+    color: #e5e7eb !important;
+}
+/* Booking days — hide date number, show emoji centred with coloured border */
+.rdp-day-walk .rdp-day_button {
+    color: transparent !important;
+    border-color: rgba(212, 175, 55, 0.8) !important;
+    border-width: 2px !important;
+}
+.rdp-day-walk .rdp-day_button::after {
+    content: '🐾';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.1rem;
+    line-height: 1;
+    color: initial;
+}
+.rdp-day-sitting .rdp-day_button {
+    color: transparent !important;
+    border-color: rgba(99, 102, 241, 0.8) !important;
+    border-width: 2px !important;
+}
+.rdp-day-sitting .rdp-day_button::after {
+    content: '🛏️';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.1rem;
+    line-height: 1;
+    color: initial;
+}
+.rdp-day-walk.rdp-day-sitting .rdp-day_button::after {
+    content: '🐾🛏️';
+    font-size: 0.75rem;
+}
+.rdp-day-selected-booking .rdp-day_button {
+    background: rgba(212,175,55,0.25) !important;
+    border-color: #d4af37 !important;
+    border-style: solid !important;
+    border-width: 1px !important;
+}

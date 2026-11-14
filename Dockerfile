@@ -1,4 +1,7 @@
-FROM node:18-alpine AS base
+# Node 22.23.4+ required: 18 and 20 are both EOL. 22.23.4 is the floor that
+# patches CVE-2026-111497 (Brotli OOB write) — anything earlier in the 22
+# line makes that vector reachable, since 22's undici advertises `br`.
+FROM node:22-alpine AS base
 
 ARG RESEND_API_KEY 
 ENV RESEND_API_KEY=$RESEND_API_KEY
