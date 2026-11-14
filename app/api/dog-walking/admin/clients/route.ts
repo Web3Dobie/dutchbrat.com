@@ -9,7 +9,8 @@ interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
     image_filename: string | null;
 }
 
@@ -114,7 +115,8 @@ export async function GET(request: NextRequest) {
                                 'id', d.id,
                                 'dog_name', d.dog_name,
                                 'dog_breed', COALESCE(d.dog_breed, 'Unknown'),
-                                'dog_age', COALESCE(d.dog_age, 0),
+                                'dog_age', d.dog_age,
+                                'dog_birthday', d.dog_birthday,
                                 'image_filename', d.image_filename
                             )
                             ELSE NULL

@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import ClientEditor from "./components/ClientEditor";
+import { formatDogAge } from "@/lib/dogAge";
 
 // Types
 interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
     image_filename: string | null;
 }
 
@@ -121,7 +123,8 @@ export default function ClientManagement() {
         
         return dogs.map(dog => {
             const hasPhoto = dog.image_filename ? "📷" : "❌";
-            return `${dog.dog_name} (${dog.dog_breed}, ${dog.dog_age}) ${hasPhoto}`;
+            const age = formatDogAge(dog.dog_birthday, dog.dog_age);
+            return `${dog.dog_name} (${dog.dog_breed}, ${age ?? '?'}) ${hasPhoto}`;
         }).join(", ");
     };
 

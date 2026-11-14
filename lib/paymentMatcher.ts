@@ -29,14 +29,27 @@ export async function matchPaymentToOwner(
 ): Promise<PaymentMatchResult | null> {
     const client = await pool.connect();
 
+    // Normalize whitespace: trim and collapse multiple consecutive spaces to one.
+    // Revolut sometimes appends a payment reference (e.g. "Hicks S M    S96") after
+    // extra spaces — normalising lets us match against the stored clean name.
+    const normalizedSender = senderName.trim().replace(/\s+/g, ' ');
+
     try {
-        // Tier 1: match on any stored payment_account_names (most reliable)
+        // Tier 1: match on any stored payment_account_names (most reliable).
+        // Two sub-checks (both case-insensitive, both on normalized strings):
+        //   a) exact match: normalized sender == stored name
+        //   b) prefix match: normalized sender starts with stored name + space
+        //      (handles bank references appended after the real name, e.g. "Hicks S M S96")
         let ownerResult = await client.query<MatchedOwner>(
             `SELECT id, owner_name, payment_preference, payment_account_names
              FROM hunters_hounds.owners
-             WHERE $1 ILIKE ANY(payment_account_names)
+             WHERE EXISTS (
+                 SELECT 1 FROM unnest(payment_account_names) AS n
+                 WHERE $1 ILIKE regexp_replace(n, '\\s+', ' ', 'g')
+                    OR $1 ILIKE regexp_replace(n, '\\s+', ' ', 'g') || ' %'
+             )
              LIMIT 1`,
-            [senderName]
+            [normalizedSender]
         );
 
         let wasNewAccountName = false;
@@ -48,12 +61,12 @@ export async function matchPaymentToOwner(
                  FROM hunters_hounds.owners
                  WHERE owner_name ILIKE $1
                  LIMIT 1`,
-                [senderName]
+                [normalizedSender]
             );
 
             // If still no match, try partial first-name match
             if (ownerResult.rows.length === 0) {
-                const firstName = senderName.split(' ')[0];
+                const firstName = normalizedSender.split(' ')[0];
                 ownerResult = await client.query<MatchedOwner>(
                     `SELECT id, owner_name, payment_preference, payment_account_names
                      FROM hunters_hounds.owners
@@ -74,7 +87,7 @@ export async function matchPaymentToOwner(
 
         const owner = ownerResult.rows[0];
 
-        // All outstanding unpaid bookings, oldest first — no date window
+        // All outstanding unpaid bookings, oldest first.
         const bookingsResult = await client.query(`
             SELECT id, service_type, start_time, end_time,
                    price_pounds::numeric::float8 as price_pounds
@@ -89,15 +102,15 @@ export async function matchPaymentToOwner(
 
         const expectedTotal = bookings.reduce((sum, b) => sum + b.price_pounds, 0);
 
-        // If matched via fallback AND amounts match (within £0.01), auto-save the new account name
+        // If matched via fallback AND amounts match (within £0.01), auto-save the normalized name
         if (wasNewAccountName && Math.abs(amountPounds - expectedTotal) < 0.01) {
             await client.query(
                 `UPDATE hunters_hounds.owners
                  SET payment_account_names = array_append(payment_account_names, $1)
                  WHERE id = $2 AND NOT ($1 ILIKE ANY(payment_account_names))`,
-                [senderName, owner.id]
+                [normalizedSender, owner.id]
             );
-            owner.payment_account_names = [...owner.payment_account_names, senderName];
+            owner.payment_account_names = [...owner.payment_account_names, normalizedSender];
         }
 
         return { owner, bookings, expectedTotal, wasNewAccountName };

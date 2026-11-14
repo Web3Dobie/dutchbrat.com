@@ -100,16 +100,24 @@ export async function POST(request: NextRequest) {
                 }
             }
 
-            // Update bookings to 'completed' with optional walk summary
+            // Bookings priced at an explicit £0 (meet & greets, loyalty redemptions) go straight to
+            // 'completed & paid' — there is nothing to collect, so they must not enter the payment queue.
+            // A NULL price means "not yet priced", not "free", so those stay 'completed' and remain
+            // in the admin queue until a price is set.
+            const statusExpression = `CASE
+                        WHEN price_pounds = 0 THEN 'completed & paid'
+                        ELSE 'completed'
+                    END`;
+
             const updateQuery = finalSummary
                 ? `UPDATE hunters_hounds.bookings
-                   SET status = 'completed', walk_summary = $2, updated_at = CURRENT_TIMESTAMP
+                   SET status = ${statusExpression}, walk_summary = $2, updated_at = CURRENT_TIMESTAMP
                    WHERE id = ANY($1) AND status = 'confirmed'
-                   RETURNING id;`
+                   RETURNING id, status;`
                 : `UPDATE hunters_hounds.bookings
-                   SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+                   SET status = ${statusExpression}, updated_at = CURRENT_TIMESTAMP
                    WHERE id = ANY($1) AND status = 'confirmed'
-                   RETURNING id;`;
+                   RETURNING id, status;`;
 
             const updateParams = finalSummary
                 ? [data.booking_ids, finalSummary]
@@ -117,6 +125,7 @@ export async function POST(request: NextRequest) {
 
             const updateResult = await client.query(updateQuery, updateParams);
             const updatedCount = updateResult.rows.length;
+            const autoPaidCount = updateResult.rows.filter(r => r.status === 'completed & paid').length;
 
             if (updatedCount === 0) {
                 await client.query('ROLLBACK');
@@ -143,7 +152,9 @@ export async function POST(request: NextRequest) {
 
 ${bookingDetails}
 
-<i>Status updated to 'completed' (awaiting payment)</i>`;
+<i>${autoPaidCount > 0
+    ? `${updatedCount - autoPaidCount} awaiting payment, ${autoPaidCount} free booking(s) auto-marked as paid`
+    : `Status updated to 'completed' (awaiting payment)`}</i>`;
 
                 // Add walk summary to notification if provided
                 if (finalSummary) {

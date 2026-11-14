@@ -8,7 +8,8 @@ interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
     image_filename: string | null;
 }
 
@@ -61,7 +62,8 @@ interface UpdateClientRequest {
         id: number;
         dog_name?: string;
         dog_breed?: string;
-        dog_age?: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
         image_filename?: string | null;
     }[];
 }
@@ -113,7 +115,8 @@ export async function GET(
                                 'id', d.id,
                                 'dog_name', d.dog_name,
                                 'dog_breed', COALESCE(d.dog_breed, 'Unknown'),
-                                'dog_age', COALESCE(d.dog_age, 0),
+                                'dog_age', d.dog_age,
+                                'dog_birthday', d.dog_birthday,
                                 'image_filename', d.image_filename
                             )
                             ELSE NULL
@@ -320,7 +323,15 @@ export async function PUT(
                     dogValues.push(dogUpdate.dog_breed?.trim() || null);
                     paramIndex++;
                 }
-                if (dogUpdate.dog_age !== undefined) {
+                if (dogUpdate.dog_birthday !== undefined) {
+                    dogUpdates.push(`dog_birthday = $${paramIndex}`);
+                    dogValues.push(dogUpdate.dog_birthday ?? null);
+                    paramIndex++;
+                    // When birthday is set, clear the static age
+                    if (dogUpdate.dog_birthday) {
+                        dogUpdates.push(`dog_age = NULL`);
+                    }
+                } else if (dogUpdate.dog_age !== undefined) {
                     dogUpdates.push(`dog_age = $${paramIndex}`);
                     dogValues.push(dogUpdate.dog_age);
                     paramIndex++;
@@ -373,7 +384,8 @@ export async function PUT(
                                 'id', d.id,
                                 'dog_name', d.dog_name,
                                 'dog_breed', COALESCE(d.dog_breed, 'Unknown'),
-                                'dog_age', COALESCE(d.dog_age, 0),
+                                'dog_age', d.dog_age,
+                                'dog_birthday', d.dog_birthday,
                                 'image_filename', d.image_filename
                             )
                             ELSE NULL

@@ -15,12 +15,29 @@ export async function GET(request: NextRequest) {
     // Default to current month if not specified
     const year = searchParams.get("year") || new Date().getFullYear().toString();
     const month = searchParams.get("month") || (new Date().getMonth() + 1).toString();
+    // Number of consecutive months to cover, starting at year/month.
+    // 1 = a normal edition; 2 = a combined edition (e.g. a July & August special).
+    const monthCount = Math.min(Math.max(parseInt(searchParams.get("months") || "1") || 1, 1), 12);
+
+    const startYear = parseInt(year);
+    const startMonth = parseInt(month);
+
+    if (isNaN(startYear) || isNaN(startMonth) || startMonth < 1 || startMonth > 12) {
+        return NextResponse.json({ error: "Invalid year or month parameter" }, { status: 400 });
+    }
+
+    // Half-open range [rangeStart, rangeEnd) so the span rolls over year boundaries cleanly
+    const endOffset = startMonth - 1 + monthCount;
+    const endYear = startYear + Math.floor(endOffset / 12);
+    const endMonth = (endOffset % 12) + 1;
+    const rangeStart = `${startYear}-${String(startMonth).padStart(2, "0")}-01`;
+    const rangeEnd = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
 
     const client = await pool.connect();
 
     try {
-        // Find dogs whose FIRST booking was in the specified month
-        // This means they're new to the pack that month
+        // Find dogs whose FIRST booking fell inside the requested span —
+        // those are the ones new to the pack across that period
         const query = `
             SELECT DISTINCT
                 d.id as dog_id,
@@ -37,12 +54,12 @@ export async function GET(request: NextRequest) {
             AND b.service_type NOT IN ('meetgreet', 'Meet & Greet', 'Meet & Greet - for new clients')
             GROUP BY d.id, d.dog_name, d.dog_breed, d.image_filename, o.id, o.owner_name
             HAVING
-                EXTRACT(YEAR FROM MIN(b.start_time)) = $1
-                AND EXTRACT(MONTH FROM MIN(b.start_time)) = $2
+                MIN(b.start_time) >= $1::timestamptz
+                AND MIN(b.start_time) < $2::timestamptz
             ORDER BY first_service_date ASC;
         `;
 
-        const result = await client.query(query, [parseInt(year), parseInt(month)]);
+        const result = await client.query(query, [rangeStart, rangeEnd]);
 
         return NextResponse.json({
             success: true,
@@ -55,8 +72,9 @@ export async function GET(request: NextRequest) {
                 owner_name: row.owner_name,
                 first_service_date: row.first_service_date
             })),
-            month: parseInt(month),
-            year: parseInt(year),
+            month: startMonth,
+            year: startYear,
+            months: monthCount,
             count: result.rows.length
         });
 

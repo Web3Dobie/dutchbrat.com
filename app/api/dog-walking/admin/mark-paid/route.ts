@@ -62,20 +62,23 @@ export async function POST(request: NextRequest) {
             }
 
             // Check if all bookings are in 'completed' status
-            const invalidBookings = validateResult.rows.filter(booking => booking.status !== 'completed');
+            // A cancelled booking carrying a late-cancellation fee is also collectable.
+            const payableStatuses = ['completed', 'cancelled'];
+            const invalidBookings = validateResult.rows.filter(booking => !payableStatuses.includes(booking.status));
             if (invalidBookings.length > 0) {
                 await client.query('ROLLBACK');
                 return NextResponse.json(
-                    { error: `Cannot mark as paid. Some bookings are not in 'completed' status: ${invalidBookings.map(b => `#${b.id} (${b.status})`).join(', ')}` },
+                    { error: `Cannot mark as paid. Some bookings are not in a payable status: ${invalidBookings.map(b => `#${b.id} (${b.status})`).join(', ')}` },
                     { status: 400 }
                 );
             }
 
             // Update bookings to 'completed & paid'
             const updateQuery = `
-                UPDATE hunters_hounds.bookings 
-                SET status = 'completed & paid', updated_at = CURRENT_TIMESTAMP
-                WHERE id = ANY($1) AND status = 'completed'
+                UPDATE hunters_hounds.bookings
+                SET status = CASE WHEN status = 'cancelled' THEN 'cancelled & paid' ELSE 'completed & paid' END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ANY($1) AND status IN ('completed', 'cancelled')
                 RETURNING id;
             `;
 

@@ -53,62 +53,74 @@ export async function POST(request: NextRequest) {
 
             matched++;
             const { owner, bookings, expectedTotal, wasNewAccountName } = matchResult;
-            const amountExact = Math.abs(amountPounds - expectedTotal) < 0.01;
 
-            if (amountExact && bookings.length > 0) {
-                // Mark all matched bookings as completed & paid
-                const bookingIds = bookings.map(b => b.id);
-                await pool.query(
-                    `UPDATE hunters_hounds.bookings SET status = 'completed & paid' WHERE id = ANY($1)`,
-                    [bookingIds]
+            const preferenceLabel = owner.payment_preference === 'per_service'
+                ? 'per-service payer'
+                : `${owner.payment_preference} payer`;
+
+            const formatBookingLine = (b: MatchedBooking) => {
+                const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
+                    ? `${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')}–${format(new TZDate(new Date(b.end_time), "Europe/London"), 'd MMM')}`
+                    : format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM');
+                return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
+            };
+
+            if (bookings.length === 0) {
+                // Matched owner but no outstanding completed bookings
+                await sendTelegramNotification(
+                    `⚠️ PAYMENT RECEIVED — NO OUTSTANDING BOOKINGS\n\nFrom: ${senderName}\nAmount: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id})\nNo completed unpaid bookings found.\n\nPlease review manually.`
                 );
 
-                const bookingLines = bookings
-                    .map(b => {
-                        const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
-                            ? `${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')}–${format(new TZDate(new Date(b.end_time), "Europe/London"), 'd MMM')}`
-                            : format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM');
-                        return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
-                    })
-                    .join('\n');
+            } else if (amountPounds > expectedTotal + 0.01) {
+                // Overpayment — do not mark anything paid
+                const bookingLines = bookings.map(formatBookingLine).join('\n');
+                await sendTelegramNotification(
+                    `⚠️ OVERPAYMENT — action required\n\nFrom: ${senderName}\nAmount received: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id}) — ${preferenceLabel}\nAll outstanding bookings:\n${bookingLines}\n\nTotal outstanding: £${expectedTotal.toFixed(2)} — Overpaid by: £${(amountPounds - expectedTotal).toFixed(2)}\nBookings NOT marked paid. Please review in admin console.`
+                );
+                console.log(`[payment-check] Overpayment for owner=${owner.owner_name}: outstanding £${expectedTotal.toFixed(2)}, got £${amountPounds.toFixed(2)}`);
 
-                const preferenceLabel = owner.payment_preference === 'per_service'
-                    ? 'per-service payer'
-                    : `${owner.payment_preference} payer`;
+            } else {
+                // Payment ≤ outstanding: greedy oldest-first allocation
+                let remaining = amountPounds;
+                const bookingsToPay: MatchedBooking[] = [];
+                for (const b of bookings) {
+                    if (remaining >= b.price_pounds - 0.01) {
+                        bookingsToPay.push(b);
+                        remaining -= b.price_pounds;
+                    } else {
+                        break;
+                    }
+                }
 
-                let message = `💰 PAYMENT RECEIVED ✅\n\nFrom: ${senderName}\nAmount: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id}) — ${preferenceLabel}\nBookings marked as paid:\n${bookingLines}\n\nExpected: £${expectedTotal.toFixed(2)} — Received: £${amountPounds.toFixed(2)} ✅`;
+                if (bookingsToPay.length > 0) {
+                    const bookingIds = bookingsToPay.map(b => b.id);
+                    await pool.query(
+                        `UPDATE hunters_hounds.bookings SET status = 'completed & paid' WHERE id = ANY($1)`,
+                        [bookingIds]
+                    );
+                }
+
+                const paidTotal = bookingsToPay.reduce((s, b) => s + b.price_pounds, 0);
+                const unpaidBookings = bookings.filter(b => !bookingsToPay.find(p => p.id === b.id));
+                const remainingBalance = expectedTotal - paidTotal;
+                const isFullMatch = unpaidBookings.length === 0;
+
+                const paidLines = bookingsToPay.map(formatBookingLine).join('\n');
+
+                let message: string;
+                if (isFullMatch) {
+                    message = `💰 PAYMENT RECEIVED ✅\n\nFrom: ${senderName}\nAmount: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id}) — ${preferenceLabel}\nBookings marked as paid:\n${paidLines}\n\nTotal: £${paidTotal.toFixed(2)} — Received: £${amountPounds.toFixed(2)} ✅`;
+                } else {
+                    const unpaidLines = unpaidBookings.map(formatBookingLine).join('\n');
+                    message = `💰 PARTIAL PAYMENT RECEIVED ✅\n\nFrom: ${senderName}\nAmount: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id}) — ${preferenceLabel}\nBookings marked as paid:\n${paidLines}\n\nStill outstanding (£${remainingBalance.toFixed(2)}):\n${unpaidLines}`;
+                }
 
                 if (wasNewAccountName) {
                     message += `\n\n📌 Account name '${senderName}' saved to ${owner.owner_name}'s profile.\nFuture payments will match automatically.`;
                 }
 
                 await sendTelegramNotification(message);
-                console.log(`[payment-check] Matched and marked paid: owner=${owner.owner_name}, bookings=${bookingIds.join(',')}`);
-
-            } else if (bookings.length === 0) {
-                // Matched owner but no outstanding completed bookings
-                const message = `⚠️ PAYMENT RECEIVED — NO OUTSTANDING BOOKINGS\n\nFrom: ${senderName}\nAmount: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id})\nNo completed unpaid bookings found for this period.\n\nPlease review manually.`;
-                await sendTelegramNotification(message);
-
-            } else {
-                // Amount mismatch — do NOT auto-mark anything
-                const bookingLines = bookings
-                    .map(b => {
-                        const dateLabel = b.end_time && new Date(b.end_time).getTime() !== new Date(b.start_time).getTime()
-                            ? `${format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM')}–${format(new TZDate(new Date(b.end_time), "Europe/London"), 'd MMM')}`
-                            : format(new TZDate(new Date(b.start_time), "Europe/London"), 'd MMM');
-                        return `  #${b.id} ${getServiceDisplayName(b.service_type)} ${dateLabel} £${b.price_pounds.toFixed(2)}`;
-                    })
-                    .join('\n');
-
-                const preferenceLabel = owner.payment_preference === 'per_service'
-                    ? 'per-service payer'
-                    : `${owner.payment_preference} payer`;
-
-                const message = `⚠️ PAYMENT MISMATCH — action required\n\nFrom: ${senderName}\nAmount received: £${amountPounds.toFixed(2)}\n\nMatched to: ${owner.owner_name} (#${owner.id}) — ${preferenceLabel}\nOutstanding bookings this period:\n${bookingLines}\n\nExpected: £${expectedTotal.toFixed(2)} — Received: £${amountPounds.toFixed(2)}\nBookings NOT marked paid. Please review in admin console.`;
-
-                await sendTelegramNotification(message);
-                console.log(`[payment-check] Amount mismatch for owner=${owner.owner_name}: expected £${expectedTotal.toFixed(2)}, got £${amountPounds.toFixed(2)}`);
+                console.log(`[payment-check] Marked paid: owner=${owner.owner_name}, bookings=${bookingsToPay.map(b => b.id).join(',')}`);
             }
         }
 

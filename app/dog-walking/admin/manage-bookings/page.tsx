@@ -70,6 +70,8 @@ export default function ManageBookings() {
     const [rescheduleTime, setRescheduleTime] = useState<string>('');
     const [rescheduleEndDate, setRescheduleEndDate] = useState<string>('');
     const [rescheduleEndTime, setRescheduleEndTime] = useState<string>('');
+    const [rescheduleServiceType, setRescheduleServiceType] = useState<string>('');
+    const [rescheduleDuration, setRescheduleDuration] = useState<number>(60);
 
     // Modify Dogs modal state
     const [ownerDogs, setOwnerDogs] = useState<OwnerDog[]>([]);
@@ -178,6 +180,8 @@ export default function ManageBookings() {
                 setRescheduleEndDate('');
                 setRescheduleEndTime('');
             }
+            setRescheduleServiceType(booking.service_type || 'solo');
+            setRescheduleDuration(booking.duration_minutes || 60);
         }
 
         if (modal === 'modify-dogs') {
@@ -269,21 +273,25 @@ export default function ManageBookings() {
             const newStartDate = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
             const newEndDate = isSitting
                 ? new Date(`${rescheduleEndDate}T${rescheduleEndTime}:00`)
-                : new Date(newStartDate.getTime() + actionBooking.duration_minutes * 60 * 1000);
+                : new Date(newStartDate.getTime() + rescheduleDuration * 60 * 1000);
             if (newEndDate <= newStartDate) {
                 setModalError("End time must be after start time");
                 setModalLoading(false);
                 return;
             }
+            const body: Record<string, unknown> = {
+                booking_id: actionBooking.id,
+                new_start_time: newStartDate.toISOString(),
+                new_end_time: newEndDate.toISOString(),
+            };
+            if (!isSitting && rescheduleServiceType !== actionBooking.service_type) {
+                body.new_service_type = rescheduleServiceType;
+            }
             const response = await fetch('/api/dog-walking/admin/reschedule-booking', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({
-                    booking_id: actionBooking.id,
-                    new_start_time: newStartDate.toISOString(),
-                    new_end_time: newEndDate.toISOString(),
-                }),
+                body: JSON.stringify(body),
             });
             if (!response.ok) {
                 const errorData = await response.json();
@@ -1031,12 +1039,37 @@ export default function ManageBookings() {
                 const isSitting = actionBooking.booking_type === 'single_day_sitting'
                     || actionBooking.booking_type === 'multi_day'
                     || (actionBooking.service_type || '').toLowerCase().includes('sitting');
+                const WALK_OPTIONS = [
+                    { service_type: 'quick',    label: 'Quick Walk — 30 min',       duration: 30  },
+                    { service_type: 'solo',     label: 'Solo Walk — 1 hour',         duration: 60  },
+                    { service_type: 'solo',     label: 'Solo Walk — 90 min',         duration: 90  },
+                    { service_type: 'solo',     label: 'Solo Walk — 2 hours',        duration: 120 },
+                    { service_type: 'meetgreet',label: 'Meet & Greet — 30 min',     duration: 30  },
+                ];
+                const selectedOptionKey = `${rescheduleServiceType}-${rescheduleDuration}`;
                 return (
                     <div style={styles.modalOverlay}>
                         <div style={styles.modal}>
                             <h2 style={styles.modalTitle}>Reschedule Booking</h2>
                             {bookingSummary(actionBooking)}
                             {modalError && <div style={{ color: "#ef4444", marginBottom: "16px", fontSize: "0.875rem" }}>{modalError}</div>}
+                            {!isSitting && (
+                                <div style={{ marginBottom: "16px" }}>
+                                    <label style={styles.modalLabel}>Service / Duration</label>
+                                    <select
+                                        value={selectedOptionKey}
+                                        onChange={(e) => {
+                                            const opt = WALK_OPTIONS.find(o => `${o.service_type}-${o.duration}` === e.target.value);
+                                            if (opt) { setRescheduleServiceType(opt.service_type); setRescheduleDuration(opt.duration); }
+                                        }}
+                                        style={styles.modalInput}
+                                    >
+                                        {WALK_OPTIONS.map(o => (
+                                            <option key={`${o.service_type}-${o.duration}`} value={`${o.service_type}-${o.duration}`}>{o.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div style={{ marginBottom: "16px" }}>
                                 <label style={styles.modalLabel}>{isSitting ? "New Start Date" : "New Date"}</label>
                                 <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} style={styles.modalInput} />
@@ -1057,11 +1090,19 @@ export default function ManageBookings() {
                                     </div>
                                 </>
                             )}
-                            {!isSitting && <div style={{ marginBottom: "8px" }} />}
+                            {!isSitting && (
+                                <p style={{ color: "#94a3b8", fontSize: "12px", marginBottom: "20px" }}>
+                                    End time: {rescheduleTime ? (() => {
+                                        const [h, m] = rescheduleTime.split(':').map(Number);
+                                        const end = new Date(0, 0, 0, h, m + rescheduleDuration);
+                                        return `${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;
+                                    })() : '—'} · Remember to update the price if it changed.
+                                </p>
+                            )}
                             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
                                 <button onClick={closeModal} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#6b7280", opacity: modalLoading ? 0.5 : 1 }}>Cancel</button>
                                 <button onClick={handleRescheduleSubmit} disabled={modalLoading} style={{ ...styles.modalButton, backgroundColor: "#3b82f6", opacity: modalLoading ? 0.5 : 1 }}>
-                                    {modalLoading ? "Rescheduling..." : "Confirm Reschedule"}
+                                    {modalLoading ? "Saving..." : "Confirm"}
                                 </button>
                             </div>
                         </div>

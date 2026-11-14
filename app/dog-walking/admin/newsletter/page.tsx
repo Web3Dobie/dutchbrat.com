@@ -77,6 +77,28 @@ interface NotionPage {
     last_edited: string;
 }
 
+const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
+// Human label for the period an edition covers: "July 2026", "July & August 2026",
+// "July – September 2026", or "December 2026 & January 2027" when it crosses a year end.
+function formatPeriodLabel(startMonth: number, startYear: number, span: number): string {
+    if (span <= 1) return `${MONTH_NAMES[startMonth - 1]} ${startYear}`;
+
+    const endOffset = startMonth - 1 + (span - 1);
+    const endYear = startYear + Math.floor(endOffset / 12);
+    const endMonth = (endOffset % 12) + 1;
+
+    const startPart = endYear === startYear
+        ? MONTH_NAMES[startMonth - 1]
+        : `${MONTH_NAMES[startMonth - 1]} ${startYear}`;
+    const endPart = `${MONTH_NAMES[endMonth - 1]} ${endYear}`;
+
+    return span === 2 ? `${startPart} & ${endPart}` : `${startPart} – ${endPart}`;
+}
+
 export default function NewsletterPage() {
     // State
     const [isLoading, setIsLoading] = useState(true);
@@ -110,6 +132,9 @@ export default function NewsletterPage() {
     // New Pack Members month selector
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+    // How many consecutive months this edition covers — 2 for a combined
+    // "July & August" special, 1 for a normal monthly edition
+    const [monthSpan, setMonthSpan] = useState(1);
 
     // Notion state
     const [importMode, setImportMode] = useState<"editor" | "notion">("editor");
@@ -150,16 +175,16 @@ export default function NewsletterPage() {
         fetchData();
     }, []);
 
-    // Re-fetch new dogs and birthday dogs when month changes
+    // Re-fetch new dogs and birthday dogs when the month or span changes
     useEffect(() => {
         fetchNewDogs(selectedYear, selectedMonth);
         fetchBirthdayDogs(selectedMonth);
-    }, [selectedYear, selectedMonth]);
+    }, [selectedYear, selectedMonth, monthSpan]);
 
     const fetchNewDogs = async (year: number, month: number) => {
         try {
             const newDogsRes = await fetch(
-                `/api/dog-walking/admin/newsletter/new-dogs?year=${year}&month=${month}`,
+                `/api/dog-walking/admin/newsletter/new-dogs?year=${year}&month=${month}&months=${monthSpan}`,
                 { credentials: "include" }
             );
             if (newDogsRes.ok) {
@@ -230,7 +255,7 @@ export default function NewsletterPage() {
         setIsLoadingBirthdays(true);
         try {
             const res = await fetch(
-                `/api/dog-walking/admin/newsletter/birthday-dogs?month=${month}`,
+                `/api/dog-walking/admin/newsletter/birthday-dogs?month=${month}&months=${monthSpan}`,
                 { credentials: "include" }
             );
             const data = await res.json();
@@ -375,11 +400,7 @@ export default function NewsletterPage() {
 
     // Build content object from form state
     const buildContent = (): NewsletterContent => {
-        const monthNames = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
-        const contentMonth = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
+        const contentMonth = formatPeriodLabel(selectedMonth, selectedYear, monthSpan);
 
         const selectedMembers = newPackMembers
             .filter(m => m.selected)
@@ -796,6 +817,7 @@ export default function NewsletterPage() {
         setIncludeNewPackMembers(true);
         setSelectedYear(new Date().getFullYear());
         setSelectedMonth(new Date().getMonth() + 1);
+        setMonthSpan(1);
         setNewPackMembers(prev => prev.map(m => ({ ...m, selected: true })));
     };
 
@@ -1168,16 +1190,13 @@ export default function NewsletterPage() {
                                 </label>
                                 {includeNewPackMembers && (
                                     <>
-                                        <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+                                        <div style={{ display: "flex", gap: "10px", marginBottom: "8px" }}>
                                             <select
                                                 value={selectedMonth}
                                                 onChange={e => setSelectedMonth(parseInt(e.target.value))}
                                                 style={{ ...styles.input, width: "auto", flex: 1 }}
                                             >
-                                                {[
-                                                    "January", "February", "March", "April", "May", "June",
-                                                    "July", "August", "September", "October", "November", "December"
-                                                ].map((name, i) => (
+                                                {MONTH_NAMES.map((name, i) => (
                                                     <option key={i + 1} value={i + 1}>{name}</option>
                                                 ))}
                                             </select>
@@ -1190,9 +1209,24 @@ export default function NewsletterPage() {
                                                     <option key={y} value={y}>{y}</option>
                                                 ))}
                                             </select>
+                                            <select
+                                                value={monthSpan}
+                                                onChange={e => setMonthSpan(parseInt(e.target.value))}
+                                                style={{ ...styles.input, width: "auto" }}
+                                                title="How many months this edition covers"
+                                            >
+                                                <option value={1}>1 month</option>
+                                                <option value={2}>2 months</option>
+                                                <option value={3}>3 months</option>
+                                            </select>
                                         </div>
+                                        <p style={{ color: "#64748b", fontSize: "12px", margin: "0 0 12px 0" }}>
+                                            Covering <strong style={{ color: "#94a3b8" }}>{formatPeriodLabel(selectedMonth, selectedYear, monthSpan)}</strong>
+                                        </p>
                                         {newPackMembers.length === 0 ? (
-                                            <p style={{ color: "#64748b", fontSize: "14px" }}>No new dogs this month</p>
+                                            <p style={{ color: "#64748b", fontSize: "14px" }}>
+                                                No new dogs in {formatPeriodLabel(selectedMonth, selectedYear, monthSpan)}
+                                            </p>
                                         ) : (
                                             <div>
                                                 {newPackMembers.map(dog => (
@@ -1267,7 +1301,9 @@ export default function NewsletterPage() {
                                         {isLoadingBirthdays ? (
                                             <p style={{ color: "#94a3b8", fontSize: "13px" }}>Loading...</p>
                                         ) : birthdayDogs.length === 0 ? (
-                                            <p style={{ color: "#64748b", fontSize: "14px" }}>No birthdays this month</p>
+                                            <p style={{ color: "#64748b", fontSize: "14px" }}>
+                                                No birthdays in {formatPeriodLabel(selectedMonth, selectedYear, monthSpan)}
+                                            </p>
                                         ) : (
                                             <div>
                                                 {birthdayDogs.map(dog => (
@@ -1457,19 +1493,16 @@ export default function NewsletterPage() {
                                 <label style={styles.sectionTitle}>
                                     🐕 New Pack Members
                                     <span style={{ color: "#64748b", fontWeight: "normal", fontSize: "12px", marginLeft: "8px" }}>
-                                        (First service this month - photos will display at 150px)
+                                        (First service in the selected period - photos will display at 150px)
                                     </span>
                                 </label>
-                                <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+                                <div style={{ display: "flex", gap: "10px", marginBottom: "8px" }}>
                                     <select
                                         value={selectedMonth}
                                         onChange={e => setSelectedMonth(parseInt(e.target.value))}
                                         style={{ ...styles.input, width: "auto", flex: 1 }}
                                     >
-                                        {[
-                                            "January", "February", "March", "April", "May", "June",
-                                            "July", "August", "September", "October", "November", "December"
-                                        ].map((name, i) => (
+                                        {MONTH_NAMES.map((name, i) => (
                                             <option key={i + 1} value={i + 1}>{name}</option>
                                         ))}
                                     </select>
@@ -1482,9 +1515,25 @@ export default function NewsletterPage() {
                                             <option key={y} value={y}>{y}</option>
                                         ))}
                                     </select>
+                                    <select
+                                        value={monthSpan}
+                                        onChange={e => setMonthSpan(parseInt(e.target.value))}
+                                        style={{ ...styles.input, width: "auto" }}
+                                        title="How many months this edition covers"
+                                    >
+                                        <option value={1}>1 month</option>
+                                        <option value={2}>2 months</option>
+                                        <option value={3}>3 months</option>
+                                    </select>
                                 </div>
+                                <p style={{ color: "#64748b", fontSize: "12px", margin: "0 0 12px 0" }}>
+                                    Covering <strong style={{ color: "#94a3b8" }}>{formatPeriodLabel(selectedMonth, selectedYear, monthSpan)}</strong>
+                                    {monthSpan > 1 && " — new members and birthdays span the whole period"}
+                                </p>
                                 {newPackMembers.length === 0 ? (
-                                    <p style={{ color: "#64748b", fontSize: "14px" }}>No new dogs this month</p>
+                                    <p style={{ color: "#64748b", fontSize: "14px" }}>
+                                        No new dogs in {formatPeriodLabel(selectedMonth, selectedYear, monthSpan)}
+                                    </p>
                                 ) : (
                                     <div>
                                         {newPackMembers.map(dog => (

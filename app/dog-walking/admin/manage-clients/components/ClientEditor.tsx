@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { formatDogAge, formatDogBirthday, parseBirthdayDate, birthdayToDateString, MONTHS } from "@/lib/dogAge";
 
 // Types
 interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
     image_filename: string | null;
 }
 
@@ -669,15 +671,51 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                             />
                                         </div>
                                         <div style={styles.inputGroup}>
-                                            <label style={styles.label}>Age (years)</label>
-                                            <input
-                                                type="number"
-                                                value={dog.dog_age || ''}
-                                                onChange={(e) => handleDogChange(dog.id, 'dog_age', parseInt(e.target.value) || 0)}
-                                                style={styles.input}
-                                                min="0"
-                                                max="30"
-                                            />
+                                            <label style={styles.label}>
+                                                Birthday (Month &amp; Year)
+                                                {dog.dog_birthday && (
+                                                    <span style={{ color: '#9ca3af', fontWeight: 'normal', marginLeft: 8 }}>
+                                                        — {formatDogAge(dog.dog_birthday)} old
+                                                    </span>
+                                                )}
+                                                {!dog.dog_birthday && dog.dog_age != null && (
+                                                    <span style={{ color: '#f59e0b', fontWeight: 'normal', marginLeft: 8 }}>
+                                                        — {dog.dog_age} yrs (static, no birthday set)
+                                                    </span>
+                                                )}
+                                            </label>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <select
+                                                    style={{ ...styles.input, flex: 2 }}
+                                                    value={dog.dog_birthday ? String(parseBirthdayDate(dog.dog_birthday)?.month ?? '') : ''}
+                                                    onChange={(e) => {
+                                                        const parsed = parseBirthdayDate(dog.dog_birthday);
+                                                        const year = parsed?.year ?? new Date().getFullYear();
+                                                        const month = parseInt(e.target.value);
+                                                        if (month) handleDogChange(dog.id, 'dog_birthday', birthdayToDateString(month, year));
+                                                    }}
+                                                >
+                                                    <option value="">Month</option>
+                                                    {MONTHS.map((m, i) => (
+                                                        <option key={m} value={String(i + 1)}>{m}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    style={{ ...styles.input, flex: 1 }}
+                                                    value={dog.dog_birthday ? String(parseBirthdayDate(dog.dog_birthday)?.year ?? '') : ''}
+                                                    onChange={(e) => {
+                                                        const parsed = parseBirthdayDate(dog.dog_birthday);
+                                                        const month = parsed?.month ?? 1;
+                                                        const year = parseInt(e.target.value);
+                                                        if (year) handleDogChange(dog.id, 'dog_birthday', birthdayToDateString(month, year));
+                                                    }}
+                                                >
+                                                    <option value="">Year</option>
+                                                    {Array.from({ length: new Date().getFullYear() - 1989 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                                        <option key={y} value={String(y)}>{y}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
 

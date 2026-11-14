@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { birthdayToDateString, MONTHS } from "@/lib/dogAge";
 
 interface RegisterData {
     ownerName: string;
@@ -9,7 +10,8 @@ interface RegisterData {
     address: string;
     dogName: string;
     dogBreed: string;
-    dogAge: string;
+    dogBirthMonth: string;
+    dogBirthYear: string;
     photoConsent: boolean;
 }
 
@@ -23,11 +25,13 @@ interface RegisteredUser {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }[];
 }
 
 export default function AdminRegisterClient() {
+    const currentYear = new Date().getFullYear();
     const [formData, setFormData] = useState<RegisterData>({
         ownerName: "",
         phone: "",
@@ -35,7 +39,8 @@ export default function AdminRegisterClient() {
         address: "",
         dogName: "",
         dogBreed: "",
-        dogAge: "",
+        dogBirthMonth: "",
+        dogBirthYear: "",
         photoConsent: false,
     });
 
@@ -59,18 +64,14 @@ export default function AdminRegisterClient() {
 
         // Basic validation
         if (!formData.ownerName || !formData.phone || !formData.email ||
-            !formData.address || !formData.dogName || !formData.dogBreed || !formData.dogAge) {
+            !formData.address || !formData.dogName || !formData.dogBreed ||
+            !formData.dogBirthMonth || !formData.dogBirthYear) {
             setError("All fields are required");
             setIsLoading(false);
             return;
         }
 
-        const dogAge = parseInt(formData.dogAge, 10);
-        if (isNaN(dogAge) || dogAge < 0 || dogAge > 30) {
-            setError("Dog age must be a valid number between 0 and 30");
-            setIsLoading(false);
-            return;
-        }
+        const dogBirthday = birthdayToDateString(parseInt(formData.dogBirthMonth), parseInt(formData.dogBirthYear));
 
         try {
             const response = await fetch("/api/dog-walking/user-register", {
@@ -79,8 +80,13 @@ export default function AdminRegisterClient() {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    ...formData,
-                    dogAge: dogAge,
+                    ownerName: formData.ownerName,
+                    phone: formData.phone,
+                    email: formData.email,
+                    address: formData.address,
+                    dogName: formData.dogName,
+                    dogBreed: formData.dogBreed,
+                    dogBirthday,
                     photoSharingConsent: formData.photoConsent,
                 }),
             });
@@ -101,7 +107,8 @@ export default function AdminRegisterClient() {
                 address: "",
                 dogName: "",
                 dogBreed: "",
-                dogAge: "",
+                dogBirthMonth: "",
+                dogBirthYear: "",
                 photoConsent: false,
             });
 
@@ -237,7 +244,7 @@ export default function AdminRegisterClient() {
                     <div><strong>Owner:</strong> {success.owner_name} (ID: {success.owner_id})</div>
                     <div><strong>Phone:</strong> {success.phone}</div>
                     <div><strong>Email:</strong> {success.email}</div>
-                    <div><strong>Dog:</strong> {success.dogs[0]?.dog_name} ({success.dogs[0]?.dog_breed}, {success.dogs[0]?.dog_age} years old)</div>
+                    <div><strong>Dog:</strong> {success.dogs[0]?.dog_name} ({success.dogs[0]?.dog_breed})</div>
                     <div style={{ marginTop: "12px", fontSize: "0.9rem", color: "#059669" }}>
                         📧 Welcome email sent to client<br />
                         📱 Telegram notification sent to you
@@ -316,18 +323,33 @@ export default function AdminRegisterClient() {
                     required
                 />
 
-                <label style={styles.label}>Age (years)</label>
-                <input
-                    type="number"
-                    name="dogAge"
-                    value={formData.dogAge}
-                    onChange={handleInputChange}
-                    style={styles.input}
-                    placeholder="0"
-                    min="0"
-                    max="30"
-                    required
-                />
+                <label style={styles.label}>Birthday (Month & Year)</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <select
+                        name="dogBirthMonth"
+                        value={formData.dogBirthMonth}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dogBirthMonth: e.target.value }))}
+                        style={{ ...styles.input, flex: 2 }}
+                        required
+                    >
+                        <option value="">Month</option>
+                        {MONTHS.map((m, i) => (
+                            <option key={m} value={String(i + 1)}>{m}</option>
+                        ))}
+                    </select>
+                    <select
+                        name="dogBirthYear"
+                        value={formData.dogBirthYear}
+                        onChange={(e) => setFormData(prev => ({ ...prev, dogBirthYear: e.target.value }))}
+                        style={{ ...styles.input, flex: 1 }}
+                        required
+                    >
+                        <option value="">Year</option>
+                        {Array.from({ length: currentYear - 1989 }, (_, i) => currentYear - i).map(y => (
+                            <option key={y} value={String(y)}>{y}</option>
+                        ))}
+                    </select>
+                </div>
 
                 <div style={styles.sectionTitle}>Photo Sharing Consent</div>
                 <label style={{

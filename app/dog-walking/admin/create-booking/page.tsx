@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { format, addMinutes, isPast } from "date-fns";
 import { getSoloWalkPrice, getQuickWalkPrice } from "@/lib/pricing";
+import { formatDogAge } from "@/lib/dogAge";
 
 // Updated service options with both solo walk durations
 const SERVICE_OPTIONS = [
@@ -23,7 +24,8 @@ interface Client {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }[];
 }
 
@@ -37,7 +39,8 @@ interface Customer {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }[];
 }
 
@@ -437,7 +440,7 @@ export default function AdminCreateBooking() {
                                             }}
                                         >
                                             <strong>{dog.dog_name}</strong><br />
-                                            <small>{dog.dog_breed}, {dog.dog_age} years old</small>
+                                            <small>{dog.dog_breed}, {formatDogAge(dog.dog_birthday, dog.dog_age)} old</small>
                                         </div>
                                     ))}
                                 </div>

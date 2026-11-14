@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
                         Cancel Booking
                     </a>
                     <br><br>
-                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. For multi-day bookings, please provide as much notice as possible.</p>
+                    <p><strong>Cancellation Policy:</strong> Walks and day visits can be cancelled at any time, even on the same day, with no fee. <strong>Multi-day sittings longer than 2 days require 7 days' notice</strong> — cancelled inside that window, a 50% fee applies.</p>
                     <p>Thank you!</p>
                 `;
             } else if (booking_type === 'single_day_sitting') {
@@ -294,7 +294,7 @@ export async function POST(request: NextRequest) {
                         Cancel Booking
                     </a>
                     <br><br>
-                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p><strong>Cancellation Policy:</strong> Walks and day visits can be cancelled at any time, even on the same day, with no fee. <strong>Multi-day sittings longer than 2 days require 7 days' notice</strong> — cancelled inside that window, a 50% fee applies.</p>
                     <p>Thank you!</p>
                 `;
             } else {
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
                         Cancel Booking
                     </a>
                     <br><br>
-                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p><strong>Cancellation Policy:</strong> Walks and day visits can be cancelled at any time, even on the same day, with no fee. <strong>Multi-day sittings longer than 2 days require 7 days' notice</strong> — cancelled inside that window, a 50% fee applies.</p>
                     <p>Thank you!</p>
                 `;
             }

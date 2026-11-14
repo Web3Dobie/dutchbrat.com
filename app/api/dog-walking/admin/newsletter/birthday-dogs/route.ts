@@ -14,9 +14,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const month = searchParams.get("month") || (new Date().getMonth() + 1).toString();
     const monthInt = parseInt(month);
+    // Number of consecutive months to cover, starting at `month`.
+    // 1 = a normal edition; 2 = a combined edition (e.g. a July & August special).
+    const monthCount = Math.min(Math.max(parseInt(searchParams.get("months") || "1") || 1, 1), 12);
 
     if (isNaN(monthInt) || monthInt < 1 || monthInt > 12) {
         return NextResponse.json({ error: "Invalid month parameter (1–12)" }, { status: 400 });
+    }
+
+    // Wraps across the year end, so a December start can run into January
+    const monthList: number[] = [];
+    for (let i = 0; i < monthCount; i++) {
+        monthList.push(((monthInt - 1 + i) % 12) + 1);
     }
 
     const client = await pool.connect();
@@ -36,11 +45,14 @@ export async function GET(request: NextRequest) {
             FROM hunters_hounds.dogs d
             JOIN hunters_hounds.owners o ON d.owner_id = o.id
             WHERE d.dog_birthday IS NOT NULL
-              AND EXTRACT(MONTH FROM d.dog_birthday) = $1
-            ORDER BY EXTRACT(DAY FROM d.dog_birthday), d.dog_name;
+              AND EXTRACT(MONTH FROM d.dog_birthday)::int = ANY($1::int[])
+            ORDER BY
+                array_position($1::int[], EXTRACT(MONTH FROM d.dog_birthday)::int),
+                EXTRACT(DAY FROM d.dog_birthday),
+                d.dog_name;
         `;
 
-        const result = await client.query(query, [monthInt]);
+        const result = await client.query(query, [monthList]);
 
         return NextResponse.json({
             success: true,
@@ -56,6 +68,8 @@ export async function GET(request: NextRequest) {
                 age_years: row.age_years,
             })),
             month: monthInt,
+            months: monthCount,
+            month_list: monthList,
             count: result.rows.length,
         });
 
