@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { HunterMediaDB } from '../../../../lib/hunterMedia'
+import { isHunterAuthenticated } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,8 +19,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authCookie = req.cookies.get('hunter-auth')
-  if (authCookie?.value !== 'authenticated') {
+  if (!isHunterAuthenticated(req)) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
   
@@ -36,8 +36,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authCookie = req.cookies.get('hunter-auth')
-  if (authCookie?.value !== 'authenticated') {
+  if (!isHunterAuthenticated(req)) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
   

@@ -2,11 +2,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { HunterMediaDB } from '../../../../../lib/hunterMedia'
+import { isHunterAuthenticated } from '@/lib/auth'
 
 // Auth middleware
 function checkAuth(req: NextRequest) {
-  const authCookie = req.cookies.get('hunter-auth')
-  return authCookie?.value === 'authenticated'
+  return isHunterAuthenticated(req)
 }
 
 export async function PATCH(
@@ -35,8 +35,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   // 1. Authentication check
-  const authCookie = req.cookies.get('hunter-auth')
-  if (authCookie?.value !== 'authenticated') {
+  if (!isHunterAuthenticated(req)) {
     return NextResponse.json({ 
       error: 'Authentication required',
       code: 'AUTH_REQUIRED'

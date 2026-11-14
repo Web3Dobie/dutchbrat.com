@@ -2,11 +2,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { scanAndProcessNewFiles } from '../../../../../lib/enhancedMediaScanner'
+import { isHunterAuthenticated } from '@/lib/auth'
 
 // Auth middleware
 function checkAuth(req: NextRequest) {
-  const authCookie = req.cookies.get('hunter-auth')
-  return authCookie?.value === 'authenticated'
+  return isHunterAuthenticated(req)
 }
 
 export const maxDuration = 300 // 5 minutes

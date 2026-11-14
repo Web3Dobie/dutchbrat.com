@@ -5,11 +5,11 @@ import { getMediaFiles, updateThumbnailPaths } from '../../../../../lib/hunterMe
 import path from 'path'
 import { thumbnailGenerator } from '../../../../../lib/thumbnailGenerator'
 import { videoThumbnailGenerator } from '../../../../../lib/videoThumbnailGenerator'
+import { isHunterAuthenticated } from '@/lib/auth'
 
 // Auth middleware
 function checkAuth(req: NextRequest) {
-  const authCookie = req.cookies.get('hunter-auth')
-  return authCookie?.value === 'authenticated'
+  return isHunterAuthenticated(req)
 }
 
 export async function POST(req: NextRequest) {
