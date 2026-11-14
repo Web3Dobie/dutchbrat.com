@@ -13,7 +13,8 @@ interface Customer {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
         image_filename?: string | null;
     }>;
 }
@@ -215,17 +216,20 @@ export default function MyMedia({ customer, onBack }: MyMediaProps) {
     };
 
     // --- Media URL Helper ---
-    // Uses nginx-media for direct file serving (same as memorial site)
+    // Goes through the authenticated API route, NOT nginx directly. Until
+    // 2026-11-01 these were raw /client-media/ URLs served by nginx with no
+    // session check, so anyone who guessed a filename could fetch any client's
+    // photos. nginx now only serves these via the route's X-Accel-Redirect.
     // Cache buster v4: forces refresh after thumbnail EXIF rotation fix
     const getMediaUrl = (item: MediaItem, useThumbnail: boolean = false) => {
         if (useThumbnail && item.thumbnail_path) {
-            return `/client-media/${item.thumbnail_path}?v=4`;
+            return `/api/dog-walking/client-media/${item.thumbnail_path}?v=4`;
         }
         // Add cache buster for videos to bypass CDN cache after re-encoding
         if (item.media_type === 'video') {
-            return `/client-media/${item.file_path}?v=4`;
+            return `/api/dog-walking/client-media/${item.file_path}?v=4`;
         }
-        return `/client-media/${item.file_path}`;
+        return `/api/dog-walking/client-media/${item.file_path}`;
     };
 
     // --- Render ---

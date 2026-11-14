@@ -536,7 +536,7 @@ export default function ClientMediaPage() {
                                     }}>
                                         {file.mediaType === "image" ? (
                                             <img
-                                                src={`/client-media/${file.filePath}?v=4`}
+                                                src={`/api/dog-walking/client-media/${file.filePath}?v=4`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
@@ -657,13 +657,13 @@ export default function ClientMediaPage() {
                                     }}>
                                         {media.thumbnail_path ? (
                                             <img
-                                                src={`/client-media/${media.thumbnail_path}?v=4`}
+                                                src={`/api/dog-walking/client-media/${media.thumbnail_path}?v=4`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
                                         ) : media.media_type === "image" ? (
                                             <img
-                                                src={`/client-media/${media.file_path}?v=4`}
+                                                src={`/api/dog-walking/client-media/${media.file_path}?v=4`}
                                                 alt=""
                                                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                                             />
