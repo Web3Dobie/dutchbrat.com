@@ -7,13 +7,15 @@ import { getServiceDisplayName } from "@/lib/serviceTypes";
 // Import existing calendar components
 import ResponsiveDatePicker from "./ResponsiveDatePicker";
 import TimeSlotGrid from "./TimeSlotGrid";
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
 }
 
 interface BookingDetails {
@@ -89,7 +91,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         setError(null);
         
         try {
-            const response = await fetch(`/api/dog-walking/booking-details?id=${bookingId}`);
+            const response = await customerFetch(`/api/dog-walking/booking-details?id=${bookingId}`);
             const data = await response.json();
             
             if (!response.ok) {
@@ -135,7 +137,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
             // Include owner_id for extended travel time calculation
             const url = `/api/dog-walking/availability?date=${formattedDate}&service_type=${serviceType}&exclude_booking_id=${booking.id}&owner_id=${booking.owner_id}`;
             
-            const response = await fetch(url);
+            const response = await customerFetch(url);
             
             if (!response.ok) {
                 throw new Error("Failed to fetch availability");
@@ -148,7 +150,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
             
         } catch (err: any) {
             console.error("Failed to fetch available slots:", err);
-            setError("Could not load available times. Please try again.");
+            setError(err.message || "Could not load available times. Please try again.");
             setApiRanges([]);
         } finally {
             setLoadingSlots(false);
@@ -163,7 +165,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         setError(null);
 
         try {
-            const response = await fetch("/api/dog-walking/cancel", {
+            const response = await customerFetch("/api/dog-walking/cancel", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -197,7 +199,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         setError(null);
 
         try {
-            const response = await fetch("/api/dog-walking/reschedule-booking", {
+            const response = await customerFetch("/api/dog-walking/reschedule-booking", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -251,7 +253,7 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
         setError(null);
 
         try {
-            const response = await fetch("/api/dog-walking/modify-booking-dogs", {
+            const response = await customerFetch("/api/dog-walking/modify-booking-dogs", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

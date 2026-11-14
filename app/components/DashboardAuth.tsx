@@ -13,15 +13,22 @@ interface Customer {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }>;
 }
 
 interface DashboardAuthProps {
     onAuthSuccess: (customer: Customer) => void;
+    /**
+     * Shown above the form when the customer was returned here rather than
+     * arriving fresh — currently only an expired session. Styled as a notice,
+     * not an error: nothing went wrong and nothing they did caused it.
+     */
+    notice?: string | null;
 }
 
-export default function DashboardAuth({ onAuthSuccess }: DashboardAuthProps) {
+export default function DashboardAuth({ onAuthSuccess, notice }: DashboardAuthProps) {
     // --- State ---
     const [searchInput, setSearchInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -84,6 +91,16 @@ export default function DashboardAuth({ onAuthSuccess }: DashboardAuthProps) {
             fontSize: "0.85rem",
             color: "#9ca3af",
             marginBottom: "16px",
+            lineHeight: "1.4",
+        } as React.CSSProperties,
+        notice: {
+            color: "#fcd34d",
+            fontSize: "0.9rem",
+            marginBottom: "16px",
+            padding: "12px",
+            backgroundColor: "#422006",
+            border: "1px solid #b45309",
+            borderRadius: "4px",
             lineHeight: "1.4",
         } as React.CSSProperties,
     };
@@ -169,6 +186,10 @@ export default function DashboardAuth({ onAuthSuccess }: DashboardAuthProps) {
                         Enter the phone number or email address you used when booking to view your appointments.
                     </p>
                 </div>
+
+                {/* Session expiry notice — shown instead of leaving the
+                    customer staring at a raw "Not authenticated" error. */}
+                {notice && <div style={styles.notice}>{notice}</div>}
 
                 {/* Form */}
                 <form onSubmit={handleLookup}>

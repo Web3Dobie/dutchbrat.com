@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import { formatDogAge, formatDogBirthday } from "@/lib/dogAge";
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
     image_filename?: string | null;
 }
 
@@ -280,7 +283,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
             updateData.vet_info = formData.vet_info;
             updateData.pet_insurance = formData.pet_insurance;
 
-            const response = await fetch(`/api/dog-walking/customer-update`, {
+            const response = await customerFetch(`/api/dog-walking/customer-update`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -346,7 +349,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
         setAddDogLoading(true);
 
         try {
-            const res = await fetch("/api/dog-walking/dog-add", {
+            const res = await customerFetch("/api/dog-walking/dog-add", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -495,7 +498,8 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                                     {dog.dog_name}
                                 </div>
                                 <div style={{ color: "#9ca3af", fontSize: "0.9rem" }}>
-                                    {dog.dog_breed} • {dog.dog_age} {dog.dog_age === 1 ? 'year' : 'years'} old
+                                    {dog.dog_breed} • {formatDogAge(dog.dog_birthday, dog.dog_age) ?? ''} old
+                                    {dog.dog_birthday && <span style={{ marginLeft: 6, fontSize: '0.8rem' }}>({formatDogBirthday(dog.dog_birthday)})</span>}
                                 </div>
                             </div>
                         </div>

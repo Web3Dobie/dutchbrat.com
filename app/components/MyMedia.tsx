@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Customer {
@@ -199,7 +200,7 @@ export default function MyMedia({ customer, onBack }: MyMediaProps) {
         setError(null);
 
         try {
-            const response = await fetch("/api/dog-walking/customer-media");
+            const response = await customerFetch("/api/dog-walking/customer-media");
             const data = await response.json();
 
             if (!response.ok) {

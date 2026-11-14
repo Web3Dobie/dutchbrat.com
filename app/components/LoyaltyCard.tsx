@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { format, isFuture } from "date-fns";
 import { getServiceDisplayName } from '@/lib/serviceTypes';
 import { formatPrice, getRewardTier } from '@/lib/pricing';
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Booking {
@@ -358,7 +359,7 @@ export default function LoyaltyCard({ ownerId, bookings }: LoyaltyCardProps) {
             setIsLoading(true);
             setError(null);
 
-            const response = await fetch(`/api/dog-walking/loyalty?owner_id=${ownerId}`);
+            const response = await customerFetch(`/api/dog-walking/loyalty?owner_id=${ownerId}`);
             const data = await response.json();
 
             if (!response.ok) {
@@ -380,7 +381,7 @@ export default function LoyaltyCard({ ownerId, bookings }: LoyaltyCardProps) {
             setIsRedeeming(true);
             setError(null);
 
-            const response = await fetch('/api/dog-walking/loyalty', {
+            const response = await customerFetch('/api/dog-walking/loyalty', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ owner_id: ownerId, booking_id: bookingId })

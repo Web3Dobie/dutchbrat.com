@@ -4,13 +4,16 @@ import React, { useState, useEffect } from "react";
 import { format, isSameDay } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { getSoloWalkPrice, formatSoloWalkPrice, getQuickWalkPrice } from "@/lib/pricing";
+import { formatDogAge } from "@/lib/dogAge";
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
 }
 
 interface User {
@@ -170,7 +173,7 @@ export default function BookingForm({
         setError(null);
 
         try {
-            const response = await fetch(`/api/dog-walking/secondary-addresses?owner_id=${currentUser.owner_id}`);
+            const response = await customerFetch(`/api/dog-walking/secondary-addresses?owner_id=${currentUser.owner_id}`);
             const data = await response.json();
 
             if (!response.ok) {
@@ -185,7 +188,9 @@ export default function BookingForm({
 
         } catch (err: any) {
             console.error("Failed to fetch secondary addresses:", err);
-            setError("Could not load address options. Using primary address only.");
+            // Prefer the thrown message so an expired session says so here,
+            // rather than silently degrading and failing at the booking step.
+            setError(err.message || "Could not load address options. Using primary address only.");
             setSecondaryAddresses([]);
             return [];
         } finally {
@@ -443,7 +448,7 @@ export default function BookingForm({
         setError(null);
 
         try {
-            const res = await fetch("/api/dog-walking/dog-add", {
+            const res = await customerFetch("/api/dog-walking/dog-add", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -513,7 +518,7 @@ export default function BookingForm({
 
             console.log("Booking request body:", bookingData);
 
-            const res = await fetch("/api/dog-walking/book", {
+            const res = await customerFetch("/api/dog-walking/book", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(bookingData),
@@ -865,7 +870,7 @@ export default function BookingForm({
                             {dog.dog_name}
                         </h5>
                         <p style={{ color: "#9ca3af", margin: "0", fontSize: "0.85rem" }}>
-                            {dog.dog_breed} • {dog.dog_age} years old
+                            {dog.dog_breed} • {formatDogAge(dog.dog_birthday, dog.dog_age)} old
                         </p>
                     </div>
                 </label>
@@ -1044,8 +1049,14 @@ export default function BookingForm({
             <div style={styles.disclaimer}>
                 <p style={{ marginBottom: "8px" }}>
                     <strong>Cancellations:</strong> I offer a flexible and understanding
-                    cancellation policy. You can cancel your booking at any time, even on
-                    the same day, with absolutely no cancellation fee.
+                    cancellation policy. Walks and day visits can be cancelled at any time,
+                    even on the same day, with absolutely no cancellation fee.
+                </p>
+                <p style={{ marginBottom: "8px" }}>
+                    <strong>Multi-day sittings:</strong> Sittings longer than 2 days need 7
+                    days&apos; notice to cancel free of charge. Cancelled inside that window,
+                    a 50% fee applies — a week-long sitting can&apos;t be refilled at short
+                    notice the way a walk can. You&apos;ll always see any fee before confirming.
                 </p>
                 <p style={{ marginBottom: "8px" }}>
                     <strong>A Small Request:</strong> Whenever possible, please provide at

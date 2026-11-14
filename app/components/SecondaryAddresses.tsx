@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Customer {
@@ -13,7 +14,8 @@ interface Customer {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
         image_filename?: string | null;
     }>;
     partner_name?: string | null;
@@ -227,7 +229,7 @@ export default function SecondaryAddresses({ customer, onBack }: SecondaryAddres
             setIsLoading(true);
             setError(null);
 
-            const response = await fetch(`/api/dog-walking/secondary-addresses?owner_id=${customer.owner_id}`);
+            const response = await customerFetch(`/api/dog-walking/secondary-addresses?owner_id=${customer.owner_id}`);
             const data = await response.json();
 
             if (!response.ok) {
@@ -338,7 +340,7 @@ export default function SecondaryAddresses({ customer, onBack }: SecondaryAddres
 
             const method = editingId ? "PUT" : "POST";
 
-            const response = await fetch(url, {
+            const response = await customerFetch(url, {
                 method,
                 headers: {
                     "Content-Type": "application/json",
@@ -369,7 +371,7 @@ export default function SecondaryAddresses({ customer, onBack }: SecondaryAddres
 
     const handleToggleActive = async (addressId: number, currentActive: boolean) => {
         try {
-            const response = await fetch(`/api/dog-walking/secondary-addresses/${addressId}/toggle`, {
+            const response = await customerFetch(`/api/dog-walking/secondary-addresses/${addressId}/toggle`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
@@ -400,7 +402,7 @@ export default function SecondaryAddresses({ customer, onBack }: SecondaryAddres
         }
 
         try {
-            const response = await fetch(`/api/dog-walking/secondary-addresses/${addressId}`, {
+            const response = await customerFetch(`/api/dog-walking/secondary-addresses/${addressId}`, {
                 method: "DELETE",
             });
 

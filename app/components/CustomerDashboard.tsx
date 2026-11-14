@@ -7,6 +7,7 @@ import BookingManager from "./BookingManager";
 import AccountDetails from "./AccountDetails";
 import SecondaryAddresses from "./SecondaryAddresses";
 import MyMedia from "./MyMedia";
+import { onSessionExpired, SESSION_EXPIRED_MESSAGE } from "@/lib/customerSession";
 
 // --- Types ---
 interface Customer {
@@ -19,7 +20,8 @@ interface Customer {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
         image_filename?: string | null;
     }>;
     // Partner fields
@@ -41,6 +43,22 @@ export default function CustomerDashboard() {
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
     const [isCheckingSession, setIsCheckingSession] = useState(true);
+    const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+
+    // --- Drop back to the login view when a session expires mid-use ---
+    //
+    // Sessions last 7 days, so this fires regularly in normal use. Without it
+    // the customer saw the raw "Not authenticated" string from whichever API
+    // call happened to fail and had no way of knowing to log in again.
+    useEffect(() => {
+        return onSessionExpired(() => {
+            setCustomer(null);
+            setSelectedBookingId(null);
+            setSessionNotice(SESSION_EXPIRED_MESSAGE);
+            setView("auth");
+            setIsCheckingSession(false);
+        });
+    }, []);
 
     // --- Check for existing session on mount ---
     useEffect(() => {
@@ -67,6 +85,7 @@ export default function CustomerDashboard() {
     // --- Handlers ---
     const handleAuthSuccess = (authenticatedCustomer: Customer) => {
         setCustomer(authenticatedCustomer);
+        setSessionNotice(null);
         setView("main");
     };
 
@@ -81,6 +100,7 @@ export default function CustomerDashboard() {
 
         setCustomer(null);
         setSelectedBookingId(null);
+        setSessionNotice(null);
         setView("auth");
     };
 
@@ -265,7 +285,7 @@ export default function CustomerDashboard() {
             )}
 
             {!isCheckingSession && view === "auth" && (
-                <DashboardAuth onAuthSuccess={handleAuthSuccess} />
+                <DashboardAuth onAuthSuccess={handleAuthSuccess} notice={sessionNotice} />
             )}
 
             {!isCheckingSession && view === "main" && customer && (

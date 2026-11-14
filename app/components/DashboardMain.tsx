@@ -1,17 +1,21 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths, isSameDay } from "date-fns";
+import React, { useState, useEffect, useMemo } from "react";
+import { format, isPast, isToday, isTomorrow, addHours, isBefore, getISOWeek, endOfWeek, addDays, addWeeks, startOfMonth, addMonths, isSameDay, eachDayOfInterval, startOfDay } from "date-fns";
 import { formatPrice } from '@/lib/pricing';
 import { getServiceDisplayName } from '@/lib/serviceTypes';
 import LoyaltyCard from './LoyaltyCard';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/style.css';
+import { customerFetch } from "@/lib/customerSession";
 
 // --- Types ---
 interface Dog {
     id: number;
     dog_name: string;
     dog_breed: string;
-    dog_age: number;
+    dog_age?: number | null;
+    dog_birthday?: string | null;
 }
 
 interface Customer {
@@ -35,8 +39,9 @@ interface Booking {
     start_time: string;
     end_time: string;
     duration_minutes: number;
-    status: 'confirmed' | 'cancelled' | 'completed' | 'completed & paid' | 'paid' | 'active' | 'no_show';
+    status: 'confirmed' | 'cancelled' | 'cancelled & paid' | 'completed' | 'completed & paid' | 'paid' | 'active' | 'no_show';
     price_pounds: number;
+    cancellation_fee_pounds?: number | null;
     dog_names: string[];
     created_at: string;
     walk_summary?: string | null;
@@ -66,6 +71,55 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'bookings' | 'loyalty' | 'account'>('bookings');
     const [sittingNotes, setSittingNotes] = useState<Record<number, Array<{ id: number; note_text: string; note_date: string }>>>({});
+    const [calendarMonth, setCalendarMonth] = useState<Date>(startOfMonth(new Date()));
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
+    // --- Derived: bookings mapped to calendar dates ---
+    const bookingsByDate = useMemo<Map<string, Booking[]>>(() => {
+        const map = new Map<string, Booking[]>();
+        bookings
+            .filter(b => b.status === 'confirmed' || b.status === 'active')
+            .forEach(b => {
+                if (b.service_type === 'sitting') {
+                    eachDayOfInterval({
+                        start: startOfDay(new Date(b.start_time)),
+                        end: startOfDay(new Date(b.end_time)),
+                    }).forEach(d => {
+                        const key = format(d, 'yyyy-MM-dd');
+                        if (!map.has(key)) map.set(key, []);
+                        map.get(key)!.push(b);
+                    });
+                } else {
+                    const key = format(startOfDay(new Date(b.start_time)), 'yyyy-MM-dd');
+                    if (!map.has(key)) map.set(key, []);
+                    map.get(key)!.push(b);
+                }
+            });
+        return map;
+    }, [bookings]);
+
+    const walkDates = useMemo<Date[]>(() => {
+        const dates: Date[] = [];
+        bookingsByDate.forEach((items, key) => {
+            if (items.some(b => b.service_type !== 'sitting'))
+                dates.push(new Date(key + 'T00:00:00'));
+        });
+        return dates;
+    }, [bookingsByDate]);
+
+    const sittingDates = useMemo<Date[]>(() => {
+        const dates: Date[] = [];
+        bookingsByDate.forEach((items, key) => {
+            if (items.some(b => b.service_type === 'sitting'))
+                dates.push(new Date(key + 'T00:00:00'));
+        });
+        return dates;
+    }, [bookingsByDate]);
+
+    const selectedDates = useMemo<Date[]>(
+        () => selectedCalendarDate ? [new Date(selectedCalendarDate + 'T00:00:00')] : [],
+        [selectedCalendarDate]
+    );
 
     // --- Styles ---
     const styles = {
@@ -167,7 +221,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
             setIsLoading(true);
             setError(null);
 
-            const response = await fetch(`/api/dog-walking/customer-bookings?owner_id=${customer.owner_id}`);
+            const response = await customerFetch(`/api/dog-walking/customer-bookings?owner_id=${customer.owner_id}`);
             const data = await response.json();
 
             if (!response.ok) {
@@ -505,9 +559,11 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
 
             {/* Outstanding Balance Card */}
             {(() => {
-                const outstandingTotal = bookings
-                    .filter(b => b.status === 'completed')
-                    .reduce((sum, b) => sum + (b.price_pounds || 0), 0);
+                const outstandingTotal = bookings.reduce((sum, b) => {
+                    if (b.status === 'completed') return sum + (b.price_pounds || 0);
+                    if (b.status === 'cancelled') return sum + (b.cancellation_fee_pounds || 0);
+                    return sum;
+                }, 0);
 
                 if (outstandingTotal > 0) {
                     return (
@@ -516,7 +572,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             backgroundColor: "#7f1d1d",
                             border: "1px solid #dc2626"
                         }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                                 <div>
                                     <h3 style={{ color: "#fecaca", margin: "0 0 4px 0", fontSize: "1rem" }}>
                                         Outstanding Balance
@@ -525,12 +581,26 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                                         Payment due at agreed date
                                     </p>
                                 </div>
-                                <div style={{
-                                    color: "#fff",
-                                    fontSize: "1.5rem",
-                                    fontWeight: "bold"
-                                }}>
+                                <div style={{ color: "#fff", fontSize: "1.5rem", fontWeight: "bold" }}>
                                     {formatPrice(outstandingTotal)}
+                                </div>
+                            </div>
+                            <div style={{ borderTop: "1px solid #991b1b", marginBottom: "12px" }} />
+                            <p style={{ color: "#fca5a5", margin: "0 0 8px 0", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>
+                                How to pay
+                            </p>
+                            <div style={{ display: "flex", flexDirection: "column" as const, gap: "6px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ color: "#fca5a5", fontSize: "0.875rem" }}>💜 Revolut</span>
+                                    <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 600 }}>@dutchbrat</span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ color: "#fca5a5", fontSize: "0.875rem" }}>🏦 Bank transfer</span>
+                                    <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 600 }}>Ernesto Becker</span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ color: "#fca5a5", fontSize: "0.875rem" }}>Sort code / Account</span>
+                                    <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 600 }}>04-00-75 &nbsp;·&nbsp; 19945388</span>
                                 </div>
                             </div>
                         </div>
@@ -588,6 +658,66 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
             {/* Bookings Content */}
             {activeTab === 'bookings' && (
                 <>
+                    {/* Booking Calendar */}
+                    {bookingsByDate.size > 0 && (
+                        <div style={{ ...styles.card, padding: '16px', marginBottom: '24px' }}>
+                            <h3 style={{ color: '#fff', marginBottom: '16px', fontSize: '1.1rem' }}>
+                                📅 My Booking Calendar
+                            </h3>
+                            <div className="rdp-dashboard-calendar">
+                                <DayPicker
+                                    month={calendarMonth}
+                                    onMonthChange={setCalendarMonth}
+                                    modifiers={{ walk: walkDates, sitting: sittingDates, bookingSelected: selectedDates }}
+                                    modifiersClassNames={{ walk: 'rdp-day-walk', sitting: 'rdp-day-sitting', bookingSelected: 'rdp-day-selected-booking' }}
+                                    onDayClick={(date) => {
+                                        const key = format(date, 'yyyy-MM-dd');
+                                        if (bookingsByDate.has(key))
+                                            setSelectedCalendarDate(prev => prev === key ? null : key);
+                                    }}
+                                    showOutsideDays={false}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '0.8rem', color: '#9ca3af' }}>
+                                <span>🐾 Walk</span>
+                                <span>🛏️ Sitting</span>
+                            </div>
+                            {selectedCalendarDate && (() => {
+                                const dayBookings = bookingsByDate.get(selectedCalendarDate) ?? [];
+                                if (!dayBookings.length) return null;
+                                return (
+                                    <div style={{ marginTop: '16px', backgroundColor: '#1f2937', border: '1px solid #d4af37', borderRadius: '8px', padding: '12px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                            <p style={{ color: '#d4af37', fontWeight: '600', margin: 0, fontSize: '0.9rem' }}>
+                                                {format(new Date(selectedCalendarDate + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}
+                                            </p>
+                                            <button onClick={() => setSelectedCalendarDate(null)}
+                                                style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+                                        </div>
+                                        {dayBookings.map(b => (
+                                            <div key={b.id} style={{ borderLeft: `3px solid ${getBookingStatusColor(b)}`, paddingLeft: '10px', marginBottom: '10px' }}>
+                                                <p style={{ color: '#fff', fontWeight: '600', margin: '0 0 4px', fontSize: '0.875rem' }}>
+                                                    {b.service_type === 'sitting' ? '🛏️' : '🐾'} {getServiceDisplayName(b.service_type)}
+                                                </p>
+                                                <p style={{ color: '#d1d5db', margin: '0 0 2px', fontSize: '0.8rem' }}>
+                                                    {b.dog_names?.join(' & ')}
+                                                </p>
+                                                <p style={{ color: '#9ca3af', margin: '0 0 4px', fontSize: '0.8rem' }}>
+                                                    {b.service_type === 'sitting'
+                                                        ? `${format(new Date(b.start_time), 'MMM d')} → ${format(new Date(b.end_time), 'MMM d')}`
+                                                        : format(new Date(b.start_time), 'h:mm a')}
+                                                </p>
+                                                <span style={{ display: 'inline-block', backgroundColor: getBookingStatusColor(b), color: '#fff', fontSize: '0.7rem', fontWeight: '600', padding: '2px 6px', borderRadius: '10px', textTransform: 'capitalize' }}>
+                                                    {b.status}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
+
                     {/* Quick Actions */}
                     <div style={styles.card}>
                         <h3 style={{ color: "#fff", marginBottom: "16px", fontSize: "1.1rem" }}>
@@ -736,7 +866,10 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
 
                     {/* Awaiting Payment Section (flat, not grouped) */}
                     {!isLoading && !error && (() => {
-                        const awaitingPayment = bookings.filter(b => b.status === 'completed');
+                        const awaitingPayment = bookings.filter(b =>
+                            (b.status === 'completed' && (b.price_pounds ?? 0) > 0) ||
+                            (b.status === 'cancelled' && (b.cancellation_fee_pounds ?? 0) > 0)
+                        );
                         if (awaitingPayment.length === 0) return null;
                         return (
                             <div style={styles.card}>
@@ -752,8 +885,10 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                     {!isLoading && !error && (() => {
                         const historyBookings = bookings.filter(booking =>
                             booking.status === 'completed & paid' ||
-                            booking.status === 'cancelled' ||
-                            booking.status === 'no_show'
+                            booking.status === 'cancelled & paid' ||
+                            booking.status === 'no_show' ||
+                            (booking.status === 'cancelled' && (booking.cancellation_fee_pounds ?? 0) === 0) ||
+                            (booking.status === 'completed' && (booking.price_pounds ?? 0) === 0)
                         );
                         if (historyBookings.length === 0) return null;
                         return (
