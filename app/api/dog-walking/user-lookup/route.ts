@@ -1,10 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { clientIp, rateLimit, tooManyRequests } from '@/lib/rateLimit';
 
 // --- Database Connection ---
 const pool = getPool();
 
 export async function GET(request: NextRequest) {
+    // Unauthenticated by design (it is a lookup), but it returns customer details,
+    // so bulk guessing is rate limited. 20 per 15 minutes per IP.
+    const ip = clientIp(request);
+    const limit = rateLimit(`user-lookup:${ip}`, 20, 15 * 60);
+    if (!limit.allowed) {
+        console.warn(`[User Lookup] Rate limit hit from ${ip}`);
+        return tooManyRequests(limit.retryAfter);
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const phone = searchParams.get("phone");
     const email = searchParams.get("email");
@@ -53,8 +63,8 @@ export async function GET(request: NextRequest) {
         // --- Step 2: Find Their Dogs - INCLUDES image_filename ---
         console.log(`[User Lookup] Found owner: ${owner.owner_name} (ID: ${owner.id})`);
         const dogsQuery = `
-            SELECT id, dog_name, dog_breed, dog_age, image_filename 
-            FROM hunters_hounds.dogs 
+            SELECT id, dog_name, dog_breed, dog_age, dog_birthday, image_filename
+            FROM hunters_hounds.dogs
             WHERE owner_id = $1
             ORDER BY id
         `;

@@ -7,6 +7,7 @@ import { getSoloWalkPrice } from "@/lib/pricing";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { requireOwner } from '@/lib/customerAuth';
 
 // Database Connection
 const pool = getPool();
@@ -21,6 +22,11 @@ interface ModifyDogsRequest {
 }
 
 export async function POST(request: NextRequest) {
+    // Acted on any booking_id with no ownership check. Called only from the
+    // customer dashboard (BookingManager).
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     const data: ModifyDogsRequest = await request.json();
 
     // Validation
@@ -63,10 +69,10 @@ export async function POST(request: NextRequest) {
                 o.address
             FROM hunters_hounds.bookings b
             JOIN hunters_hounds.owners o ON b.owner_id = o.id
-            WHERE b.id = $1 AND b.status = 'confirmed';
+            WHERE b.id = $1 AND b.status = 'confirmed' AND b.owner_id = $2;
         `;
 
-        const bookingResult = await client.query(bookingQuery, [data.booking_id]);
+        const bookingResult = await client.query(bookingQuery, [data.booking_id, auth.ownerId]);
 
         if (bookingResult.rows.length === 0) {
             await client.query("ROLLBACK");

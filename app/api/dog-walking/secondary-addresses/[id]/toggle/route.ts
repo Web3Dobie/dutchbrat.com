@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { requireOwner } from '@/lib/customerAuth';
 
 const pool = getPool();
 
@@ -29,6 +30,9 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     const addressId = parseInt(params.id);
 
     if (isNaN(addressId)) {
@@ -64,8 +68,8 @@ export async function PATCH(
 
         // Check if address exists and get current info
         const existingCheck = await client.query(
-            "SELECT id, owner_id, address_label, is_active FROM hunters_hounds.secondary_addresses WHERE id = $1",
-            [addressId]
+            "SELECT id, owner_id, address_label, is_active FROM hunters_hounds.secondary_addresses WHERE id = $1 AND owner_id = $2",
+            [addressId, auth.ownerId]
         );
 
         if (existingCheck.rows.length === 0) {

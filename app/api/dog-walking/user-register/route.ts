@@ -3,6 +3,8 @@ import { sendTelegramNotification } from "@/lib/telegram";
 import { sendEmail } from "@/lib/emailService";
 import { generateWelcomeEmail, type WelcomeEmailData } from "@/lib/emailTemplates";
 import { getPool } from '@/lib/database';
+import { formatDogAge, formatDogBirthday } from '@/lib/dogAge';
+import { CUSTOMER_COOKIE, SESSION_COOKIE_OPTIONS, SESSION_TTL_SECONDS, signSession } from '@/lib/session';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -15,8 +17,9 @@ interface RegisterRequest {
     address: string;
     dogName: string;
     dogBreed: string;
-    dogAge: number;
-    photoSharingConsent?: boolean; // Optional, defaults to false
+    dogBirthday?: string; // YYYY-MM-01 format (month/year)
+    dogAge?: number;      // Legacy fallback
+    photoSharingConsent?: boolean;
 }
 
 // --- Main POST Function ---
@@ -30,16 +33,14 @@ export async function POST(request: NextRequest) {
         !data.email ||
         !data.address ||
         !data.dogName ||
-        !data.dogBreed ||
-        data.dogAge === undefined || data.dogAge === null
+        !data.dogBreed
     ) {
         return NextResponse.json(
-            { error: "All fields including dog's breed and age are required" },
+            { error: "All fields including dog's breed are required" },
             { status: 400 }
         );
     }
 
-    // Additional validation for data quality
     if (data.dogBreed.trim().length === 0) {
         return NextResponse.json(
             { error: "Dog's breed cannot be empty" },
@@ -47,9 +48,9 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    if (data.dogAge < 0 || data.dogAge > 30) {
+    if (!data.dogBirthday && (data.dogAge === undefined || data.dogAge === null)) {
         return NextResponse.json(
-            { error: "Dog's age must be between 0 and 30 years" },
+            { error: "Dog's birthday or age is required" },
             { status: 400 }
         );
     }
@@ -71,15 +72,16 @@ export async function POST(request: NextRequest) {
 
         // --- Step 2: Create the first Dog ---
         const dogQuery = `
-            INSERT INTO hunters_hounds.dogs (owner_id, dog_name, dog_breed, dog_age)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, dog_name, dog_breed, dog_age;
+            INSERT INTO hunters_hounds.dogs (owner_id, dog_name, dog_breed, dog_age, dog_birthday)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, dog_name, dog_breed, dog_age, dog_birthday;
         `;
         const dogValues = [
             newOwnerId,
             data.dogName,
             data.dogBreed,
-            data.dogAge,
+            data.dogBirthday ? null : (data.dogAge ?? null),
+            data.dogBirthday ?? null,
         ];
         const dogResult = await client.query(dogQuery, dogValues);
         const newDog = dogResult.rows[0];
@@ -91,6 +93,7 @@ export async function POST(request: NextRequest) {
                 dogName: data.dogName,
                 dogBreed: data.dogBreed,
                 dogAge: data.dogAge,
+                dogBirthday: data.dogBirthday,
             };
 
             await sendEmail({
@@ -120,7 +123,7 @@ export async function POST(request: NextRequest) {
 
 <b>First Dog:</b> ${data.dogName}
 <b>Breed:</b> ${data.dogBreed}
-<b>Age:</b> ${data.dogAge} years
+<b>Birthday:</b> ${data.dogBirthday ? `${formatDogBirthday(data.dogBirthday)} (${formatDogAge(data.dogBirthday)} old)` : `${data.dogAge} years (no birthday recorded)`}
 
 <i>Customer registered and welcome email sent!</i>
             `;
@@ -133,7 +136,13 @@ export async function POST(request: NextRequest) {
         await client.query("COMMIT");
 
         // --- Success Response ---
-        return NextResponse.json(
+        // The session is established here rather than relying on the client to
+        // follow up with a POST to /customer-session. Someone who has just created
+        // the account is self-evidently its owner, and the follow-up call is
+        // fire-and-forget in the UI — if it failed, the new customer would hold
+        // React state with no cookie and the next authenticated call (adding a
+        // second dog) would 401.
+        const response = NextResponse.json(
             {
                 user: {
                     owner_id: newOwnerId,
@@ -146,6 +155,14 @@ export async function POST(request: NextRequest) {
             },
             { status: 201 }
         );
+
+        response.cookies.set(
+            CUSTOMER_COOKIE,
+            signSession({ realm: 'customer', owner_id: newOwnerId }, SESSION_TTL_SECONDS),
+            SESSION_COOKIE_OPTIONS
+        );
+
+        return response;
 
     } catch (error: any) {
         await client.query("ROLLBACK");

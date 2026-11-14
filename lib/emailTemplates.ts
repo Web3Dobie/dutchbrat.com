@@ -6,6 +6,33 @@
 import { getServiceDisplayName } from './serviceTypes';
 import { formatDogAge, formatDogBirthday } from './dogAge';
 
+// HTML escaping for values that originate from customers.
+//
+// This file had no escaping at all. dog_name, dog_breed and owner_name are all
+// customer-settable and are interpolated into element text and into attributes
+// such as alt="${dog.dogName}", so a name containing a quote or a tag could
+// break out and inject markup into every email the pack receives — and into the
+// admin newsletter preview. lib/notionToEmailHtml.ts has always done this
+// correctly; this matches it.
+//
+// esc() is safe in both text and attribute position. escMultiline() additionally
+// turns newlines into <br>, for free-text fields like the walk summary — never
+// use it inside an attribute.
+function esc(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escMultiline(value: unknown): string {
+    return esc(value).replace(/\r?\n/g, '<br>');
+}
+
+
 export interface WelcomeEmailData {
     ownerName: string;
     dogName: string;
@@ -67,7 +94,10 @@ export function formatDurationForEmail(minutes: number | null, startTime?: Date,
 }
 
 export function generateWelcomeEmail(data: WelcomeEmailData): string {
-    const { ownerName, dogName, dogBreed, dogBirthday, dogAge } = data;
+    const { dogBirthday, dogAge } = data;
+    const ownerName = esc(data.ownerName);
+    const dogName = esc(data.dogName);
+    const dogBreed = esc(data.dogBreed);
     const birthdayText = dogBirthday ? formatDogBirthday(dogBirthday) : null;
     const ageText = formatDogAge(dogBirthday, dogAge);
     const dogDesc = birthdayText
@@ -172,7 +202,9 @@ export function generateWelcomeEmail(data: WelcomeEmailData): string {
 }
 
 export function generateNoShowEmail(data: NoShowEmailData): string {
-    const { ownerName, serviceType, appointmentDate, appointmentTime, dogNames } = data;
+    const { serviceType, appointmentDate, appointmentTime } = data;
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
 
     return `
     <!DOCTYPE html>
@@ -282,7 +314,9 @@ export interface PaymentReceivedEmailData {
 }
 
 export function generatePaymentReceivedEmail(data: PaymentReceivedEmailData): { subject: string; html: string } {
-    const { ownerName, dogNames, dogImageUrls, serviceType, serviceDate, reviewUrl } = data;
+    const { dogImageUrls, serviceType, serviceDate, reviewUrl } = data;
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
 
     const subject = `Review request: How did ${dogNames} enjoy their time with me`;
 
@@ -395,7 +429,9 @@ export interface PaymentInvoiceEmailData {
 }
 
 export function generatePaymentInvoiceEmail(data: PaymentInvoiceEmailData): { subject: string; html: string } {
-    const { ownerName, dogNames, services, totalAmount, paymentPreference } = data;
+    const { services, totalAmount, paymentPreference } = data;
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
 
     const periodLabel = paymentPreference === 'weekly' ? 'Weekly' :
                         paymentPreference === 'fortnightly' ? 'Fortnightly' :
@@ -511,7 +547,9 @@ export interface PaymentReminderEmailData {
 }
 
 export function generatePaymentReminderEmail(data: PaymentReminderEmailData): { subject: string; html: string } {
-    const { ownerName, dogNames, services, totalAmount } = data;
+    const { services, totalAmount } = data;
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
 
     const subject = `Payment Reminder - Hunter's Hounds - £${totalAmount.toFixed(2)}`;
 
@@ -628,7 +666,10 @@ export interface ReviewRequestEmailData {
 }
 
 export function generateReviewRequestEmail(data: ReviewRequestEmailData): { subject: string; html: string } {
-    const { ownerName, dogNames, dogImageUrls, serviceType, serviceDate, walkSummary, reviewUrl } = data;
+    const { dogImageUrls, serviceType, serviceDate, reviewUrl } = data;
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
+    const walkSummary = data.walkSummary === null ? null : escMultiline(data.walkSummary);
 
     const subject = `${dogNames} had a great time! Share your experience`;
 
@@ -739,7 +780,8 @@ export function generateReviewRequestEmail(data: ReviewRequestEmailData): { subj
 }
 
 export function generateChristmasEmail(data: ChristmasEmailData): string {
-    const { ownerName, dogNames } = data;
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
 
     return `
     <!DOCTYPE html>
@@ -907,9 +949,9 @@ export interface RecurringBookingEmailData {
 }
 
 export function generateRecurringBookingEmail(data: RecurringBookingEmailData): { subject: string; html: string } {
+    const ownerName = esc(data.ownerName);
+    const dogNames = esc(data.dogNames);
     const {
-        ownerName,
-        dogNames,
         serviceType,
         patternDescription,
         preferredTime,
@@ -1114,16 +1156,16 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
         const memberCards = newPackMembers.map(dog => `
             <div style="display: inline-block; width: 180px; text-align: center; margin: 10px; vertical-align: top;">
                 ${dog.imageFilename ? `
-                    <img src="https://hunters-hounds.london/api/dog-images/${dog.imageFilename}"
-                         alt="${dog.dogName}"
+                    <img src="https://hunters-hounds.london/api/dog-images/${esc(dog.imageFilename)}"
+                         alt="${esc(dog.dogName)}"
                          style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 10px;">
                 ` : `
                     <div style="width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #60a5fa); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center;">
                         <span style="font-size: 48px;">🐕</span>
                     </div>
                 `}
-                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${dog.dogName}</div>
-                <div style="color: #6b7280; font-size: 13px;">${dog.breed}</div>
+                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${esc(dog.dogName)}</div>
+                <div style="color: #6b7280; font-size: 13px;">${esc(dog.breed)}</div>
             </div>
         `).join('');
 
@@ -1131,7 +1173,7 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
             <div style="margin: 30px 0; padding: 25px; background-color: #f0f9ff; border-radius: 12px;">
                 <h2 style="color: #1e40af; margin: 0 0 20px 0; font-size: 20px;">🐕 Welcome to the Pack!</h2>
                 <p style="color: #4b5563; margin: 0 0 20px 0;">
-                    We're excited to welcome ${newPackMembers.length === 1 ? 'a new member' : `${newPackMembers.length} new members`} to Hunter's Hounds this month!
+                    We're excited to welcome ${newPackMembers.length === 1 ? 'a new member' : `${newPackMembers.length} new members`} to Hunter's Hounds ${content.month ? `in ${content.month}` : 'this month'}!
                 </p>
                 <div style="text-align: center;">
                     ${memberCards}
@@ -1255,24 +1297,24 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
     `;
 }
 
-function buildBirthdayHtml(dogs: NewsletterContent['birthdayDogs']): string {
+function buildBirthdayHtml(dogs: NewsletterContent['birthdayDogs'], period?: string): string {
     if (!dogs || dogs.length === 0) return '';
     const cards = dogs.map(dog => {
         const age = dog.age_years > 0 ? ` — turned ${dog.age_years}!` : '';
         return `
             <div style="display: inline-block; width: 180px; text-align: center; margin: 10px; vertical-align: top;">
                 ${dog.image_filename
-                    ? `<img src="https://hunters-hounds.london/api/dog-images/${dog.image_filename}" alt="${dog.dog_name}" style="width: 130px; height: 130px; border-radius: 50%; object-fit: cover; border: 3px solid #f59e0b; margin-bottom: 10px;">`
+                    ? `<img src="https://hunters-hounds.london/api/dog-images/${esc(dog.image_filename)}" alt="${esc(dog.dog_name)}" style="width: 130px; height: 130px; border-radius: 50%; object-fit: cover; border: 3px solid #f59e0b; margin-bottom: 10px;">`
                     : `<div style="width: 130px; height: 130px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #fbbf24); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 48px;">&#127874;</div>`
                 }
-                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${dog.dog_name}</div>
-                <div style="color: #92400e; font-size: 13px;">${dog.breed}${age}</div>
+                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${esc(dog.dog_name)}</div>
+                <div style="color: #92400e; font-size: 13px;">${esc(dog.breed)}${age}</div>
             </div>
         `;
     }).join('');
     return `
         <div style="margin: 30px 0; padding: 25px; background-color: #fffbeb; border-radius: 12px; border: 2px solid #fde68a;">
-            <h2 style="color: #92400e; margin: 0 0 8px 0; font-size: 20px;">&#127874; Birthday Pups This Month!</h2>
+            <h2 style="color: #92400e; margin: 0 0 8px 0; font-size: 20px;">&#127874; Birthday Pups ${period ? `in ${period}` : 'This Month'}!</h2>
             <p style="color: #78350f; margin: 0 0 20px 0; font-size: 15px;">
                 Wishing a very happy birthday to ${dogs.length === 1 ? 'this special pup' : 'these special pups'}!
             </p>
@@ -1298,16 +1340,16 @@ function generateNotionNewsletterEmail(content: NewsletterContent): string {
         const memberCards = newPackMembers.map(dog => `
             <div style="display: inline-block; width: 180px; text-align: center; margin: 10px; vertical-align: top;">
                 ${dog.imageFilename ? `
-                    <img src="https://hunters-hounds.london/api/dog-images/${dog.imageFilename}"
-                         alt="${dog.dogName}"
+                    <img src="https://hunters-hounds.london/api/dog-images/${esc(dog.imageFilename)}"
+                         alt="${esc(dog.dogName)}"
                          style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 10px;">
                 ` : `
                     <div style="width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #60a5fa); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center;">
                         <span style="font-size: 48px;">&#128021;</span>
                     </div>
                 `}
-                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${dog.dogName}</div>
-                <div style="color: #6b7280; font-size: 13px;">${dog.breed}</div>
+                <div style="font-weight: 600; color: #1f2937; font-size: 16px;">${esc(dog.dogName)}</div>
+                <div style="color: #6b7280; font-size: 13px;">${esc(dog.breed)}</div>
             </div>
         `).join('');
 
@@ -1315,7 +1357,7 @@ function generateNotionNewsletterEmail(content: NewsletterContent): string {
             <div style="margin: 30px 0; padding: 25px; background-color: #f0f9ff; border-radius: 12px;">
                 <h2 style="color: #1e40af; margin: 0 0 20px 0; font-size: 20px;">&#128021; Welcome to the Pack!</h2>
                 <p style="color: #4b5563; margin: 0 0 20px 0;">
-                    We're excited to welcome ${newPackMembers.length === 1 ? 'a new member' : `${newPackMembers.length} new members`} to Hunter's Hounds this month!
+                    We're excited to welcome ${newPackMembers.length === 1 ? 'a new member' : `${newPackMembers.length} new members`} to Hunter's Hounds ${content.month ? `in ${content.month}` : 'this month'}!
                 </p>
                 <div style="text-align: center;">
                     ${memberCards}
@@ -1347,7 +1389,7 @@ function generateNotionNewsletterEmail(content: NewsletterContent): string {
 
                 ${newMembersHtml}
 
-                ${content.includeBirthdays !== false ? buildBirthdayHtml(content.birthdayDogs) : ''}
+                ${content.includeBirthdays !== false ? buildBirthdayHtml(content.birthdayDogs, content.month) : ''}
             </div>
 
             <!-- Footer -->

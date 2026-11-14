@@ -1,29 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
 import { getRewardTier } from '@/lib/pricing';
+import { requireOwner } from '@/lib/customerAuth';
 
 export const dynamic = 'force-dynamic';
 
 const pool = getPool();
 
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const ownerId = searchParams.get("owner_id");
-
-    if (!ownerId) {
-        return NextResponse.json(
-            { error: "owner_id parameter is required" },
-            { status: 400 }
-        );
-    }
-
-    const ownerIdNum = parseInt(ownerId);
-    if (isNaN(ownerIdNum)) {
-        return NextResponse.json(
-            { error: "owner_id must be a valid number" },
-            { status: 400 }
-        );
-    }
+    // owner_id comes from the verified session, never the client. These endpoints
+    // previously trusted a client-supplied owner_id with no authentication.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+    const ownerIdNum = auth.ownerId;
 
     const client = await pool.connect();
 
@@ -136,12 +125,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const body = await request.json();
-    const { owner_id, booking_id } = body;
+    // owner_id comes from the verified session, never the client. These endpoints
+    // previously trusted a client-supplied owner_id with no authentication.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+    const owner_id = auth.ownerId;
 
-    if (!owner_id || !booking_id) {
+    const body = await request.json();
+    const { booking_id } = body;
+
+    if (!booking_id) {
         return NextResponse.json(
-            { error: "owner_id and booking_id are required" },
+            { error: "booking_id is required" },
             { status: 400 }
         );
     }

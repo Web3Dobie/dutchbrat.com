@@ -15,6 +15,7 @@ import {
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 import { getWalkLimitForDate } from '@/lib/walkLimit';
+import { getOwnerIdFromSession } from '@/lib/customerAuth';
 
 // --- Database Connection (for exclude_booking_id lookup) ---
 const pool = getPool();
@@ -40,7 +41,12 @@ export async function GET(request: NextRequest) {
     const dateQuery = searchParams.get("date"); // e.g., "2023-10-31"
     const serviceType = searchParams.get("service_type"); // NEW: Get service type
     const excludeBookingId = searchParams.get("exclude_booking_id"); // For rescheduling: exclude original booking
-    const ownerId = searchParams.get("owner_id"); // For extended travel time lookup
+    // Taken from the session, not the query string: ?owner_id=N previously let
+    // anyone probe another owner's travel-time preference. This endpoint must keep
+    // working for logged-out visitors browsing availability, so a missing session
+    // is not an error — it just means no per-owner preference is applied.
+    const sessionOwnerId = getOwnerIdFromSession(request);
+    const ownerId = sessionOwnerId !== null ? String(sessionOwnerId) : null;
 
     if (!dateQuery) {
         return NextResponse.json(
@@ -217,13 +223,8 @@ export async function GET(request: NextRequest) {
                 if (description.includes('Multi-day booking')) return false;
                 if (description.includes('Booking Type: Multi-Day')) return false;
 
-                // Single-day long sitting (6+ hours): has "Dog Sitting" in summary
-                if (summary.includes('Dog Sitting')) {
-                    const minutesMatch = description.match(/Duration:\s*(\d+)\s*minutes/i);
-                    const hoursMatch = description.match(/Duration:\s*(\d+)\s*hours?/i);
-                    if (minutesMatch && parseInt(minutesMatch[1], 10) >= 360) return false;
-                    if (hoursMatch && parseInt(hoursMatch[1], 10) >= 6) return false;
-                }
+                // Single-day sittings (any duration) DO block walks — Hunter is physically present
+                // with that dog. Only multi-day sittings are exempt (dog lives at client's home).
 
                 return true; // Include everything else (blocks walks)
             })

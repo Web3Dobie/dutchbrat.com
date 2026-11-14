@@ -1,37 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdminCredentials } from '@/lib/auth';
+import { ADMIN_COOKIE, SESSION_COOKIE_OPTIONS, SESSION_TTL_SECONDS, signSession } from '@/lib/session';
+import { clientIp, rateLimit, tooManyRequests } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
-// Verify admin credentials from environment variables only (no hardcoded fallbacks)
-function verifyAdminCredentials(username: string, password: string): boolean {
-    // Primary admin credentials (required)
-    if (!process.env.HUNTER_ADMIN_USER || !process.env.HUNTER_ADMIN_PASSWORD) {
-        console.error('Missing required environment variables: HUNTER_ADMIN_USER and/or HUNTER_ADMIN_PASSWORD');
-        return false;
-    }
-
-    const validCredentials = [
-        {
-            username: process.env.HUNTER_ADMIN_USER,
-            password: process.env.HUNTER_ADMIN_PASSWORD
-        }
-    ];
-
-    // Optional: Secondary admin credentials
-    if (process.env.HUNTER_ADMIN_USER_2 && process.env.HUNTER_ADMIN_PASSWORD_2) {
-        validCredentials.push({
-            username: process.env.HUNTER_ADMIN_USER_2,
-            password: process.env.HUNTER_ADMIN_PASSWORD_2
-        });
-    }
-
-    return validCredentials.some(cred =>
-        cred.username === username && cred.password === password
-    );
-}
+// 10 attempts per 15 minutes per IP. Before this there was no limit at all.
+const MAX_ATTEMPTS = 10;
+const WINDOW_SECONDS = 15 * 60;
 
 export async function POST(request: NextRequest) {
     try {
+        const ip = clientIp(request);
+        const limit = rateLimit(`admin-auth:${ip}`, MAX_ATTEMPTS, WINDOW_SECONDS);
+        if (!limit.allowed) {
+            console.warn(`[Admin Auth] Rate limit hit from ${ip}`);
+            return tooManyRequests(limit.retryAfter);
+        }
+
         const { username, password } = await request.json();
 
         if (!username || !password) {
@@ -41,30 +27,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const isValid = verifyAdminCredentials(username, password);
+        const matchedUser = verifyAdminCredentials(username, password);
 
-        if (isValid) {
-            const response = NextResponse.json({ success: true });
-            // Set dog-walking admin specific cookie
-            response.cookies.set('dog-walking-admin-auth', 'authenticated', {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7, // 7 days
-                path: '/'
-            });
-            return response;
-        } else {
-            return NextResponse.json(
-                { error: 'Invalid credentials' },
-                { status: 401 }
-            );
+        if (!matchedUser) {
+            console.warn(`[Admin Auth] Failed login for '${username}' from ${ip}`);
+            return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
         }
+
+        // The cookie is now a signed token rather than the literal 'authenticated',
+        // so it cannot be forged without SESSION_SECRET.
+        const token = signSession({ realm: 'admin', username: matchedUser }, SESSION_TTL_SECONDS);
+
+        const response = NextResponse.json({ success: true });
+        response.cookies.set(ADMIN_COOKIE, token, SESSION_COOKIE_OPTIONS);
+        console.log(`[Admin Auth] Session issued for '${matchedUser}' from ${ip}`);
+        return response;
     } catch (error) {
         console.error('Dog-walking admin auth error:', error);
-        return NextResponse.json(
-            { error: 'Authentication failed' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Authentication failed' }, { status: 500 });
     }
 }

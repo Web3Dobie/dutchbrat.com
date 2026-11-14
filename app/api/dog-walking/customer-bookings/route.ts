@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { requireOwner } from '@/lib/customerAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,24 +8,12 @@ export const dynamic = 'force-dynamic';
 const pool = getPool();
 
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const ownerId = searchParams.get("owner_id");
-
-    // Validation
-    if (!ownerId) {
-        return NextResponse.json(
-            { error: "owner_id parameter is required" },
-            { status: 400 }
-        );
-    }
-
-    const ownerIdNum = parseInt(ownerId);
-    if (isNaN(ownerIdNum)) {
-        return NextResponse.json(
-            { error: "owner_id must be a valid number" },
-            { status: 400 }
-        );
-    }
+    // owner_id comes from the verified session, never from the query string.
+    // This endpoint previously accepted ?owner_id=N unauthenticated, so walking
+    // the integers returned every client's full booking history.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+    const ownerIdNum = auth.ownerId;
 
     const client = await pool.connect();
 
@@ -40,6 +29,7 @@ export async function GET(request: NextRequest) {
                 b.booking_type,
                 b.status,
                 b.price_pounds,
+                b.cancellation_fee_pounds,
                 b.walk_summary,
                 b.created_at,
                 b.series_id,
@@ -81,6 +71,7 @@ export async function GET(request: NextRequest) {
             duration_minutes: row.duration_minutes,
             status: row.status,
             price_pounds: row.price_pounds ? parseFloat(row.price_pounds) : null,
+            cancellation_fee_pounds: row.cancellation_fee_pounds ? parseFloat(row.cancellation_fee_pounds) : null,
             walk_summary: row.walk_summary,
             booking_type: row.booking_type,
             note_count: row.note_count || 0,

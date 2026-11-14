@@ -1,30 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from '@/lib/database';
+import { getOwnerIdFromSession } from '@/lib/customerAuth';
 
 export const dynamic = "force-dynamic";
-
-const COOKIE_NAME = "dog-walking-customer-session";
 
 // Database Connection
 const pool = getPool();
 
-// Helper to get owner_id from session cookie
-function getOwnerIdFromSession(request: NextRequest): number | null {
-    const sessionCookie = request.cookies.get(COOKIE_NAME);
-
-    if (!sessionCookie?.value) {
-        return null;
-    }
-
-    try {
-        const sessionData = JSON.parse(
-            Buffer.from(sessionCookie.value, "base64").toString("utf-8")
-        );
-        return sessionData.owner_id || null;
-    } catch {
-        return null;
-    }
-}
+// The owner_id now comes from the shared, signature-verifying helper. This file
+// used to carry its own copy that base64-decoded the cookie; left in place it
+// would reject every signed token and break the gallery outright.
 
 // GET - Fetch customer's media grouped by month
 export async function GET(request: NextRequest) {

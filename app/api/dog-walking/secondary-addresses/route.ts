@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { requireOwner } from '@/lib/customerAuth';
 
 // Database connection
 const pool = getPool();
@@ -36,15 +37,11 @@ interface CreateAddressRequest {
 
 // GET - List secondary addresses for a customer
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const owner_id = searchParams.get("owner_id");
-
-    if (!owner_id || isNaN(parseInt(owner_id))) {
-        return NextResponse.json(
-            { error: "Valid owner_id parameter is required" },
-            { status: 400 }
-        );
-    }
+    // owner_id comes from the verified session, never the client. These endpoints
+    // previously trusted a client-supplied owner_id with no authentication.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+    const owner_id = String(auth.ownerId);
 
     const client = await pool.connect();
 
@@ -95,6 +92,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new secondary address
 export async function POST(request: NextRequest) {
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     let requestData: CreateAddressRequest;
 
     try {
@@ -106,11 +106,15 @@ export async function POST(request: NextRequest) {
         );
     }
 
+    // Overwrite any client-supplied owner_id with the session's. An address could
+    // otherwise be attached to someone else's account.
+    requestData.owner_id = auth.ownerId;
+
     // Validation
-    if (!requestData.owner_id || !requestData.address || !requestData.address_label ||
+    if (!requestData.address || !requestData.address_label ||
         !requestData.contact_name || !requestData.contact_phone) {
         return NextResponse.json(
-            { error: "Missing required fields: owner_id, address, address_label, contact_name, contact_phone" },
+            { error: "Missing required fields: address, address_label, contact_name, contact_phone" },
             { status: 400 }
         );
     }

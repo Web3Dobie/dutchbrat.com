@@ -13,6 +13,7 @@ import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEve
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 import { getWalkLimitForDate } from '@/lib/walkLimit';
+import { requireOwner } from '@/lib/customerAuth';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -21,9 +22,18 @@ const pool = getPool();
 const calendar = getCalendar();
 
 export async function POST(request: NextRequest) {
+    // Was unauthenticated with ownerId taken from the body, so anyone could create
+    // bookings on any client's account — and trigger the confirmation emails and
+    // Telegram notifications that go with them. Admin-created bookings use
+    // admin/create-booking, so a customer session is the right requirement here.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     try {
         const body = await request.json();
         console.log("Booking request body:", body);
+        // The session decides the owner; any ownerId in the body is ignored.
+        body.ownerId = auth.ownerId;
         const {
             ownerId,
             dog_id_1,
@@ -53,6 +63,27 @@ export async function POST(request: NextRequest) {
                 console.log(`[Booking] Walk limit reached on ${bookingDate}: ${limitResult.currentWalkCount}/${limitResult.walkLimit}`);
                 return NextResponse.json(
                     { error: `Walk limit reached for this date (${limitResult.currentWalkCount}/${limitResult.walkLimit} during active sitting). Contact admin for override.` },
+                    { status: 409 }
+                );
+            }
+        }
+
+        // Meet & Greet is a one-off introduction for new clients. Block a second one
+        // regardless of whether the client registered before or during booking.
+        // Cancelled ones don't count, so a cancelled intro can be rebooked.
+        if (normalizedServiceType === 'meetgreet' && ownerId) {
+            const existingMeetGreet = await pool.query(
+                `SELECT id, start_time FROM hunters_hounds.bookings
+                 WHERE owner_id = $1
+                   AND service_type = 'meetgreet'
+                   AND status <> 'cancelled'
+                 LIMIT 1`,
+                [ownerId]
+            );
+            if (existingMeetGreet.rows.length > 0) {
+                console.log(`[Booking] Duplicate meet & greet blocked for owner ${ownerId} (existing booking #${existingMeetGreet.rows[0].id})`);
+                return NextResponse.json(
+                    { error: "A meet & greet has already been booked for this account. Please choose a walk service, or get in touch if you need another introduction." },
                     { status: 409 }
                 );
             }
@@ -111,8 +142,14 @@ export async function POST(request: NextRequest) {
                 timeMax: blockCheckEnd.toISOString(),
                 singleEvents: true,
             });
+            // Use the booking date in London time (YYYY-MM-DD) for comparison
+            const bookingDateStr = new TZDate(new Date(start_time), "Europe/London").toISOString().slice(0, 10);
             const hasHolidayBlock = (blockCheckRes.data.items || []).some(event => {
                 if (!event.start?.date || !event.end?.date) return false;
+                // Compare date strings directly — avoids BST/UTC overlap false positives
+                // Google all-day events use exclusive end date, so event covers [start.date, end.date)
+                if (event.start.date > bookingDateStr) return false;   // starts after booking date
+                if (event.end.date <= bookingDateStr) return false;    // ends on or before booking date
                 const summary = event.summary || '';
                 const description = event.description || '';
                 if (summary.includes('Multi-Day Dog Sitting')) return false;
@@ -399,7 +436,7 @@ export async function POST(request: NextRequest) {
                         Cancel Booking
                     </a>
                     <br><br>
-                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. For multi-day bookings, please provide as much notice as possible.</p>
+                    <p><strong>Cancellation Policy:</strong> Walks and day visits can be cancelled at any time, even on the same day, with no fee. <strong>Multi-day sittings longer than 2 days require 7 days' notice</strong> — cancelled inside that window, a 50% fee applies.</p>
                     <p>Thank you!</p>
                 `;
             } else if (booking_type === 'single_day_sitting') {
@@ -452,7 +489,7 @@ export async function POST(request: NextRequest) {
                         Cancel Booking
                     </a>
                     <br><br>
-                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p><strong>Cancellation Policy:</strong> Walks and day visits can be cancelled at any time, even on the same day, with no fee. <strong>Multi-day sittings longer than 2 days require 7 days' notice</strong> — cancelled inside that window, a 50% fee applies.</p>
                     <p>Thank you!</p>
                 `;
             } else {
@@ -502,7 +539,7 @@ export async function POST(request: NextRequest) {
                         Cancel Booking
                     </a>
                     <br><br>
-                    <p><strong>Cancellation Policy:</strong> You can cancel your booking at any time with no fee. Please contact us at 07932749772 or use the cancellation link above.</p>
+                    <p><strong>Cancellation Policy:</strong> Walks and day visits can be cancelled at any time, even on the same day, with no fee. <strong>Multi-day sittings longer than 2 days require 7 days' notice</strong> — cancelled inside that window, a 50% fee applies.</p>
                     <p>Thank you!</p>
                 `;
             }

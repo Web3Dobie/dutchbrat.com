@@ -9,6 +9,7 @@ import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEve
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 import { getWalkLimitForDate } from '@/lib/walkLimit';
+import { requireOwner } from '@/lib/customerAuth';
 
 // Database Connection
 const pool = getPool();
@@ -20,9 +21,15 @@ interface RescheduleRequest {
     booking_id: number;
     new_start_time: string; // ISO string
     new_end_time: string;   // ISO string
+    new_service_type?: string; // optional: change service type (e.g. 'solo' → 'quick')
 }
 
 export async function POST(request: NextRequest) {
+    // Rescheduled any booking_id with no ownership check. Called only from the
+    // customer dashboard (BookingManager).
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     const data: RescheduleRequest = await request.json();
 
     // Validation
@@ -92,12 +99,12 @@ export async function POST(request: NextRequest) {
             JOIN hunters_hounds.owners o ON b.owner_id = o.id
             LEFT JOIN hunters_hounds.dogs d1 ON b.dog_id_1 = d1.id
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
-            WHERE b.id = $1 AND b.status = 'confirmed'
+            WHERE b.id = $1 AND b.status = 'confirmed' AND b.owner_id = $2
             GROUP BY b.id, b.service_type, b.booking_type, b.start_time, b.end_time, b.duration_minutes,
                      b.status, b.price_pounds, b.google_event_id, o.owner_name, o.phone, o.email, o.address;
         `;
 
-        const bookingResult = await client.query(bookingQuery, [data.booking_id]);
+        const bookingResult = await client.query(bookingQuery, [data.booking_id, auth.ownerId]);
 
         if (bookingResult.rows.length === 0) {
             await client.query("ROLLBACK");
@@ -109,8 +116,11 @@ export async function POST(request: NextRequest) {
 
         const booking = bookingResult.rows[0];
 
+        // Resolve effective service type (may be changing)
+        const newServiceType = data.new_service_type || booking.service_type;
+
         // Walk limit check during multi-day sitting (exclude the booking being rescheduled from count)
-        const serviceTypeLower = (booking.service_type || '').toLowerCase();
+        const serviceTypeLower = (newServiceType || '').toLowerCase();
         if (serviceTypeLower === 'solo' || serviceTypeLower === 'quick') {
             const targetDate = new Date(data.new_start_time).toISOString().split('T')[0];
             const limitResult = await getWalkLimitForDate(pool, targetDate, data.booking_id);
@@ -132,8 +142,11 @@ export async function POST(request: NextRequest) {
                 timeMax: endOfDay(rescheduleDate).toISOString(),
                 singleEvents: true,
             });
+            const rescheduleDateStr = new TZDate(rescheduleDate, "Europe/London").toISOString().slice(0, 10);
             const hasHolidayBlock = (blockCheckRes.data.items || []).some(event => {
                 if (!event.start?.date || !event.end?.date) return false;
+                if (event.start.date > rescheduleDateStr) return false;
+                if (event.end.date <= rescheduleDateStr) return false;
                 const summary = event.summary || '';
                 const description = event.description || '';
                 if (summary.includes('Multi-Day Dog Sitting')) return false;
@@ -195,16 +208,10 @@ export async function POST(request: NextRequest) {
             if (reschedulingIsSitting && isWalk) return false;
 
             if (isSitting) {
-                // Calculate duration in hours
-                const startTime = new Date(row.start_time);
-                const endTime = new Date(row.end_time);
-                const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-
-                // Long sittings (6+ hours) don't block walks
-                if (durationHours >= 6) {
-                    console.log(`Allowing coexistence: booking ${row.id} is a ${durationHours}h sitting, walks can coexist`);
-                    return false;
-                }
+                // Single-day sittings block walks regardless of duration — Hunter is physically
+                // present with that dog. Only multi-day sittings (dog lives at client's home)
+                // are exempt, and those are already filtered above via `reschedulingIsSitting`.
+                // Do NOT add a duration-based exemption here.
             }
 
             return true; // This is a real conflict
@@ -227,13 +234,14 @@ export async function POST(request: NextRequest) {
         const newDurationMinutes = Math.round((newEndTime.getTime() - newStartTime.getTime()) / (1000 * 60));
         const durationToStore = booking.booking_type === 'single' ? newDurationMinutes : null;
 
-        // 1. Update booking in database (removed updated_at reference)
+        // 1. Update booking in database
         const updateQuery = `
-            UPDATE hunters_hounds.bookings 
-            SET 
+            UPDATE hunters_hounds.bookings
+            SET
                 start_time = $2,
                 end_time = $3,
-                duration_minutes = $4
+                duration_minutes = $4,
+                service_type = $5
             WHERE id = $1;
         `;
 
@@ -241,11 +249,12 @@ export async function POST(request: NextRequest) {
             data.booking_id,
             data.new_start_time,
             data.new_end_time,
-            durationToStore
+            durationToStore,
+            newServiceType,
         ]);
 
         // 2. Update Google Calendar event
-        const serviceDisplayName = getServiceDisplayName(booking.service_type);
+        const serviceDisplayName = getServiceDisplayName(newServiceType);
         const dogNames = booking.dog_names?.join(" & ") || "dogs";
         let calendarUpdated = false;
 
@@ -254,7 +263,7 @@ export async function POST(request: NextRequest) {
                 // Generate standardized calendar event using shared utility
                 const isMultiDay = booking.booking_type === 'multi_day';
                 const calendarEventData: CalendarEventData = {
-                    service_type: serviceDisplayName,
+                    service_type: serviceDisplayName, // already uses newServiceType via getServiceDisplayName
                     dogNames,
                     ownerName: booking.owner_name,
                     phone: booking.phone,
@@ -294,30 +303,35 @@ export async function POST(request: NextRequest) {
         const newFormattedDate = format(new TZDate(newStartTime, "Europe/London"), "EEEE, MMMM d, yyyy");
         const newFormattedTime = format(new TZDate(newStartTime, "Europe/London"), "h:mm a");
 
+        const serviceChanged = newServiceType !== booking.service_type;
+        const oldServiceDisplayName = getServiceDisplayName(booking.service_type);
+
         try {
-            const emailSubject = `Booking Rescheduled - ${serviceDisplayName}`;
+            const emailSubject = `Booking Updated - ${serviceDisplayName}`;
             const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #059669;">Booking Rescheduled</h2>
-                    
+                    <h2 style="color: #059669;">Booking Updated</h2>
+
                     <p>Dear ${booking.owner_name},</p>
-                    
-                    <p>Your booking has been successfully rescheduled:</p>
-                    
+
+                    <p>Your booking has been successfully updated:</p>
+
                     <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                         <h3 style="margin-top: 0; color: #374151;">Updated Booking Details</h3>
-                        <p><strong>Service:</strong> ${serviceDisplayName}</p>
+                        <p><strong>Service:</strong> ${serviceDisplayName} (${newDurationMinutes} min)</p>
                         <p><strong>New Date:</strong> ${newFormattedDate}</p>
                         <p><strong>New Time:</strong> ${newFormattedTime}</p>
                         <p><strong>Dogs:</strong> ${dogNames}</p>
                         ${booking.price_pounds ? `<p><strong>Price:</strong> £${parseFloat(booking.price_pounds).toFixed(2)}</p>` : ''}
                     </div>
-                    
+
                     <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                        <p style="margin: 0; color: #92400e;"><strong>Previous booking time:</strong> ${oldFormattedDate} at ${oldFormattedTime}</p>
+                        <p style="margin: 0; color: #92400e;">
+                            <strong>Previous booking:</strong> ${oldServiceDisplayName} on ${oldFormattedDate} at ${oldFormattedTime}
+                        </p>
                     </div>
-                    
-                    <p>Please make note of the new date and time. We look forward to seeing you and ${dogNames}!</p>
+
+                    <p>Please make note of the new details. We look forward to seeing you and ${dogNames}!</p>
                     
                     <p>If you need to make any further changes, please contact us as soon as possible.</p>
                     
@@ -342,11 +356,11 @@ export async function POST(request: NextRequest) {
         // 4. Send Telegram notification to business owner
         try {
             const telegramMessage = `
-📅 **BOOKING RESCHEDULED** (ID: ${data.booking_id})
+📅 **BOOKING UPDATED** (ID: ${data.booking_id})
 
 **Customer:** ${booking.owner_name}
 **Phone:** ${booking.phone}
-**Service:** ${serviceDisplayName}
+${serviceChanged ? `**Service:** ${oldServiceDisplayName} → ${serviceDisplayName} (${newDurationMinutes} min)` : `**Service:** ${serviceDisplayName} (${newDurationMinutes} min)`}
 
 **OLD TIME:** ${oldFormattedDate} at ${oldFormattedTime}
 **NEW TIME:** ${newFormattedDate} at ${newFormattedTime}

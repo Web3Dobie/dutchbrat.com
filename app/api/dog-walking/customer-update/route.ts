@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { requireOwner } from '@/lib/customerAuth';
 
 // Database Connection
 const pool = getPool();
@@ -21,6 +22,12 @@ interface UpdateCustomerRequest {
 }
 
 export async function PUT(request: NextRequest) {
+    // Previously identified the account purely by a body owner_id plus a matching
+    // email or phone. The verification check below is kept as defence in depth, but
+    // the account acted on is now the session's.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     let requestData: UpdateCustomerRequest;
 
     try {
@@ -32,11 +39,12 @@ export async function PUT(request: NextRequest) {
         );
     }
 
-    const { owner_id, verification_email, verification_phone } = requestData;
+    const owner_id = auth.ownerId;
+    const { verification_email, verification_phone } = requestData;
 
-    if (!owner_id || (!verification_email && !verification_phone)) {
+    if (!verification_email && !verification_phone) {
         return NextResponse.json(
-            { error: "owner_id and either verification_email or verification_phone are required" },
+            { error: "Either verification_email or verification_phone are required" },
             { status: 400 }
         );
     }

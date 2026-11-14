@@ -1,10 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { clientIp, rateLimit, tooManyRequests } from '@/lib/rateLimit';
 
 // Database Connection
 const pool = getPool();
 
+// 20 lookups per 15 minutes per IP.
+//
+// This endpoint is unauthenticated by design — supplying an email or phone IS the
+// login step. But a match returns the client's full record (address, phone,
+// partner details, dogs), so without a limit it could be used to harvest clients
+// by guessing identifiers in bulk. Knowing an exact email or phone is a real
+// barrier, unlike the integer enumeration that used to work on other endpoints;
+// rate limiting makes guessing at scale impractical. Proper identity proof (an
+// emailed code) is the remaining step.
+const MAX_LOOKUPS = 20;
+const WINDOW_SECONDS = 15 * 60;
+
 export async function GET(request: NextRequest) {
+    const ip = clientIp(request);
+    const limit = rateLimit(`customer-lookup:${ip}`, MAX_LOOKUPS, WINDOW_SECONDS);
+    if (!limit.allowed) {
+        console.warn(`[Customer Lookup] Rate limit hit from ${ip}`);
+        return tooManyRequests(limit.retryAfter);
+    }
+
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get("phone");
     const email = searchParams.get("email");
@@ -38,6 +58,14 @@ export async function GET(request: NextRequest) {
                     o.partner_email,
                     o.partner_phone,
                     o.payment_preference,
+                    -- A meet & greet is a one-off for new clients. A cancelled one
+                    -- doesn't count, so they can rebook it.
+                    EXISTS (
+                        SELECT 1 FROM hunters_hounds.bookings mg
+                        WHERE mg.owner_id = o.id
+                          AND mg.service_type = 'meetgreet'
+                          AND mg.status <> 'cancelled'
+                    ) AS has_had_meetgreet,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -45,6 +73,7 @@ export async function GET(request: NextRequest) {
                                 'dog_name', d.dog_name,
                                 'dog_breed', d.dog_breed,
                                 'dog_age', d.dog_age,
+                                'dog_birthday', d.dog_birthday,
                                 'image_filename', d.image_filename
                             )
                             ORDER BY d.id
@@ -73,6 +102,14 @@ export async function GET(request: NextRequest) {
                     o.partner_email,
                     o.partner_phone,
                     o.payment_preference,
+                    -- A meet & greet is a one-off for new clients. A cancelled one
+                    -- doesn't count, so they can rebook it.
+                    EXISTS (
+                        SELECT 1 FROM hunters_hounds.bookings mg
+                        WHERE mg.owner_id = o.id
+                          AND mg.service_type = 'meetgreet'
+                          AND mg.status <> 'cancelled'
+                    ) AS has_had_meetgreet,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -80,6 +117,7 @@ export async function GET(request: NextRequest) {
                                 'dog_name', d.dog_name,
                                 'dog_breed', d.dog_breed,
                                 'dog_age', d.dog_age,
+                                'dog_birthday', d.dog_birthday,
                                 'image_filename', d.image_filename
                             )
                             ORDER BY d.id
@@ -143,6 +181,7 @@ export async function GET(request: NextRequest) {
                 partner_email: customer.partner_email,
                 partner_phone: customer.partner_phone,
                 payment_preference: customer.payment_preference,
+                has_had_meetgreet: customer.has_had_meetgreet,
                 dogs: customer.dogs || []
             }
         });

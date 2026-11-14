@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { requireOwner } from '@/lib/customerAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,14 @@ export const dynamic = 'force-dynamic';
 const pool = getPool();
 
 export async function GET(request: NextRequest) {
+    // This endpoint returns the owner's name, phone, email and HOME ADDRESS. It
+    // had no authentication at all, so walking id=1..1120 dumped the address book
+    // for every client. It is only ever called from the customer dashboard
+    // (BookingManager), so it now requires a session AND that the booking belong
+    // to that session's owner.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const bookingId = searchParams.get("id");
 
@@ -54,26 +63,27 @@ export async function GET(request: NextRequest) {
                         'id', dogs.id,
                         'dog_name', dogs.dog_name,
                         'dog_breed', dogs.dog_breed,
-                        'dog_age', dogs.dog_age
+                        'dog_age', dogs.dog_age,
+                        'dog_birthday', dogs.dog_birthday
                     )
                 ) FILTER (WHERE dogs.id IS NOT NULL) as dogs
             FROM hunters_hounds.bookings b
             JOIN hunters_hounds.owners o ON b.owner_id = o.id
             LEFT JOIN (
                 -- Get all dogs for this booking (both dog_id_1 and dog_id_2)
-                SELECT d.id, d.dog_name, d.dog_breed, d.dog_age, b2.id as booking_id
+                SELECT d.id, d.dog_name, d.dog_breed, d.dog_age, d.dog_birthday, b2.id as booking_id
                 FROM hunters_hounds.dogs d
                 JOIN hunters_hounds.bookings b2 ON (d.id = b2.dog_id_1 OR d.id = b2.dog_id_2)
                 WHERE b2.id = $1
             ) dogs ON dogs.booking_id = b.id
-            WHERE b.id = $1
+            WHERE b.id = $1 AND b.owner_id = $2
             GROUP BY
                 b.id, b.service_type, b.start_time, b.end_time, b.duration_minutes,
                 b.status, b.price_pounds, b.google_event_id, b.created_at, b.updated_at,
                 b.owner_id, o.owner_name, o.phone, o.email, o.address;
         `;
 
-        const result = await client.query(query, [bookingIdNum]);
+        const result = await client.query(query, [bookingIdNum, auth.ownerId]);
 
         if (result.rows.length === 0) {
             return NextResponse.json(
@@ -105,13 +115,13 @@ export async function GET(request: NextRequest) {
 
         // Fetch ALL dogs belonging to the owner (for modify dogs feature)
         const ownerDogsQuery = `
-            SELECT d.id, d.dog_name, d.dog_breed, d.dog_age
+            SELECT d.id, d.dog_name, d.dog_breed, d.dog_age, d.dog_birthday
             FROM hunters_hounds.dogs d
             JOIN hunters_hounds.bookings b ON b.owner_id = d.owner_id
-            WHERE b.id = $1
+            WHERE b.id = $1 AND b.owner_id = $2
             ORDER BY d.id;
         `;
-        const ownerDogsResult = await client.query(ownerDogsQuery, [bookingIdNum]);
+        const ownerDogsResult = await client.query(ownerDogsQuery, [bookingIdNum, auth.ownerId]);
 
         return NextResponse.json({
             success: true,

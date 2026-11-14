@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ADMIN_COOKIE, SESSION_COOKIE_OPTIONS } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
     const response = NextResponse.json({ success: true });
-
-    // Clear the auth cookie
-    response.cookies.set('dog-walking-admin-auth', '', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 0, // Expire immediately
-        path: '/'
-    });
-
+    response.cookies.set(ADMIN_COOKIE, '', { ...SESSION_COOKIE_OPTIONS, maxAge: 0 });
     return response;
 }

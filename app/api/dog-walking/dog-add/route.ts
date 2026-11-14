@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sendTelegramNotification } from "@/lib/telegram";
 import { getPool } from '@/lib/database';
+import { formatDogAge, formatDogBirthday } from '@/lib/dogAge';
+import { requireOwner } from '@/lib/customerAuth';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -9,29 +11,34 @@ const pool = getPool();
 interface AddDogRequest {
     ownerId: number;
     dogName: string;
-    dogBreed: string;  // Remove the ? to make it required
-    dogAge: number;    // Remove the ? to make it required
+    dogBreed: string;
+    dogBirthday?: string; // YYYY-MM-01 format (month/year)
+    dogAge?: number;      // Legacy fallback
 }
 
 // --- Main POST Function ---
 
 export async function POST(request: NextRequest) {
+    // Was completely unauthenticated with ownerId taken from the body, so anyone
+    // could attach a dog to any client's account. dog_name is also interpolated
+    // into outgoing emails, which made this the injection point for the stored
+    // XSS in lib/emailTemplates.ts.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+
     const data: AddDogRequest = await request.json();
 
+    // The session decides the owner; any ownerId in the body is ignored.
+    data.ownerId = auth.ownerId;
+
     // --- Enhanced Data Validation ---
-    if (
-        !data.ownerId ||
-        !data.dogName ||
-        !data.dogBreed ||     // NEW: Required validation
-        data.dogAge === undefined || data.dogAge === null // NEW: Required validation
-    ) {
+    if (!data.dogName || !data.dogBreed) {
         return NextResponse.json(
-            { error: "Owner ID, dog name, breed, and age are all required" },
+            { error: "Dog name and breed are both required" },
             { status: 400 }
         );
     }
 
-    // Additional validation for data quality
     if (data.dogBreed.trim().length === 0) {
         return NextResponse.json(
             { error: "Dog's breed cannot be empty" },
@@ -39,9 +46,9 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    if (data.dogAge < 0 || data.dogAge > 30) {
+    if (!data.dogBirthday && (data.dogAge === undefined || data.dogAge === null)) {
         return NextResponse.json(
-            { error: "Dog's age must be between 0 and 30 years" },
+            { error: "Dog's birthday or age is required" },
             { status: 400 }
         );
     }
@@ -49,16 +56,17 @@ export async function POST(request: NextRequest) {
     try {
         // --- Insert the new Dog (UPDATED - no null values) ---
         const dogQuery = `
-            INSERT INTO hunters_hounds.dogs (owner_id, dog_name, dog_breed, dog_age)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, dog_name, dog_breed, dog_age;
+            INSERT INTO hunters_hounds.dogs (owner_id, dog_name, dog_breed, dog_age, dog_birthday)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, dog_name, dog_breed, dog_age, dog_birthday;
         `;
 
         const dogValues = [
             data.ownerId,
             data.dogName,
-            data.dogBreed,  // Remove || null
-            data.dogAge,    // Remove || null
+            data.dogBreed,
+            data.dogBirthday ? null : (data.dogAge ?? null),
+            data.dogBirthday ?? null,
         ];
 
         const dogResult = await pool.query(dogQuery, dogValues);
@@ -83,7 +91,7 @@ export async function POST(request: NextRequest) {
         
         <b>New Dog:</b> ${data.dogName}
         <b>Breed:</b> ${data.dogBreed}
-        <b>Age:</b> ${data.dogAge} years
+        <b>Birthday:</b> ${data.dogBirthday ? `${formatDogBirthday(data.dogBirthday)} (${formatDogAge(data.dogBirthday)} old)` : `${data.dogAge} years (no birthday recorded)`}
         
         <i>Customer added a new dog to their account.</i>
         `;

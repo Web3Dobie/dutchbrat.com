@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { requireOwner } from '@/lib/customerAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,17 +10,21 @@ const pool = getPool();
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const bookingId = searchParams.get("booking_id");
-    const ownerId = searchParams.get("owner_id");
 
-    if (!bookingId || !ownerId) {
+    // owner_id comes from the verified session, never the client. These endpoints
+    // previously trusted a client-supplied owner_id with no authentication.
+    const auth = requireOwner(request);
+    if ('response' in auth) return auth.response;
+    const ownerIdNum = auth.ownerId;
+
+    if (!bookingId) {
         return NextResponse.json(
-            { error: "booking_id and owner_id parameters are required" },
+            { error: "booking_id parameter is required" },
             { status: 400 }
         );
     }
 
     const bookingIdNum = parseInt(bookingId);
-    const ownerIdNum = parseInt(ownerId);
 
     if (isNaN(bookingIdNum) || isNaN(ownerIdNum)) {
         return NextResponse.json(
