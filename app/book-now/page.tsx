@@ -16,11 +16,13 @@ interface User {
     phone: string;
     email: string;
     address: string;
+    has_had_meetgreet?: boolean;
     dogs: Array<{
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }>;
 }
 
@@ -95,6 +97,7 @@ function HuntersHoundsBooking() {
               phone: data.customer.phone,
               email: data.customer.email,
               address: data.customer.address,
+              has_had_meetgreet: data.customer.has_had_meetgreet,
               dogs: data.customer.dogs || []
             };
 
@@ -134,6 +137,7 @@ function HuntersHoundsBooking() {
               phone: sessionData.customer.phone,
               email: sessionData.customer.email,
               address: sessionData.customer.address,
+              has_had_meetgreet: sessionData.customer.has_had_meetgreet,
               dogs: sessionData.customer.dogs || []
             };
 

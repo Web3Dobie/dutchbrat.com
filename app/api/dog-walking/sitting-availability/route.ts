@@ -17,6 +17,7 @@ import {
     TZDate
 } from "@date-fns/tz";
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
+import { getPool } from '@/lib/database';
 import type { calendar_v3 } from 'googleapis';
 
 // --- Configuration ---
@@ -29,6 +30,9 @@ const DOG_SITTING_END_HOUR = 24;    // 24:00 (end of day)
 
 // --- Google Calendar ---
 const calendar = getCalendar();
+
+// --- Database Connection ---
+const pool = getPool();
 
 interface TimeRange {
     start: Date;
@@ -73,6 +77,23 @@ async function getBusyEvents(startDate: Date, endDate: Date) {
     return res.data.items || [];
 }
 
+// Cross-check DB: returns event IDs that belong to cancelled bookings.
+// Guards against Google Calendar deletion failures leaving stale events.
+async function getCancelledEventIds(eventIds: string[]): Promise<Set<string>> {
+    if (eventIds.length === 0) return new Set();
+    const client = await pool.connect();
+    try {
+        const result = await client.query(
+            `SELECT google_event_id FROM hunters_hounds.bookings
+             WHERE google_event_id = ANY($1) AND status = 'cancelled'`,
+            [eventIds]
+        );
+        return new Set(result.rows.map((r: { google_event_id: string }) => r.google_event_id));
+    } finally {
+        client.release();
+    }
+}
+
 // Function to check single day availability
 async function checkSingleDayAvailability(date: string): Promise<AvailabilityResult> {
     const targetDate = new TZDate(date, TIMEZONE);
@@ -101,7 +122,9 @@ async function checkSingleDayAvailability(date: string): Promise<AvailabilityRes
     const workDayEnd = new TZDate(targetDate, TIMEZONE);
     workDayEnd.setHours(23, 59, 59, 999); // End of day
 
-    const busyEvents = await getBusyEvents(dayStart, dayEnd);
+    const allEvents = await getBusyEvents(dayStart, dayEnd);
+    const cancelledIds = await getCancelledEventIds(allEvents.map(e => e.id).filter(Boolean) as string[]);
+    const busyEvents = allEvents.filter(e => !cancelledIds.has(e.id!));
 
     // Block the day if there's a holiday/personal all-day calendar block
     if (busyEvents.some(isAllDayHolidayBlock)) {
@@ -181,10 +204,11 @@ async function checkSingleDayAvailability(date: string): Promise<AvailabilityRes
         });
     }
 
-    // Format ranges
+    // Format ranges in London time — plain Date boundaries from calendar events
+    // must be wrapped in TZDate so BST is respected when formatting.
     const formattedRanges = availableRanges.map((range) => ({
-        start: format(range.start, "HH:mm"),
-        end: format(range.end, "HH:mm"),
+        start: format(new TZDate(range.start, TIMEZONE), "HH:mm"),
+        end: format(new TZDate(range.end, TIMEZONE), "HH:mm"),
     }));
 
     return {
@@ -219,7 +243,9 @@ async function checkMultiDayAvailability(startDate: string, endDate: string): Pr
     // Get all busy events for the entire period
     const periodStart = startOfDay(startDateObj);
     const periodEnd = endOfDay(endDateObj);
-    const busyEvents = await getBusyEvents(periodStart, periodEnd);
+    const allPeriodEvents = await getBusyEvents(periodStart, periodEnd);
+    const cancelledPeriodIds = await getCancelledEventIds(allPeriodEvents.map(e => e.id).filter(Boolean) as string[]);
+    const busyEvents = allPeriodEvents.filter(e => !cancelledPeriodIds.has(e.id!));
 
     // Analyze conflicts day by day with SERVICE TYPE awareness
     const conflicts: string[] = [];

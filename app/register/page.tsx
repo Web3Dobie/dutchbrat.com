@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { isHuntersHoundsClient } from '@/lib/clientDomainDetection';
+import { birthdayToDateString, MONTHS } from '@/lib/dogAge';
 
 interface RegisterData {
     ownerName: string;
@@ -12,7 +13,8 @@ interface RegisterData {
     address: string;
     dogName: string;
     dogBreed: string;
-    dogAge: string;
+    dogBirthMonth: string;
+    dogBirthYear: string;
     photoConsent: boolean;
 }
 
@@ -26,7 +28,8 @@ interface User {
         id: number;
         dog_name: string;
         dog_breed: string;
-        dog_age: number;
+        dog_age?: number | null;
+        dog_birthday?: string | null;
     }>;
 }
 
@@ -38,6 +41,7 @@ export default function RegisterPage() {
     const [registeredUser, setRegisteredUser] = useState<User | null>(null);
     const [countdown, setCountdown] = useState(3);
 
+    const currentYear = new Date().getFullYear();
     const [formData, setFormData] = useState<RegisterData>({
         ownerName: '',
         phone: '',
@@ -45,7 +49,8 @@ export default function RegisterPage() {
         address: '',
         dogName: '',
         dogBreed: '',
-        dogAge: '',
+        dogBirthMonth: '',
+        dogBirthYear: '',
         photoConsent: false,
     });
 
@@ -70,6 +75,9 @@ export default function RegisterPage() {
         setError(null);
 
         try {
+            const dogBirthday = formData.dogBirthMonth && formData.dogBirthYear
+                ? birthdayToDateString(parseInt(formData.dogBirthMonth), parseInt(formData.dogBirthYear))
+                : undefined;
             const registrationData = {
                 ownerName: formData.ownerName,
                 phone: formData.phone,
@@ -77,7 +85,7 @@ export default function RegisterPage() {
                 address: formData.address,
                 dogName: formData.dogName,
                 dogBreed: formData.dogBreed,
-                dogAge: parseInt(formData.dogAge, 10),
+                dogBirthday,
                 photoSharingConsent: formData.photoConsent,
             };
 
@@ -255,17 +263,31 @@ export default function RegisterPage() {
                         required
                     />
 
-                    <label style={styles.label}>Dog's Age (years) *</label>
-                    <input
-                        style={styles.input}
-                        type="number"
-                        min="0"
-                        max="30"
-                        value={formData.dogAge}
-                        onChange={(e) => setFormData({ ...formData, dogAge: e.target.value })}
-                        placeholder="e.g., 3"
-                        required
-                    />
+                    <label style={styles.label}>Dog's Birthday (Month & Year) *</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <select
+                            style={{ ...styles.input, flex: 2 }}
+                            value={formData.dogBirthMonth}
+                            onChange={(e) => setFormData({ ...formData, dogBirthMonth: e.target.value })}
+                            required
+                        >
+                            <option value="">Month</option>
+                            {MONTHS.map((m, i) => (
+                                <option key={m} value={String(i + 1)}>{m}</option>
+                            ))}
+                        </select>
+                        <select
+                            style={{ ...styles.input, flex: 1 }}
+                            value={formData.dogBirthYear}
+                            onChange={(e) => setFormData({ ...formData, dogBirthYear: e.target.value })}
+                            required
+                        >
+                            <option value="">Year</option>
+                            {Array.from({ length: currentYear - 1989 }, (_, i) => currentYear - i).map(y => (
+                                <option key={y} value={String(y)}>{y}</option>
+                            ))}
+                        </select>
+                    </div>
 
                     {/* Photo Sharing Consent */}
                     <div className="mt-6 p-4 bg-gray-900/50 rounded-lg border border-gray-700">

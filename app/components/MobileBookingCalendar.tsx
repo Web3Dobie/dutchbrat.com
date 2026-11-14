@@ -19,6 +19,7 @@ interface User {
     phone: string;
     email: string;
     address: string;
+    has_had_meetgreet?: boolean;
     dogs: Array<{
         id: number;
         dog_name: string;
@@ -62,9 +63,11 @@ interface MobileBookingCalendarProps {
 // --- Main Mobile-First Component ---
 export default function MobileBookingCalendar({ currentUser = null }: MobileBookingCalendarProps) {
     // --- Dynamic Services Based on Authentication ---
-    const SERVICES = currentUser 
-        ? ALL_SERVICES.filter(service => service.id !== "meetgreet") // Hide Meet & Greet for existing customers
-        : ALL_SERVICES; // Show all services for new customers
+    // Meet & Greet is a one-off. Hide it only once the client has actually had one —
+    // registering before booking must not cost them their first.
+    const SERVICES = currentUser?.has_had_meetgreet
+        ? ALL_SERVICES.filter(service => service.id !== "meetgreet")
+        : ALL_SERVICES;
 
     // --- Core State (simplified from original) ---
     const [view, setView] = useState<ViewState>("picker");
