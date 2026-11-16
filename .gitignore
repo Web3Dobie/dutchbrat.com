@@ -28,3 +28,8 @@ _archive/
 
 # TypeScript incremental build artifact (rewritten on every build)
 tsconfig.tsbuildinfo
+
+# Claude Code local config — permission rules here can contain live tokens,
+# and this repo is public. Nothing in .claude/ has ever been tracked.
+# To share a config deliberately: git add -f .claude/settings.json
+.claude/
