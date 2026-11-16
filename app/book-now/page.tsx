@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import MobileBookingCalendar from '../components/MobileBookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 import { DashboardServiceCard } from '@/app/components/DashboardServiceCard';
-import { SERVICE_PRICING } from '@/lib/pricing';
+import { serviceCatalogue } from '@/lib/pricing';
 import { isHuntersHoundsClient } from '@/lib/clientDomainDetection'; // CLIENT-SIDE version
 
 // --- Types ---
@@ -394,7 +394,7 @@ function DutchBratDogWalking() {
           </div>
         
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {Object.values(SERVICE_PRICING).slice(0, 3).map(service => (
+            {Object.values(serviceCatalogue(new Date())).slice(0, 3).map(service => (
               <ServiceCard
                 key={service.id}
                 title={service.name}
@@ -403,7 +403,7 @@ function DutchBratDogWalking() {
               />
             ))}
             
-            {Object.values(SERVICE_PRICING).slice(3).map(service => (
+            {Object.values(serviceCatalogue(new Date())).slice(3).map(service => (
               <ServiceCard
                 key={service.id}
                 title={service.name}

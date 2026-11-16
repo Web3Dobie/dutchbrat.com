@@ -411,7 +411,7 @@ export default function LoyaltyCard({ ownerId, bookings }: LoyaltyCardProps) {
         const unredeemedCard = loyaltyData.full_cards.find(c => !c.redeemed);
         if (!unredeemedCard) return [];
 
-        const tier = getRewardTier(unredeemedCard.avg_price);
+        const tier = getRewardTier(unredeemedCard.avg_price, new Date());
 
         return bookings
             .filter(b =>
@@ -535,7 +535,7 @@ export default function LoyaltyCard({ ownerId, bookings }: LoyaltyCardProps) {
                         isFull={true}
                         isRedeemed={card.redeemed}
                         avgPrice={card.avg_price}
-                        rewardTier={getRewardTier(card.avg_price)}
+                        rewardTier={getRewardTier(card.avg_price, new Date())}
                         showBookingPicker={showBookingPicker}
                         setShowBookingPicker={setShowBookingPicker}
                         eligibleBookings={eligibleBookings}

@@ -250,6 +250,7 @@ export default function MobileBookingCalendar({ currentUser = null }: MobileBook
                             selectedDuration={selectedDuration ?? 60}
                             dogCount={1} // Default to 1 dog for price display - will be corrected in BookingForm
                             onDurationChange={handleDurationChange}
+                            when={selectedDay}
                         />
                     </div>
                 )}

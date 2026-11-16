@@ -7,14 +7,22 @@ interface SoloWalkDurationSelectorProps {
   selectedDuration: number;
   dogCount: number;
   onDurationChange: (duration: number) => void;
+  /**
+   * The date being booked, so the prices shown are the ones that will apply.
+   * The duration step comes before the date picker, so this is undefined on
+   * first render and the current rates are shown until a day is chosen.
+   */
+  when?: Date | null;
 }
 
-export default function SoloWalkDurationSelector({ 
-  selectedDuration, 
-  dogCount, 
-  onDurationChange 
+export default function SoloWalkDurationSelector({
+  selectedDuration,
+  dogCount,
+  onDurationChange,
+  when = null,
 }: SoloWalkDurationSelectorProps) {
-  const durationOptions = getSoloWalkOptions();
+  const priceDate = when ?? new Date();
+  const durationOptions = getSoloWalkOptions(priceDate);
 
   if (!durationOptions.length) {
     return null; // Fallback if no duration options available
@@ -30,9 +38,9 @@ export default function SoloWalkDurationSelector({
       <div className="space-y-3">
         {durationOptions.map((option) => {
           const isSelected = selectedDuration === option.duration;
-          const currentPrice = formatSoloWalkPrice(option.duration, dogCount);
-          const priceForOneDog = formatSoloWalkPrice(option.duration, 1);
-          const priceForTwoDogs = formatSoloWalkPrice(option.duration, 2);
+          const currentPrice = formatSoloWalkPrice(option.duration, dogCount, priceDate);
+          const priceForOneDog = formatSoloWalkPrice(option.duration, 1, priceDate);
+          const priceForTwoDogs = formatSoloWalkPrice(option.duration, 2, priceDate);
           
           return (
             <div 
@@ -99,7 +107,7 @@ export default function SoloWalkDurationSelector({
             {getDurationDisplay(selectedDuration)}
           </span>
           <div className="text-purple-400 font-medium text-sm mt-1">
-            {formatSoloWalkPrice(selectedDuration, 1)} - {formatSoloWalkPrice(selectedDuration, 2)}
+            {formatSoloWalkPrice(selectedDuration, 1, priceDate)} - {formatSoloWalkPrice(selectedDuration, 2, priceDate)}
           </div>
           <div className="text-gray-500 text-xs">
             Final price depends on number of dogs

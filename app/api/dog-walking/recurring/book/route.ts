@@ -122,14 +122,17 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Calculate price for each booking
+        // Price is resolved PER BOOKING, inside the loop below, from that
+        // booking's own start date. A series can straddle a price change — one
+        // created in December for January onward must carry January's prices —
+        // so a single price computed here would be wrong for part of the series.
         const isSoloWalk = service_type.toLowerCase().includes('solo walk');
         const dogCount = dog_id_2 ? 2 : 1;
-        let pricePerBooking: number | null = null;
 
-        if (isSoloWalk && duration_minutes) {
-            pricePerBooking = getSoloWalkPrice(duration_minutes, dogCount);
-        } else {
+        const priceForDate = (when: Date): number | null => {
+            if (isSoloWalk && duration_minutes) {
+                return getSoloWalkPrice(duration_minutes, dogCount, when);
+            }
             const serviceTypeMap: Record<string, string> = {
                 'Meet & Greet - for new clients': 'meetgreet',
                 'Solo Walk (60 min)': 'solo',
@@ -137,10 +140,10 @@ export async function POST(request: NextRequest) {
                 'Dog Sitting (Variable)': 'sitting'
             };
             const pricingServiceId = serviceTypeMap[service_type];
-            if (pricingServiceId) {
-                pricePerBooking = getServicePrice(pricingServiceId);
-            }
-        }
+            return pricingServiceId ? getServicePrice(pricingServiceId, when) : null;
+        };
+
+        let seriesTotalPrice: number | null = null;
 
         // 1. Create the booking_series record
         const seriesResult = await client.query(
@@ -201,6 +204,12 @@ export async function POST(request: NextRequest) {
             const startDateTime = new TZDate(date, TIMEZONE);
             startDateTime.setHours(hour, minute, 0, 0);
             const endDateTime = new Date(startDateTime.getTime() + duration_minutes * 60000);
+
+            // Price this booking on its own date, not the series start date.
+            const pricePerBooking = priceForDate(startDateTime);
+            if (pricePerBooking !== null) {
+                seriesTotalPrice = (seriesTotalPrice ?? 0) + pricePerBooking;
+            }
 
             // Generate cancellation token
             const cancellationToken = crypto.randomUUID();
@@ -279,7 +288,9 @@ export async function POST(request: NextRequest) {
         await client.query('COMMIT');
 
         // 3. Send confirmation email
-        const totalPrice = pricePerBooking ? pricePerBooking * confirmed_dates.length : null;
+        // Summed from each booking's own price rather than multiplied out, so a
+        // series spanning a price change totals correctly.
+        const totalPrice = seriesTotalPrice;
         const patternDescription = recurrence_pattern === 'weekly'
             ? 'Every week'
             : recurrence_pattern === 'biweekly'

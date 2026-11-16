@@ -8,6 +8,7 @@ import { getServiceDisplayName } from "@/lib/serviceTypes";
 import ResponsiveDatePicker from "./ResponsiveDatePicker";
 import TimeSlotGrid from "./TimeSlotGrid";
 import { customerFetch } from "@/lib/customerSession";
+import { getSoloWalkPrice } from "@/lib/pricing";
 
 // --- Types ---
 interface Dog {
@@ -288,14 +289,13 @@ export default function BookingManager({ bookingId, onBack, onBookingUpdated }: 
 
         const dogCount = selectedDogIds.length;
         const duration = booking.duration_minutes;
+        if (duration !== 60 && duration !== 120) return null;
 
-        // Solo Walk pricing
-        if (duration === 60) {
-            return dogCount === 2 ? 25.00 : 17.50;
-        } else if (duration === 120) {
-            return dogCount === 2 ? 32.50 : 25.00;
-        }
-        return null;
+        // Priced from the shared price book on this booking's own date, so the
+        // preview matches what the server will store. The literal table that
+        // used to be here was a third copy of the prices and would have shown
+        // 2026 figures to clients after the rate change.
+        return getSoloWalkPrice(duration, dogCount, booking.start_time);
     };
 
     // Check if dogs have actually changed

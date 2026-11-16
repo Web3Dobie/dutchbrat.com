@@ -221,11 +221,15 @@ export async function POST(request: NextRequest) {
         const isQuickWalk = service_type.toLowerCase().includes('quick walk');
         const dogCount = dog_id_2 ? 2 : 1;
 
+        // Priced on the date of the walk, so a booking made before a price
+        // change for a date after it carries the new price.
+        const priceDate = new Date(start_time);
+
         if (isSoloWalk && duration_minutes) {
-            finalPrice = getSoloWalkPrice(duration_minutes, dogCount);
+            finalPrice = getSoloWalkPrice(duration_minutes, dogCount, priceDate);
             console.log(`Solo Walk Duration Pricing: ${duration_minutes}min, ${dogCount} dogs -> £${finalPrice}`);
         } else if (isQuickWalk) {
-            finalPrice = getQuickWalkPrice(dogCount);
+            finalPrice = getQuickWalkPrice(dogCount, priceDate);
             console.log(`Quick Walk Pricing: ${dogCount} dogs -> £${finalPrice}`);
         } else {
             const serviceTypeMap: Record<string, string> = {
@@ -235,7 +239,7 @@ export async function POST(request: NextRequest) {
             };
             const pricingServiceId = serviceTypeMap[service_type];
             if (pricingServiceId) {
-                finalPrice = getServicePrice(pricingServiceId);
+                finalPrice = getServicePrice(pricingServiceId, priceDate);
             }
         }
 

@@ -238,7 +238,8 @@ export async function POST(request: NextRequest) {
         }
 
         const bookingPrice = parseFloat(booking.price_pounds || 0);
-        const rewardTier = getRewardTier(avgPrice);
+        // A free walk is redeemed now, so it is valued at today's rates.
+        const rewardTier = getRewardTier(avgPrice, new Date());
 
         if (bookingPrice > rewardTier) {
             await client.query('ROLLBACK');

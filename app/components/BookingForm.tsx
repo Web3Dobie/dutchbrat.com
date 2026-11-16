@@ -156,11 +156,13 @@ export default function BookingForm({
 
     const calculatePrice = () => {
         const dogCount = selectedDogIds.length || 1;
+        // Quoted for the date being booked, so the figure shown matches what
+        // the server will store even across a price change.
         if (isSoloWalk && selectedDuration) {
-            return getSoloWalkPrice(selectedDuration, dogCount);
+            return getSoloWalkPrice(selectedDuration, dogCount, startTime);
         }
         if (isQuickWalk) {
-            return getQuickWalkPrice(dogCount);
+            return getQuickWalkPrice(dogCount, startTime);
         }
         return null;
     };

@@ -106,9 +106,19 @@ export default function AdminCreateBooking() {
         loadClients();
     }, []);
 
+    // The date being booked, so the quoted price matches what the server will
+    // store. Falls back to today until a date has been entered.
+    const priceDate = (): Date => {
+        if (bookingDate) {
+            const d = new Date(`${bookingDate}T${bookingTime || "12:00"}`);
+            if (!Number.isNaN(d.getTime())) return d;
+        }
+        return new Date();
+    };
+
     // Calculate pricing display for solo walks
     const getSoloWalkPriceDisplay = (duration: number, dogCount: number) => {
-        const price = getSoloWalkPrice(duration, dogCount);
+        const price = getSoloWalkPrice(duration, dogCount, priceDate());
         return `£${price.toFixed(2)}`;
     };
 
@@ -125,7 +135,7 @@ export default function AdminCreateBooking() {
 
         if (service.type === "quick_walk") {
             const dogCount = selectedDogs.length || 1;
-            const price = getQuickWalkPrice(dogCount);
+            const price = getQuickWalkPrice(dogCount, priceDate());
             return ` - £${price.toFixed(2)} (${dogCount} dog${dogCount > 1 ? 's' : ''})`;
         }
 

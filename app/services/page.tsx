@@ -1,7 +1,17 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { priceBookFor } from '@/lib/pricing'
 
 export default function ServicesPage() {
+  // Every price on this page comes from lib/pricing.ts, so a rate change is a
+  // one-line edit there rather than thirty edits here. Resolved per request,
+  // not at module load, so the new rates appear on the day they take effect
+  // even though this process has been running for weeks.
+  const book = priceBookFor(new Date())
+  const w = book.walk
+  const sb = book.sitting.bands
+  const gbp = (n: number) => `£${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2)}`
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       {/* Header */}
@@ -110,7 +120,7 @@ export default function ServicesPage() {
                     <h3 className="text-3xl font-bold text-blue-400">Quick Walk</h3>
                   </div>
                   <div className="mb-6">
-                    <span className="text-4xl font-bold text-white">£10 / £14</span>
+                    <span className="text-4xl font-bold text-white">{gbp(w[30][1])} / {gbp(w[30][2])}</span>
                     <span className="text-gray-300 ml-3">30 minutes • 1 or 2 dogs</span>
                   </div>
 
@@ -120,11 +130,11 @@ export default function ServicesPage() {
                     <div className="grid grid-cols-1 gap-2">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">30 minutes (1 dog)</span>
-                        <span className="text-white font-medium">£10</span>
+                        <span className="text-white font-medium">{gbp(w[30][1])}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">30 minutes (2 dogs)</span>
-                        <span className="text-white font-medium">£14</span>
+                        <span className="text-white font-medium">{gbp(w[30][2])}</span>
                       </div>
                     </div>
                   </div>
@@ -162,7 +172,7 @@ export default function ServicesPage() {
                     <h3 className="text-3xl font-bold text-purple-400">Solo Walk</h3>
                   </div>
                   <div className="mb-6">
-                    <span className="text-4xl font-bold text-white">£17.50 / £25</span>
+                    <span className="text-4xl font-bold text-white">{gbp(w[60][1])} / {gbp(w[60][2])}</span>
                     <span className="text-gray-300 ml-3">1 hour • 1 or 2 dogs</span>
                   </div>
                   
@@ -172,20 +182,20 @@ export default function ServicesPage() {
                     <div className="grid grid-cols-1 gap-2">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">1 hour (1 dog)</span>
-                        <span className="text-white font-medium">£17.50</span>
+                        <span className="text-white font-medium">{gbp(w[60][1])}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-300">1 hour (2 dogs)</span>
-                        <span className="text-white font-medium">£25</span>
+                        <span className="text-white font-medium">{gbp(w[60][2])}</span>
                       </div>
                       <div className="border-t border-gray-600 pt-2 mt-2">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-300">2 hours (1 dog)</span>
-                          <span className="text-white font-medium">£25</span>
+                          <span className="text-white font-medium">{gbp(w[120][1])}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-300">2 hours (2 dogs)</span>
-                          <span className="text-white font-medium">£32.50</span>
+                          <span className="text-white font-medium">{gbp(w[120][2])}</span>
                         </div>
                       </div>
                     </div>
@@ -245,7 +255,7 @@ export default function ServicesPage() {
                     <h3 className="text-3xl font-bold text-yellow-400">Dog Sitting</h3>
                   </div>
                   <div className="mb-6">
-                    <span className="text-2xl font-bold text-white">From £25</span>
+                    <span className="text-2xl font-bold text-white">From {gbp(sb[0].beforeEvening)}</span>
                     <span className="text-gray-300 ml-3">Minimum 2 hours</span>
                   </div>
                   <p className="text-gray-300 leading-relaxed mb-6">
@@ -259,47 +269,51 @@ export default function ServicesPage() {
                     
                     {/* Daytime Rates */}
                     <div className="mb-4">
-                      <h5 className="text-white font-medium mb-2">Before 6 PM:</h5>
+                      <h5 className="text-white font-medium mb-2">Starting before 6 PM:</h5>
                       <div className="grid grid-cols-1 gap-1 text-sm text-gray-300">
                         <div className="flex justify-between">
                           <span>2 hours</span>
-                          <span className="text-white font-medium">£25</span>
+                          <span className="text-white font-medium">{gbp(sb[0].beforeEvening)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>2-4 hours</span>
-                          <span className="text-white font-medium">£35</span>
+                          <span className="text-white font-medium">{gbp(sb[1].beforeEvening)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>4-6 hours</span>
-                          <span className="text-white font-medium">£45</span>
+                          <span className="text-white font-medium">{gbp(sb[2].beforeEvening)}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Evening Rates */}
                     <div className="mb-4">
-                      <h5 className="text-white font-medium mb-2">After 6 PM:</h5>
+                      <h5 className="text-white font-medium mb-2">Starting 6 PM or later:</h5>
                       <div className="grid grid-cols-1 gap-1 text-sm text-gray-300">
                         <div className="flex justify-between">
                           <span>2 hours</span>
-                          <span className="text-white font-medium">£35</span>
+                          <span className="text-white font-medium">{gbp(sb[0].fromEvening)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>2-4 hours</span>
-                          <span className="text-white font-medium">£45</span>
+                          <span className="text-white font-medium">{gbp(sb[1].fromEvening)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>4-6 hours</span>
-                          <span className="text-white font-medium">£55</span>
+                          <span className="text-white font-medium">{gbp(sb[2].fromEvening)}</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Full Day */}
-                    <div className="border-t border-gray-600 pt-3">
+                    {/* Full Day & Overnight */}
+                    <div className="border-t border-gray-600 pt-3 space-y-2">
                       <div className="flex justify-between text-white font-medium">
-                        <span>Full Day</span>
-                        <span>£55</span>
+                        <span>Full Day (over 6 hours)</span>
+                        <span>{gbp(sb[3].beforeEvening)}</span>
+                      </div>
+                      <div className="flex justify-between text-white font-medium">
+                        <span>Overnight, per night</span>
+                        <span>{gbp(book.sitting.overnightPerNight)}</span>
                       </div>
                     </div>
                   </div>
@@ -348,8 +362,8 @@ export default function ServicesPage() {
                 <div className="bg-gray-800/50 rounded-xl p-6 text-center border border-blue-500/30">
                   <h4 className="text-lg font-semibold text-blue-400 mb-2">Quick Walk</h4>
                   <div className="text-lg font-bold text-white mb-1">
-                    <div>£10 (1 dog)</div>
-                    <div>£14 (2 dogs)</div>
+                    <div>{gbp(w[30][1])} (1 dog)</div>
+                    <div>{gbp(w[30][2])} (2 dogs)</div>
                   </div>
                   <div className="text-sm text-gray-400">30 minutes</div>
                 </div>
@@ -357,8 +371,8 @@ export default function ServicesPage() {
                 <div className="bg-gray-800/50 rounded-xl p-6 text-center border border-purple-500/30">
                   <h4 className="text-lg font-semibold text-purple-400 mb-2">1 Hour Walk</h4>
                   <div className="text-lg font-bold text-white mb-1">
-                    <div>£17.50 (1 dog)</div>
-                    <div>£25 (2 dogs)</div>
+                    <div>{gbp(w[60][1])} (1 dog)</div>
+                    <div>{gbp(w[60][2])} (2 dogs)</div>
                   </div>
                   <div className="text-sm text-gray-400">60 minutes</div>
                 </div>
@@ -366,8 +380,8 @@ export default function ServicesPage() {
                 <div className="bg-gray-800/50 rounded-xl p-6 text-center border border-purple-500/30">
                   <h4 className="text-lg font-semibold text-purple-400 mb-2">2 Hour Walk</h4>
                   <div className="text-lg font-bold text-white mb-1">
-                    <div>£25 (1 dog)</div>
-                    <div>£32.50 (2 dogs)</div>
+                    <div>{gbp(w[120][1])} (1 dog)</div>
+                    <div>{gbp(w[120][2])} (2 dogs)</div>
                   </div>
                   <div className="text-sm text-gray-400">2 hours</div>
                 </div>
@@ -381,38 +395,38 @@ export default function ServicesPage() {
                 
                 {/* Daytime Sitting */}
                 <div className="bg-gray-800/50 rounded-xl p-6 border border-yellow-500/30">
-                  <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">Before 6 PM</h4>
+                  <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">Starting before 6 PM</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-300">2 hours</span>
-                      <span className="text-white font-medium">£25</span>
+                      <span className="text-white font-medium">{gbp(sb[0].beforeEvening)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-300">2-4 hours</span>
-                      <span className="text-white font-medium">£35</span>
+                      <span className="text-white font-medium">{gbp(sb[1].beforeEvening)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-300">4-6 hours</span>
-                      <span className="text-white font-medium">£45</span>
+                      <span className="text-white font-medium">{gbp(sb[2].beforeEvening)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Evening Sitting */}
                 <div className="bg-gray-800/50 rounded-xl p-6 border border-yellow-500/30">
-                  <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">After 6 PM</h4>
+                  <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">Starting 6 PM or later</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-300">2 hours</span>
-                      <span className="text-white font-medium">£35</span>
+                      <span className="text-white font-medium">{gbp(sb[0].fromEvening)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-300">2-4 hours</span>
-                      <span className="text-white font-medium">£45</span>
+                      <span className="text-white font-medium">{gbp(sb[1].fromEvening)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-300">4-6 hours</span>
-                      <span className="text-white font-medium">£55</span>
+                      <span className="text-white font-medium">{gbp(sb[2].fromEvening)}</span>
                     </div>
                   </div>
                 </div>
@@ -421,8 +435,17 @@ export default function ServicesPage() {
                 <div className="bg-gray-800/50 rounded-xl p-6 border border-yellow-500/30 flex flex-col justify-center">
                   <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">Full Day</h4>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-white mb-2">£55</div>
-                    <div className="text-sm text-gray-400">Complete day care</div>
+                    <div className="text-3xl font-bold text-white mb-2">{gbp(sb[3].beforeEvening)}</div>
+                    <div className="text-sm text-gray-400">Over 6 hours</div>
+                  </div>
+                </div>
+
+                {/* Overnight */}
+                <div className="bg-gray-800/50 rounded-xl p-6 border border-yellow-500/30 flex flex-col justify-center">
+                  <h4 className="text-lg font-semibold text-yellow-400 mb-3 text-center">Overnight</h4>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-white mb-2">{gbp(book.sitting.overnightPerNight)}</div>
+                    <div className="text-sm text-gray-400">Per night</div>
                   </div>
                 </div>
               </div>

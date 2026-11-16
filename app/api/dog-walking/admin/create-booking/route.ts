@@ -80,11 +80,12 @@ export async function POST(request: NextRequest) {
         const isQuickWalk = data.service_type.toLowerCase().includes('quick walk');
         const dogCount = data.dog_id_2 ? 2 : 1;
 
+        // Priced on the date of the walk (startTime), not on today.
         if (isSoloWalk && data.duration_minutes) {
-            finalPrice = getSoloWalkPrice(data.duration_minutes, dogCount);
+            finalPrice = getSoloWalkPrice(data.duration_minutes, dogCount, startTime);
             console.log(`Admin Solo Walk Duration Pricing: ${data.duration_minutes}min, ${dogCount} dogs -> £${finalPrice}`);
         } else if (isQuickWalk) {
-            finalPrice = getQuickWalkPrice(dogCount);
+            finalPrice = getQuickWalkPrice(dogCount, startTime);
             console.log(`Admin Quick Walk Pricing: ${dogCount} dogs -> £${finalPrice}`);
         } else {
             const serviceTypeMap: Record<string, string> = {
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
                 'Dog Sitting (Variable)': 'sitting'
             };
             const pricingServiceId = serviceTypeMap[data.service_type];
-            finalPrice = pricingServiceId ? getServicePrice(pricingServiceId) : null;
+            finalPrice = pricingServiceId ? getServicePrice(pricingServiceId, startTime) : null;
         }
 
         console.log(`Admin Service: ${data.service_type} -> Final Price: £${finalPrice}`);

@@ -114,13 +114,18 @@ export async function PUT(
 
         if (isSoloWalk) {
             const duration = booking.duration_minutes || 60;
-            const calculatedPrice = getSoloWalkPrice(duration, dogCount);
+            // Re-priced on the booking's OWN date, so changing the dogs on a
+            // January walk in December applies January's prices. There is no
+            // hardcoded fallback here on purpose: a duplicate price table would
+            // go stale at the next rate change and write the wrong figure
+            // silently. An unknown duration leaves the existing price alone.
+            const calculatedPrice = getSoloWalkPrice(duration, dogCount, booking.start_time);
             if (calculatedPrice > 0) {
                 newPrice = calculatedPrice;
             } else {
-                newPrice = duration <= 60
-                    ? (dogCount === 2 ? 25.00 : 17.50)
-                    : (dogCount === 2 ? 32.50 : 25.00);
+                console.warn(
+                    `[Admin Dogs] No price for duration=${duration} on booking ${bookingId}; leaving price_pounds unchanged`
+                );
             }
         }
 

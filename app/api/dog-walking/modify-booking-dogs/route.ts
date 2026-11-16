@@ -132,23 +132,23 @@ export async function POST(request: NextRequest) {
         if (isSoloWalk) {
             // Use duration_minutes, default to 60 if null/undefined
             const duration = booking.duration_minutes || 60;
-            const calculatedPrice = getSoloWalkPrice(duration, dogCount);
+            // Priced on the booking's OWN date: a client adding a second dog in
+            // December to a January walk gets January's price.
+            const calculatedPrice = getSoloWalkPrice(duration, dogCount, booking.start_time);
 
-            console.log(`[Modify Dogs] Solo Walk price calculation: duration=${duration}, dogCount=${dogCount}, calculatedPrice=${calculatedPrice}`);
+            console.log(`[Modify Dogs] Solo Walk price calculation: duration=${duration}, dogCount=${dogCount}, date=${booking.start_time}, calculatedPrice=${calculatedPrice}`);
 
-            // Only update if we got a valid price
+            // Only update if we got a valid price.
+            //
+            // The hardcoded fallback that used to live here is deliberately
+            // gone: it was a second copy of the price table and would have
+            // written 2026 prices for ever after the rate change, silently and
+            // only on the path a client uses to add a dog. An unrecognised
+            // duration now leaves the existing price alone and says so.
             if (calculatedPrice > 0) {
                 newPrice = calculatedPrice;
             } else {
-                // Fallback: calculate manually if getSoloWalkPrice fails
-                // 60 min: £17.50 (1 dog) / £25.00 (2 dogs)
-                // 120 min: £25.00 (1 dog) / £32.50 (2 dogs)
-                if (duration <= 60) {
-                    newPrice = dogCount === 2 ? 25.00 : 17.50;
-                } else {
-                    newPrice = dogCount === 2 ? 32.50 : 25.00;
-                }
-                console.log(`[Modify Dogs] Used fallback pricing: newPrice=${newPrice}`);
+                console.warn(`[Modify Dogs] No price for duration=${duration} on booking ${booking.id}; leaving price_pounds at ${booking.price_pounds}`);
             }
         }
 
