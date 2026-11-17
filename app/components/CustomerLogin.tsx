@@ -64,11 +64,12 @@ export default function CustomerLogin({
     onAuthSuccess,
     notice,
     title = "Access Your Bookings",
-    subtitle = "Enter the email address you booked with and we'll send you a code to sign in.",
+    subtitle = "Enter the email address or phone number you booked with, and we'll send you a code to sign in.",
     onRegisterClick,
 }: CustomerLoginProps) {
     const [step, setStep] = useState<"email" | "code">("email");
-    const [email, setEmail] = useState("");
+    // Either an email address or a phone number — the server works out which.
+    const [identifier, setIdentifier] = useState("");
     const [code, setCode] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -198,8 +199,15 @@ export default function CustomerLogin({
 
     /** Step one: ask for a code. */
     const requestCode = async (isResend = false) => {
-        if (!email.trim() || !email.includes("@")) {
-            setError("Please enter the email address you booked with.");
+        const typed = identifier.trim();
+        if (!typed) {
+            setError("Please enter your email address or phone number.");
+            return;
+        }
+        // Only a sanity check. Whether it matches an account is the server's
+        // business, and it deliberately will not say.
+        if (!typed.includes("@") && typed.replace(/\D/g, "").length < 7) {
+            setError("That doesn't look like an email address or a phone number.");
             return;
         }
 
@@ -211,7 +219,7 @@ export default function CustomerLogin({
             const response = await fetch("/api/dog-walking/customer-session/request-code", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: email.trim() }),
+                body: JSON.stringify({ identifier: identifier.trim() }),
             });
 
             const data = await response.json();
@@ -221,11 +229,10 @@ export default function CustomerLogin({
             }
 
             setStep("code");
-            setInfo(
-                isResend
-                    ? `A new code is on its way to ${email.trim()}.`
-                    : `${data.message} Check ${email.trim()} — it may take a moment.`
-            );
+            // data.message already names the destination when the customer
+            // signed in by phone number and we know where it went; for an email
+            // it stays deliberately vague about whether the address is on file.
+            setInfo(isResend ? `A new code is on its way. ${data.message}` : data.message);
             startCooldown();
         } catch (err: any) {
             console.error("[CustomerLogin] Code request failed:", err);
@@ -251,7 +258,7 @@ export default function CustomerLogin({
             const response = await fetch("/api/dog-walking/customer-session", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: email.trim(), code: trimmed }),
+                body: JSON.stringify({ identifier: identifier.trim(), code: trimmed }),
             });
 
             const data = await response.json();
@@ -324,20 +331,24 @@ export default function CustomerLogin({
                 <form onSubmit={handleSubmit}>
                     {step === "email" ? (
                         <>
-                            <label style={styles.label} htmlFor="loginEmail">
-                                Email Address
+                            <label style={styles.label} htmlFor="loginIdentifier">
+                                Email Address or Phone Number
                             </label>
                             <input
                                 style={styles.input}
-                                type="email"
-                                id="loginEmail"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@example.com"
+                                type="text"
+                                id="loginIdentifier"
+                                value={identifier}
+                                onChange={(e) => setIdentifier(e.target.value)}
+                                placeholder="you@example.com or 07123456789"
                                 disabled={isLoading}
-                                autoComplete="email"
+                                autoComplete="email tel"
                                 autoFocus
                             />
+                            <p style={styles.hint}>
+                                Either works. If you use your phone number, the code goes to
+                                the email address we have on file for you.
+                            </p>
                         </>
                     ) : (
                         <>
@@ -402,7 +413,7 @@ export default function CustomerLogin({
                             disabled={isLoading}
                             style={styles.linkButton}
                         >
-                            Use a different email
+                            Start again
                         </button>
                     </div>
                 )}
@@ -422,14 +433,14 @@ export default function CustomerLogin({
                             New to Hunter's Hounds?{" "}
                             <button
                                 type="button"
-                                onClick={() => onRegisterClick(email.trim())}
+                                onClick={() => onRegisterClick(identifier.trim())}
                                 style={{ ...styles.linkButton, fontSize: "0.85rem" }}
                             >
                                 Register here
                             </button>
                         </p>
                     )}
-                    <p>No code arriving, or not sure which email you used?</p>
+                    <p>No code arriving, or not sure which details you used?</p>
                     <p style={{ marginTop: "4px" }}>
                         <a
                             href="mailto:ernesto@hunters-hounds.london"

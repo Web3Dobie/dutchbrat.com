@@ -9,7 +9,7 @@ import {
 import { getOwnerIdFromSession } from '@/lib/customerAuth';
 import { verifySession } from '@/lib/session';
 import { clientIp, rateLimit, tooManyRequests } from '@/lib/rateLimit';
-import { verifyLoginCode } from '@/lib/loginCodes';
+import { resolveLoginTarget, verifyLoginCode } from '@/lib/loginCodes';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,42 +118,44 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const email: string = typeof body?.email === 'string' ? body.email.trim() : '';
+        // `email` is still accepted so an old cached page keeps working.
+        const rawIdentifier = body?.identifier ?? body?.email ?? body?.phone;
+        const identifier: string = typeof rawIdentifier === 'string' ? rawIdentifier.trim() : '';
         const code: string = typeof body?.code === 'string' ? body.code.trim() : '';
 
-        if (!email || !code) {
+        if (!identifier || !code) {
             return NextResponse.json(
-                { error: 'Both your email address and the code are required.' },
+                { error: 'Both your email address or phone number and the code are required.' },
                 { status: 400 }
             );
         }
 
         const client = await pool.connect();
         try {
-            // Matches the primary-or-partner logic in request-code.
-            const result = await client.query(
-                `SELECT id, owner_name FROM hunters_hounds.owners
-                  WHERE LOWER(email) = LOWER($1) OR LOWER(partner_email) = LOWER($1)
-                  LIMIT 1`,
-                [email]
-            );
+            // Same resolution as request-code, so whatever identified the
+            // account at step one identifies it at step two. The code itself is
+            // checked against the OWNER, not against the address it was mailed
+            // to — a client who signed in by phone number never learns that
+            // address and cannot be asked for it here.
+            const target = await resolveLoginTarget(client, identifier);
 
-            // One message for an unknown address, a wrong code and an expired
-            // code alike. Distinguishing them would say whether the address is
-            // a client's, which is what the code step exists to hide.
+            // One message for an unknown identifier, a wrong code and an
+            // expired code alike. Distinguishing them would say whether the
+            // identifier belongs to a client, which is what the code step
+            // exists to hide.
             const badCode = () =>
                 NextResponse.json(
                     { error: 'That code is not right, or it has expired. Please request a new one.' },
                     { status: 401 }
                 );
 
-            if (result.rows.length === 0) {
-                console.warn(`[Customer Session] Code submitted for an unknown address from ${ip}`);
+            if (!target) {
+                console.warn(`[Customer Session] Code submitted for an unknown identifier from ${ip}`);
                 return badCode();
             }
 
-            const owner = result.rows[0];
-            const verification = await verifyLoginCode(client, owner.id, email, code);
+            const owner = { id: target.ownerId, owner_name: target.ownerName };
+            const verification = await verifyLoginCode(client, owner.id, code);
 
             if (!verification.ok) {
                 console.warn(

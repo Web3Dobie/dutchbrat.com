@@ -19,10 +19,13 @@
 //   * Issuing a code expires the previous ones for that owner, so there is at
 //     most one live code per client at a time. Without this, requesting three
 //     codes would leave three valid.
-//   * Verification is scoped to the address the code was SENT to, not just the
-//     owner. A partner email logs into the primary owner's account, so an
-//     owner-only check would let a code mailed to the partner be redeemed by
-//     someone typing the primary address.
+//   * Verification is scoped to the OWNER, not to the address the code was sent
+//     to. It was address-scoped at first, to stop a code mailed to a partner
+//     being redeemed by someone typing the primary address — but redeeming it
+//     requires the code, and holding the code already means having read that
+//     mailbox, so the check guarded nothing. Owner scoping is what lets a
+//     client sign in with their phone number: the code goes to the email on
+//     file, and they never have to know which address that was.
 
 import crypto from 'crypto';
 
@@ -110,28 +113,31 @@ export type VerifyResult =
     | { ok: false; reason: 'no_code' | 'expired' | 'too_many_attempts' | 'wrong_code' };
 
 /**
- * Check `code` against the live code for `ownerId` that was sent to `sentTo`.
+ * Check `code` against the live code for `ownerId`.
  *
  * On success the code is marked used, so it cannot be replayed. On a wrong
  * guess the attempt is counted, and the fifth wrong guess burns the code — the
  * caller should report that as "request a new code" rather than "wrong code",
  * since retrying will no longer help.
+ *
+ * Deliberately not scoped to the address the code was mailed to: a client who
+ * signed in with their phone number has no idea which address that was, and
+ * cannot be asked to supply it at step two. See the note at the top of the file
+ * for why that costs nothing.
  */
 export async function verifyLoginCode(
     client: Queryable,
     ownerId: number,
-    sentTo: string,
     code: string
 ): Promise<VerifyResult> {
     const result = await client.query(
         `SELECT id, code_hash, attempts, expires_at <= NOW() AS is_expired
            FROM hunters_hounds.login_codes
           WHERE owner_id = $1
-            AND LOWER(sent_to) = LOWER($2)
             AND used_at IS NULL
           ORDER BY created_at DESC
           LIMIT 1`,
-        [ownerId, sentTo]
+        [ownerId]
     );
 
     if (result.rows.length === 0) return { ok: false, reason: 'no_code' };
@@ -179,4 +185,125 @@ export async function pruneOldCodes(client: Queryable): Promise<void> {
         // Housekeeping must never fail a login.
         console.error('[Login Codes] Prune failed:', error);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Working out who is logging in, and where the code should go
+// ---------------------------------------------------------------------------
+
+export interface LoginTarget {
+    ownerId: number;
+    ownerName: string;
+    /** The address the code will actually be sent to. */
+    destination: string;
+    /** How the customer identified themselves. */
+    via: 'email' | 'phone';
+}
+
+/** True if the typed identifier looks like an email rather than a phone number. */
+export function looksLikeEmail(identifier: string): boolean {
+    return identifier.includes('@');
+}
+
+/** Phone numbers are stored inconsistently, so compare them stripped. */
+function normalisePhone(phone: string): string {
+    return phone.replace(/[\s\-()]/g, '');
+}
+
+/**
+ * Resolve an email address OR phone number to the account it belongs to and the
+ * address a code should be mailed to.
+ *
+ * Phone numbers are supported because they are how a good number of clients
+ * have always signed in, and being told "use the email you signed up with"
+ * helps nobody who cannot remember which address that was. There is no SMS
+ * here, so the code goes to the email on file either way — a phone number
+ * identifies the account, it does not receive anything.
+ *
+ * When the phone matches the PARTNER's number, the code goes to the partner's
+ * own address if they have one. Mailing the primary owner instead would be
+ * both confusing and a small privacy leak between two people who are not
+ * necessarily the same household any more.
+ */
+export async function resolveLoginTarget(
+    client: Queryable,
+    identifier: string
+): Promise<LoginTarget | null> {
+    const trimmed = identifier.trim();
+    if (!trimmed) return null;
+
+    if (looksLikeEmail(trimmed)) {
+        const result = await client.query(
+            `SELECT id, owner_name, email, partner_email
+               FROM hunters_hounds.owners
+              WHERE LOWER(email) = LOWER($1) OR LOWER(partner_email) = LOWER($1)
+              LIMIT 1`,
+            [trimmed]
+        );
+        if (result.rows.length === 0) return null;
+        const owner = result.rows[0];
+        // Mail the address they typed. They know it; echoing it back leaks
+        // nothing, and sending elsewhere would be surprising.
+        return {
+            ownerId: owner.id,
+            ownerName: owner.owner_name,
+            destination: trimmed,
+            via: 'email',
+        };
+    }
+
+    const digits = normalisePhone(trimmed);
+    // Too short to be a real number: treat as no match rather than letting a
+    // two-digit string collide with something.
+    if (digits.replace(/\D/g, '').length < 7) return null;
+
+    const result = await client.query(
+        `SELECT id, owner_name, email, partner_email,
+                REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '')         = $1 AS primary_match,
+                REPLACE(REPLACE(REPLACE(REPLACE(partner_phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1 AS partner_match
+           FROM hunters_hounds.owners
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '')         = $1
+             OR REPLACE(REPLACE(REPLACE(REPLACE(partner_phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
+          LIMIT 1`,
+        [digits]
+    );
+    if (result.rows.length === 0) return null;
+
+    const owner = result.rows[0];
+    const destination =
+        owner.partner_match && !owner.primary_match && owner.partner_email
+            ? owner.partner_email
+            : owner.email;
+
+    // A client with a phone number but no email on file cannot be sent a code.
+    // Every record has one today; this is here so that stays true by accident
+    // rather than by luck.
+    if (!destination) return null;
+
+    return {
+        ownerId: owner.id,
+        ownerName: owner.owner_name,
+        destination,
+        via: 'phone',
+    };
+}
+
+/**
+ * "marion@clinic.co.uk" -> "ma•••@clinic.co.uk"
+ *
+ * Shown only to someone who signed in with a phone number, so they know which
+ * mailbox to open. The domain is kept whole because that is the part that
+ * actually jogs the memory, and is the least sensitive part of an address.
+ *
+ * This does disclose something: an unknown number produces no hint at all, so
+ * the presence of one confirms the number is on file. That is a deliberate
+ * trade for not stranding clients who cannot remember which address they used.
+ */
+export function maskEmail(email: string): string {
+    const at = email.lastIndexOf('@');
+    if (at <= 0) return '•••';
+    const local = email.slice(0, at);
+    const domain = email.slice(at + 1);
+    const shown = local.slice(0, local.length <= 2 ? 1 : 2);
+    return `${shown}${'•'.repeat(Math.max(3, local.length - shown.length))}@${domain}`;
 }
