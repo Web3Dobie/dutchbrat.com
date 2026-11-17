@@ -115,6 +115,14 @@ export function verifySession(
     if (typeof payload.exp !== 'number' || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     if (expectedRealm && payload.realm !== expectedRealm) return null;
 
+    // Reject customer sessions predating the emailed-code login. Enforced here
+    // rather than in each route so nothing can miss it — including the sliding
+    // refresh in customer-session, which would otherwise renew the very cookies
+    // this is meant to retire.
+    if (payload.realm === 'customer') {
+        if (typeof payload.iat !== 'number' || payload.iat < CUSTOMER_SESSION_EPOCH) return null;
+    }
+
     return payload;
 }
 
@@ -141,6 +149,28 @@ export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days — admin, hunter
  * have made the whole login worse than the one it replaced.
  */
 export const CUSTOMER_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days
+
+/**
+ * Customer sessions issued before this instant are void.
+ *
+ * Needed because of what the 90-day sliding session would otherwise do to the
+ * cookies that already existed. Those were minted by the OLD login, where
+ * typing a client's email address was the entire credential — and on first use
+ * the sliding refresh would have quietly reissued each one for another 90 days,
+ * turning a credential that proved nothing into a long-lived one. That is the
+ * opposite of the point.
+ *
+ * Observed live on 2026-11-17: a session for owner 35, left over from testing,
+ * was extended to 90 days thirteen seconds before the first real code login.
+ *
+ * So every pre-cutover customer session is rejected and those clients log in
+ * once with a code. Rotating SESSION_SECRET would also have done it, but would
+ * have taken the admin, hunter and helping-paws sessions with it for no reason.
+ *
+ * Only the customer realm is affected; staff logins are unchanged. Raise this
+ * value to force every client to re-authenticate again.
+ */
+export const CUSTOMER_SESSION_EPOCH = 1794930257; // 2026-11-17, the emailed-code cutover
 
 /** Shared cookie attributes. Secure is unconditional: every domain is HTTPS via Cloudflare. */
 export const SESSION_COOKIE_OPTIONS = {
