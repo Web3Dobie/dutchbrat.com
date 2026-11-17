@@ -264,12 +264,41 @@ export default function AdminRecurringPage() {
     }, [loadSeries]);
 
     const loadClients = useCallback(async () => {
+        // The clients endpoint refuses limit > 100, and refuses it with a 400
+        // rather than an exception — so this has to check r.ok, or a failed
+        // fetch silently becomes an empty dropdown with no error shown.
+        const PER_PAGE = 100;
+
+        const fetchPage = async (page: number) => {
+            const r = await fetch(
+                `/api/dog-walking/admin/clients?limit=${PER_PAGE}&page=${page}&sort=name_asc`
+            );
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                throw new Error(j?.error ?? `Could not load clients (${r.status})`);
+            }
+            return j as { clients?: ClientRow[]; pagination?: { totalPages?: number } };
+        };
+
         try {
-            const r = await fetch("/api/dog-walking/admin/clients?limit=500&sort=name_asc");
-            const j = await r.json();
-            setClients(j.clients ?? []);
-        } catch {
-            setError("Could not load the client list");
+            const first = await fetchPage(1);
+            const all: ClientRow[] = [...(first.clients ?? [])];
+
+            // Page through the rest, so this does not quietly truncate once
+            // there are more than a hundred clients.
+            const totalPages = first.pagination?.totalPages ?? 1;
+            for (let page = 2; page <= totalPages; page++) {
+                const next = await fetchPage(page);
+                all.push(...(next.clients ?? []));
+            }
+
+            setClients(all);
+            if (all.length === 0) {
+                setError("The client list came back empty.");
+            }
+        } catch (e) {
+            setClients([]);
+            setError(e instanceof Error ? e.message : "Could not load the client list");
         }
     }, []);
 
