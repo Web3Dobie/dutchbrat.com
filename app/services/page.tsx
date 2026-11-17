@@ -113,8 +113,8 @@ export default function ServicesPage() {
                     These are my first new rates in some time, and they keep the service sustainable
                     so I can carry on giving every dog the same individual attention. Both the current
                     and the new prices are shown side by side below, so there are no surprises.
-                    Anything already in the diary before {longDate(next.effectiveFrom)} is charged
-                    at today&apos;s rate.
+                    The new rates apply to every walk and sitting that takes place on or after{' '}
+                    {longDate(next.effectiveFrom)}, including bookings already in the diary.
                   </p>
                 </div>
               </div>
