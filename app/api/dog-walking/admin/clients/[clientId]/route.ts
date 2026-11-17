@@ -260,6 +260,11 @@ export async function PUT(
             if (updateData.photo_sharing_consent !== undefined) {
                 ownerUpdates.push(`photo_sharing_consent = $${paramIndex}`);
                 ownerValues.push(updateData.photo_sharing_consent);
+                // Set by the admin, so it is on the client's behalf rather than
+                // by them. Only ever downgrades provenance: a client who later
+                // sets it in their own dashboard overwrites this with 'client'.
+                ownerUpdates.push(`photo_consent_source = 'admin_assumed'`);
+                ownerUpdates.push(`photo_consent_recorded_at = NOW()`);
                 paramIndex++;
             }
 

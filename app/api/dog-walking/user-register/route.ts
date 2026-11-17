@@ -76,11 +76,13 @@ export async function POST(request: NextRequest) {
 
         // --- Step 1: Create the Owner ---
         const ownerQuery = `
-            INSERT INTO hunters_hounds.owners (owner_name, phone, email, address, photo_sharing_consent)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO hunters_hounds.owners
+                (owner_name, phone, email, address, photo_sharing_consent,
+                 photo_consent_source, photo_consent_recorded_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
             RETURNING id;
         `;
-        const ownerValues = [data.ownerName, data.phone, data.email, data.address, data.photoSharingConsent];
+        const ownerValues = [data.ownerName, data.phone, data.email, data.address, data.photoSharingConsent, 'registration'];
         const ownerResult = await client.query(ownerQuery, ownerValues);
         const newOwnerId = ownerResult.rows[0].id;
 

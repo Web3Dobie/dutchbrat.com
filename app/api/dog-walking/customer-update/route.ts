@@ -111,6 +111,12 @@ export async function PUT(request: NextRequest) {
                     // this column decides whether someone's dog appears on the
                     // internet -- it must not depend on how a caller spells it.
                     values.push(value === true || value === 'true');
+                    // This is the client answering for themselves, which beats
+                    // anything inferred on their behalf. 29 of 42 records are
+                    // currently 'admin_assumed'; every client who touches this
+                    // setting turns one of those into a real answer.
+                    updates.push(`photo_consent_source = 'client'`);
+                    updates.push(`photo_consent_recorded_at = NOW()`);
                 } else {
                     // Trim string values, allow empty strings to clear fields
                     values.push(typeof value === 'string' ? value.trim() : value);
