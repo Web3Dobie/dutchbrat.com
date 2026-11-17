@@ -6,7 +6,7 @@ import { sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
-import { requireOwner } from '@/lib/customerAuth';
+import { resolveActor } from '@/lib/bookingActor';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -27,8 +27,10 @@ interface CancelRequest {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
     // Cancelled any series by id with no ownership check.
-    const auth = requireOwner(request);
-    if ('response' in auth) return auth.response;
+    // Now serves both callers: the admin cancelling a whole series from the
+    // admin UI, and a client cancelling their own from the dashboard.
+    const actor = resolveActor(request);
+    if ('response' in actor) return actor.response;
 
     const { seriesId } = await params;
     const seriesIdNum = parseInt(seriesId);
@@ -69,8 +71,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
              JOIN hunters_hounds.owners o ON bs.owner_id = o.id
              JOIN hunters_hounds.dogs d1 ON bs.dog_id_1 = d1.id
              LEFT JOIN hunters_hounds.dogs d2 ON bs.dog_id_2 = d2.id
-             WHERE bs.id = $1 AND bs.owner_id = $2`,
-            [seriesIdNum, auth.ownerId]
+             WHERE bs.id = $1
+               AND ($2::int IS NULL OR bs.owner_id = $2)`,
+            // null for an admin (any series), the client's own id otherwise
+            [seriesIdNum, actor.kind === 'admin' ? null : actor.ownerId]
         );
 
         if (seriesResult.rows.length === 0) {

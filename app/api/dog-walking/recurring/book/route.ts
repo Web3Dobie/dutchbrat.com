@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveActor } from '@/lib/bookingActor';
 import { format, parse } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { sendEmail } from "@/lib/emailService";
-import { getSoloWalkPrice, getServicePrice } from "@/lib/pricing";
+import { getSoloWalkPrice, getQuickWalkPrice, getServicePrice } from "@/lib/pricing";
 import { normalizeServiceType, getServiceDisplayName } from "@/lib/serviceTypes";
 import { generateRecurringBookingEmail } from "@/lib/emailTemplates";
 import { generateCalendarEvent, type CalendarEventData } from "@/lib/calendarEvents";
@@ -52,8 +53,16 @@ export async function POST(request: NextRequest) {
 
     try {
         const body: RecurringBookRequest = await request.json();
+
+        // Was unauthenticated: anyone could POST bookings into the diary for
+        // any client, triggering emails and calendar events. An admin may book
+        // for any owner; a client only for themselves.
+        const actor = resolveActor(request, body?.owner_id ?? null);
+        if ('response' in actor) return actor.response;
+        // Every query below uses the VERIFIED owner, never the body's claim.
+        const owner_id = actor.ownerId;
         const {
-            owner_id,
+            owner_id: _requestedOwnerId,
             dog_id_1,
             dog_id_2,
             service_type,
@@ -133,6 +142,14 @@ export async function POST(request: NextRequest) {
             if (isSoloWalk && duration_minutes) {
                 return getSoloWalkPrice(duration_minutes, dogCount, when);
             }
+            // getServicePrice('quick') returns the ONE-dog price, so a two-dog
+            // quick walk was being charged the single-dog rate. Quick walks are
+            // priced by dog count like any other walk.
+            if (service_type.toLowerCase().includes('quick')) {
+                const quick = getQuickWalkPrice(dogCount, when);
+                return quick > 0 ? quick : null;
+            }
+
             const serviceTypeMap: Record<string, string> = {
                 'Meet & Greet - for new clients': 'meetgreet',
                 'Solo Walk (60 min)': 'solo',

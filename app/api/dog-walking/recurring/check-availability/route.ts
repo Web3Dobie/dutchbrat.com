@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveActor } from '@/lib/bookingActor';
 import {
     format,
     addDays,
@@ -71,10 +72,19 @@ interface CheckAvailabilityRequest {
 }
 
 export async function POST(request: NextRequest) {
+    // Was unauthenticated and took owner_id from the body on trust, which
+    // exposed the diary to anyone. An admin may check any owner; a client only
+    // their own.
+    const bodyForAuth = await request.clone().json().catch(() => ({}));
+    const actor = resolveActor(request, bodyForAuth?.owner_id ?? null);
+    if ('response' in actor) return actor.response;
+    // Every query below uses the VERIFIED owner, never the body's claim.
+    const owner_id = actor.ownerId;
+
     try {
         const body: CheckAvailabilityRequest = await request.json();
         const {
-            owner_id,
+            owner_id: _requestedOwnerId,
             service_type,
             duration_minutes,
             recurrence_pattern,
@@ -183,7 +193,7 @@ export async function POST(request: NextRequest) {
                 const alternatives = findAlternativeTimes(
                     availability,
                     duration_minutes,
-                    prefHour
+                    prefHour * 60 + prefMinute
                 );
 
                 if (alternatives.length > 0) {
@@ -426,16 +436,16 @@ async function getDateAvailability(
 function findAlternativeTimes(
     availableRanges: TimeRange[],
     durationMinutes: number,
-    preferredHour: number
+    preferredMinutes: number
 ): Array<{ time: string; displayTime: string }> {
     const alternatives: Array<{ time: string; displayTime: string; distance: number }> = [];
 
     for (const range of availableRanges) {
-        // Generate possible start times (every 30 minutes)
+        // Generate possible start times on the quarter-hour grid the booking form offers
         let current = new Date(range.start);
         while (current.getTime() + durationMinutes * 60000 <= range.end.getTime()) {
             const timeStr = format(current, 'HH:mm');
-            const distance = Math.abs(current.getHours() - preferredHour);
+            const distance = Math.abs(current.getHours() * 60 + current.getMinutes() - preferredMinutes);
 
             alternatives.push({
                 time: timeStr,
@@ -443,7 +453,7 @@ function findAlternativeTimes(
                 distance
             });
 
-            current = new Date(current.getTime() + 30 * 60000); // 30-minute increments
+            current = new Date(current.getTime() + 15 * 60000); // quarter-hour increments
         }
     }
 

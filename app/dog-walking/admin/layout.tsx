@@ -78,6 +78,9 @@ export default function AdminLayout({
                             <Link href="/dog-walking/admin/manage-bookings" style={styles.navLink}>
                                 Bookings
                             </Link>
+                            <Link href="/dog-walking/admin/recurring" style={styles.navLink}>
+                                Recurring
+                            </Link>
                             <Link href="/dog-walking/admin/manage-reviews" style={styles.navLink}>
                                 Reviews
                             </Link>

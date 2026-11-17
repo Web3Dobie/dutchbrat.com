@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { getPool } from '@/lib/database';
+import { resolveActor } from '@/lib/bookingActor';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -13,6 +14,11 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+    // Was unauthenticated. Series ids are sequential, so this returned any
+    // client's name, email and phone to anyone who counted upwards.
+    const actor = resolveActor(request);
+    if ('response' in actor) return actor.response;
+
     const { seriesId } = await params;
     const seriesIdNum = parseInt(seriesId);
 
@@ -42,8 +48,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
              JOIN hunters_hounds.dogs d1 ON bs.dog_id_1 = d1.id
              LEFT JOIN hunters_hounds.dogs d2 ON bs.dog_id_2 = d2.id
              LEFT JOIN hunters_hounds.secondary_addresses sa ON bs.secondary_address_id = sa.id
-             WHERE bs.id = $1`,
-            [seriesIdNum]
+             WHERE bs.id = $1
+               AND ($2::int IS NULL OR bs.owner_id = $2)`,
+            // null for an admin (any series), the client's own id otherwise
+            [seriesIdNum, actor.kind === 'admin' ? null : actor.ownerId]
         );
 
         if (seriesResult.rows.length === 0) {
