@@ -205,9 +205,31 @@ export function looksLikeEmail(identifier: string): boolean {
     return identifier.includes('@');
 }
 
-/** Phone numbers are stored inconsistently, so compare them stripped. */
-function normalisePhone(phone: string): string {
-    return phone.replace(/[\s\-()]/g, '');
+/**
+ * Reduce a phone number to digits, in UK national form, so two spellings of the
+ * same number compare equal.
+ *
+ * Stored numbers are a free-text field filled in by hand over two years, so
+ * they are not consistent. One record carries a "GB" country prefix in front of
+ * the digits — stripping only spaces, hyphens and brackets left the letters in
+ * place, so that client could never have matched her own number at the login
+ * and would have sat watching for a code that was never sent.
+ *
+ * (Examples use Ofcom's reserved fictional range, not a real client's number.)
+ *
+ *   "07700 900123"    -> "07700900123"
+ *   "GB07700900123"   -> "07700900123"
+ *   "+44 7700 900123" -> "07700900123"
+ *   "(020) 7946 0000" -> "02079460000"
+ *
+ * The 44 -> 0 step is applied only at the expected length, so a genuine
+ * non-UK number starting 44 is left alone rather than mangled.
+ */
+export function canonicalisePhone(phone: string): string {
+    const digits = (phone || '').replace(/\D/g, '');
+    if (digits.startsWith('44') && digits.length === 12) return '0' + digits.slice(2);
+    if (digits.startsWith('0044') && digits.length === 14) return '0' + digits.slice(4);
+    return digits;
 }
 
 /**
@@ -252,18 +274,32 @@ export async function resolveLoginTarget(
         };
     }
 
-    const digits = normalisePhone(trimmed);
+    const digits = canonicalisePhone(trimmed);
     // Too short to be a real number: treat as no match rather than letting a
     // two-digit string collide with something.
-    if (digits.replace(/\D/g, '').length < 7) return null;
+    if (digits.length < 7) return null;
+
+    // The same reduction has to happen to the stored side, in SQL, or the two
+    // never meet. Kept beside canonicalisePhone above — change them together.
+    const CANON = `
+        CASE
+            WHEN LENGTH(REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g')) = 12
+             AND REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g') LIKE '44%'
+            THEN '0' || SUBSTR(REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g'), 3)
+            WHEN LENGTH(REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g')) = 14
+             AND REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g') LIKE '0044%'
+            THEN '0' || SUBSTR(REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g'), 5)
+            ELSE REGEXP_REPLACE(COALESCE(%COL%, ''), '[^0-9]', '', 'g')
+        END`;
+    const canonPrimary = CANON.replace(/%COL%/g, 'phone');
+    const canonPartner = CANON.replace(/%COL%/g, 'partner_phone');
 
     const result = await client.query(
         `SELECT id, owner_name, email, partner_email,
-                REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '')         = $1 AS primary_match,
-                REPLACE(REPLACE(REPLACE(REPLACE(partner_phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1 AS partner_match
+                ${canonPrimary} = $1 AS primary_match,
+                ${canonPartner} = $1 AS partner_match
            FROM hunters_hounds.owners
-          WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '')         = $1
-             OR REPLACE(REPLACE(REPLACE(REPLACE(partner_phone, ' ', ''), '-', ''), '(', ''), ')', '') = $1
+          WHERE ${canonPrimary} = $1 OR ${canonPartner} = $1
           LIMIT 1`,
         [digits]
     );
