@@ -85,6 +85,20 @@ interface ClientDog {
     dog_name: string;
 }
 
+interface AvailAlternative {
+    time: string;
+    displayTime: string;
+}
+
+interface AvailDate {
+    date: string;
+    displayDate: string;
+    time?: string;
+    status: string;
+    reason?: string;
+    alternatives?: AvailAlternative[];
+}
+
 interface ClientRow {
     id: number;
     owner_name: string;
@@ -240,9 +254,13 @@ export default function AdminRecurringPage() {
     const [cStart, setCStart] = useState("");
     const [cWeeks, setCWeeks] = useState(12);
     const [availability, setAvailability] = useState<{
-        confirmed: { date: string; time: string }[];
-        skipped: { date: string; reason?: string }[];
+        available: AvailDate[];
+        conflicts: AvailDate[];
+        blocked: AvailDate[];
+        endDate: string;
     } | null>(null);
+    // date -> alternative time the admin picked for a clashing date
+    const [rescued, setRescued] = useState<Record<string, string>>({});
 
     const loadSeries = useCallback(async () => {
         setLoading(true);
@@ -406,6 +424,7 @@ export default function AdminRecurringPage() {
         setBusy(true);
         setError(null);
         setAvailability(null);
+        setRescued({});
         try {
             const endDate = (() => {
                 const d = new Date(`${cStart}T12:00:00Z`);
@@ -432,11 +451,14 @@ export default function AdminRecurringPage() {
                 setError(j.error ?? `Availability check failed (${r.status})`);
                 return;
             }
+            setRescued({});
             setAvailability({
-                confirmed: (j.available_dates ?? []).map(
-                    (d: { date: string; time: string }) => ({ date: d.date, time: d.time })
-                ),
-                skipped: [...(j.conflicting_dates ?? []), ...(j.blocked_dates ?? [])],
+                available: j.available_dates ?? [],
+                conflicts: j.conflicting_dates ?? [],
+                blocked: j.blocked_dates ?? [],
+                // booking_series.end_date is NOT NULL, so this has to be carried
+                // through to the create call, not just used for the check.
+                endDate,
             });
         } catch (e) {
             setError(e instanceof Error ? e.message : "Availability check failed");
@@ -445,8 +467,31 @@ export default function AdminRecurringPage() {
         }
     };
 
+    /** Dates that will actually be booked: the free ones, plus any clashing
+     *  date the admin has rescued onto an alternative time. */
+    const datesToBook = useMemo(() => {
+        if (!availability) return [];
+        const fromFree = availability.available.map((d) => ({
+            date: d.date,
+            time: d.time ?? cTime,
+        }));
+        const fromRescued = Object.entries(rescued)
+            .filter(([, time]) => !!time)
+            .map(([date, time]) => ({ date, time }));
+        return [...fromFree, ...fromRescued].sort((a, b) =>
+            a.date === b.date ? a.time.localeCompare(b.time) : a.date.localeCompare(b.date)
+        );
+    }, [availability, rescued, cTime]);
+
+    const stillSkipped = useMemo(() => {
+        if (!availability) return [];
+        return [...availability.conflicts, ...availability.blocked].filter(
+            (d) => !rescued[d.date]
+        );
+    }, [availability, rescued]);
+
     const confirmCreate = async () => {
-        if (!availability || availability.confirmed.length === 0) return;
+        if (!availability || datesToBook.length === 0) return;
         setBusy(true);
         setError(null);
         try {
@@ -463,8 +508,15 @@ export default function AdminRecurringPage() {
                     days_of_week: cDays,
                     preferred_time: cTime,
                     start_date: cStart,
-                    confirmed_dates: availability.confirmed,
-                    skipped_dates: availability.skipped,
+                    // NOT NULL on booking_series — omitting it failed the whole
+                    // create with a constraint violation.
+                    end_date: availability.endDate,
+                    confirmed_dates: datesToBook,
+                    skipped_dates: stillSkipped.map((d) => ({
+                        date: d.date,
+                        displayDate: d.displayDate,
+                        reason: d.reason ?? "Unavailable",
+                    })),
                     notes: "Created by admin",
                 }),
             });
@@ -473,8 +525,12 @@ export default function AdminRecurringPage() {
                 setError(j.error ?? `Create failed (${r.status})`);
                 return;
             }
-            setNotice(`Series created: ${availability.confirmed.length} booking(s).`);
+            setNotice(
+                `Series created: ${datesToBook.length} booking(s).` +
+                    (stillSkipped.length ? ` ${stillSkipped.length} date(s) skipped.` : "")
+            );
             setAvailability(null);
+            setRescued({});
             setShowCreate(false);
             loadSeries();
         } catch (e) {
@@ -650,23 +706,95 @@ export default function AdminRecurringPage() {
 
                         {availability && (
                             <div style={{ marginTop: "16px" }}>
-                                <p style={{ marginBottom: "8px" }}>
-                                    <strong>{availability.confirmed.length}</strong> slot(s) free
-                                    {availability.skipped.length > 0 && (
+                                <p style={{ marginBottom: "10px" }}>
+                                    <strong>{datesToBook.length}</strong> slot(s) will be booked
+                                    {stillSkipped.length > 0 && (
                                         <>
                                             {" · "}
                                             <span style={{ color: "#fbbf24" }}>
-                                                {availability.skipped.length} unavailable and will be skipped
+                                                {stillSkipped.length} still unavailable
                                             </span>
                                         </>
                                     )}
                                 </p>
+
+                                {/* The availability check already works out which other
+                                    times are free on a clashing date. Showing them here
+                                    means a single awkward week can be slotted in at a
+                                    different time instead of being silently dropped. */}
+                                {(availability.conflicts.length > 0 ||
+                                    availability.blocked.length > 0) && (
+                                    <div style={{ ...s.warn, marginBottom: "14px" }}>
+                                        <p style={{ marginBottom: "10px", fontWeight: 600 }}>
+                                            These dates are not free at {cTime}:
+                                        </p>
+                                        <table style={s.table}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={s.th}>Date</th>
+                                                    <th style={s.th}>Why</th>
+                                                    <th style={s.th}>Book it instead at</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {availability.conflicts.map((d) => (
+                                                    <tr key={d.date}>
+                                                        <td style={s.td}>{d.displayDate}</td>
+                                                        <td style={{ ...s.td, color: "#fde68a" }}>
+                                                            {d.reason ?? "Not available"}
+                                                        </td>
+                                                        <td style={s.td}>
+                                                            {d.alternatives && d.alternatives.length > 0 ? (
+                                                                <select
+                                                                    style={s.input}
+                                                                    value={rescued[d.date] ?? ""}
+                                                                    onChange={(e) =>
+                                                                        setRescued((prev) => ({
+                                                                            ...prev,
+                                                                            [d.date]: e.target.value,
+                                                                        }))
+                                                                    }
+                                                                >
+                                                                    <option value="">Skip this one</option>
+                                                                    {d.alternatives.slice(0, 12).map((a) => (
+                                                                        <option key={a.time} value={a.time}>
+                                                                            {a.displayTime}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : (
+                                                                <span style={{ color: "#9ca3af" }}>
+                                                                    nothing free that day
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {availability.blocked.map((d) => (
+                                                    <tr key={d.date}>
+                                                        <td style={s.td}>{d.displayDate}</td>
+                                                        <td style={{ ...s.td, color: "#fde68a" }}>
+                                                            {d.reason ?? "Blocked"}
+                                                        </td>
+                                                        <td style={{ ...s.td, color: "#9ca3af" }}>
+                                                            cannot be booked
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <p style={{ marginTop: "10px", fontSize: "0.82rem", color: "#fde68a" }}>
+                                            Or change the time above and check again to move the whole series.
+                                        </p>
+                                    </div>
+                                )}
+
                                 <button
-                                    style={{ ...s.btn, opacity: busy || !availability.confirmed.length ? 0.5 : 1 }}
-                                    disabled={busy || !availability.confirmed.length}
+                                    style={{ ...s.btn, opacity: busy || !datesToBook.length ? 0.5 : 1 }}
+                                    disabled={busy || !datesToBook.length}
                                     onClick={confirmCreate}
                                 >
-                                    {busy ? "Creating…" : `Create ${availability.confirmed.length} booking(s)`}
+                                    {busy ? "Creating…" : `Create ${datesToBook.length} booking(s)`}
                                 </button>
                             </div>
                         )}

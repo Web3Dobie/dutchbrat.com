@@ -79,6 +79,26 @@ export async function POST(request: NextRequest) {
         } = body;
 
         // Validate required fields
+        // booking_series has NOT NULL columns with no defaults. Without this
+        // check a missing field surfaced as a 500 constraint violation with a
+        // useless "Failed to create recurring booking" at the other end.
+        const missing = [
+            !owner_id && "owner_id",
+            !dog_id_1 && "dog_id_1",
+            !service_type && "service_type",
+            !recurrence_pattern && "recurrence_pattern",
+            !preferred_time && "preferred_time",
+            !start_date && "start_date",
+            !end_date && "end_date",
+        ].filter(Boolean);
+
+        if (missing.length > 0) {
+            return NextResponse.json(
+                { error: `Missing required field(s): ${missing.join(", ")}` },
+                { status: 400 }
+            );
+        }
+
         if (!owner_id || !dog_id_1 || !service_type || !duration_minutes || !confirmed_dates || confirmed_dates.length === 0) {
             return NextResponse.json(
                 { error: "Missing required fields or no confirmed dates" },
