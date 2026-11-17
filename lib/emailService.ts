@@ -30,6 +30,16 @@ interface EmailOptions {
     html: string;
     from?: string;  // Optional override for from address
     bcc?: string | string[]; // Optional additional BCC recipients
+    /**
+     * Suppress the automatic BCC to the business address.
+     *
+     * Every other email here is business correspondence worth a copy. Login
+     * codes are not: copying them would put a live credential for each of 42
+     * clients into the bookings inbox, and would mean 42 people's login
+     * attempts arriving as mail nobody will read. Use this ONLY for
+     * credentials.
+     */
+    skipBusinessBcc?: boolean;
 }
 
 /**
@@ -116,8 +126,8 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     const defaultFrom = "Hunter's Hounds <bookings@hunters-hounds.london>";
     const businessBcc = "bookings@hunters-hounds.london";
 
-    // Combine BCCs - always include business email
-    const bccList = [businessBcc];
+    // Combine BCCs - business email included unless explicitly suppressed
+    const bccList = options.skipBusinessBcc ? [] : [businessBcc];
     if (options.bcc) {
         const additionalBcc = Array.isArray(options.bcc) ? options.bcc : [options.bcc];
         bccList.push(...additionalBcc);
@@ -127,7 +137,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
         const { data, error } = await getResend().emails.send({
             from: options.from || defaultFrom,
             to: options.to,
-            bcc: bccList,
+            ...(bccList.length > 0 ? { bcc: bccList } : {}),
             subject: options.subject.replace(/[\r\n]+/g, ' ').trim(),
             html: options.html,
         });

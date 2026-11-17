@@ -6,6 +6,7 @@ import { TZDate } from "@date-fns/tz";
 import { getSoloWalkPrice, formatSoloWalkPrice, getQuickWalkPrice } from "@/lib/pricing";
 import { formatDogAge } from "@/lib/dogAge";
 import { customerFetch } from "@/lib/customerSession";
+import CustomerLogin, { type LoggedInCustomer } from "./CustomerLogin";
 
 // --- Types ---
 interface Dog {
@@ -292,79 +293,42 @@ export default function BookingForm({
         );
     };
 
-    // --- 1. LOOKUP HANDLER - UPDATED: Now supports both phone and email ---
-    const handleLookup = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // --- 1. LOGIN ---
+    //
+    // The form, and the emailed code behind it, live in CustomerLogin. This used
+    // to be a handleLookup that called /customer-lookup with whatever was typed
+    // and treated a match as proof of identity — which meant knowing a client's
+    // email address was enough to book in their name, see their address and read
+    // their history.
+    const handleLoginSuccess = (customer: LoggedInCustomer) => {
+        setCurrentUser({
+            owner_id: customer.owner_id,
+            owner_name: customer.owner_name,
+            phone: customer.phone,
+            email: customer.email,
+            address: customer.address,
+            dogs: customer.dogs,
+        });
+        setView("selectDog");
+        // No session POST here: CustomerLogin's code exchange sets the cookie.
+    };
 
-        if (!searchInput.trim()) {
-            setError("Please enter your phone number or email address.");
-            return;
+    /**
+     * "New to Hunter's Hounds? Register here" from the login.
+     *
+     * The old flow inferred this — an email that found no account dropped
+     * straight into registration. The login can no longer tell the customer
+     * whether an address is on file (saying so would tell strangers the same),
+     * so registering is now something they choose. `typedEmail` is whatever
+     * they had already entered, so they don't type it twice.
+     */
+    const handleRegisterClick = (typedEmail: string) => {
+        setSearchInput(typedEmail);
+        if (typedEmail.includes("@")) {
+            setRegisterData((prev) => ({ ...prev, email: typedEmail }));
         }
-
-        setIsLoading(true);
         setError(null);
-
-        try {
-            // Determine if input is email or phone
-            const isEmail = searchInput.includes("@");
-            const queryParam = isEmail ? `email=${encodeURIComponent(searchInput)}` : `phone=${encodeURIComponent(searchInput)}`;
-
-            const response = await fetch(`/api/dog-walking/customer-lookup?${queryParam}`, {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to find your account");
-            }
-
-            if (data.found) {
-                // Success - customer found, convert to User format
-                const user: User = {
-                    owner_id: data.customer.owner_id,
-                    owner_name: data.customer.owner_name,
-                    phone: data.customer.phone,
-                    email: data.customer.email,
-                    address: data.customer.address,
-                    dogs: data.customer.dogs
-                };
-                setCurrentUser(user);
-                setView("selectDog");
-
-                // Set session cookie for persistent login
-                try {
-                    await fetch('/api/dog-walking/customer-session', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            owner_id: user.owner_id,
-                            owner_name: user.owner_name,
-                            email: user.email,
-                            phone: user.phone
-                        })
-                    });
-                    console.log('[BookingForm] Session cookie set for:', user.owner_name);
-                } catch (sessionErr) {
-                    console.error('[BookingForm] Failed to set session cookie:', sessionErr);
-                }
-            } else {
-                // Customer not found - set up register data with search input
-                if (isEmail) {
-                    setRegisterData(prev => ({ ...prev, email: searchInput }));
-                }
-                setView("register");
-            }
-
-        } catch (err: any) {
-            console.error("Customer lookup error:", err);
-            setError(err.message || "Something went wrong. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
+        setView("register");
     };
 
     // --- 2. REGISTER HANDLER - UPDATED: Uses searchInput instead of phone ---
@@ -376,12 +340,13 @@ export default function BookingForm({
         setError(null);
 
         try {
-            // Determine if we have email or phone in searchInput
-            const isEmail = searchInput.includes("@");
+            // Both come from their own fields now. They used to be teased apart
+            // from a single "phone or email" box, which meant whichever one the
+            // customer had NOT typed into that box was the only one validated.
             const registrationData = {
                 ...registerData,
-                phone: isEmail ? registerData.phone || "" : searchInput,  // Use searchInput if it's a phone
-                email: isEmail ? searchInput : registerData.email,  // Use searchInput if it's an email
+                phone: registerData.phone.trim(),
+                email: registerData.email.trim(),
                 dogAge: parseInt(registerData.dogAge, 10),
                 photoSharingConsent: registerData.photoConsent,  // Include photo consent
             };
@@ -406,22 +371,11 @@ export default function BookingForm({
             console.log("🔄 Setting view to selectDog");
             setView("selectDog");
 
-            // Set session cookie for persistent login
-            try {
-                await fetch('/api/dog-walking/customer-session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        owner_id: data.user.owner_id,
-                        owner_name: data.user.owner_name,
-                        email: data.user.email,
-                        phone: data.user.phone
-                    })
-                });
-                console.log('[BookingForm] Session cookie set for new user:', data.user.owner_name);
-            } catch (sessionErr) {
-                console.error('[BookingForm] Failed to set session cookie:', sessionErr);
-            }
+            // No session POST here. /user-register sets the cookie itself in the
+            // same response — someone who has just created the account is
+            // self-evidently its owner — and POSTing to /customer-session now
+            // requires an emailed code, which a brand-new account has not been
+            // sent.
 
         } catch (err: any) {
             console.error("💥 Error:", err);
@@ -665,44 +619,26 @@ export default function BookingForm({
     // --- VIEW RENDERS ---
 
     const renderLookupView = () => (
-        <form onSubmit={handleLookup}>
+        <div>
             {renderSummary()}
-            <h4>Find Your Account</h4>
-
-            {/* UPDATED: Changed label and placeholder to support both phone and email */}
-            <label style={styles.label}>Phone Number or Email Address</label>
-            <input
-                style={styles.input}
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Enter your phone or email"
-                required
-                autoComplete="tel email"
+            <CustomerLogin
+                title="Sign in to book"
+                subtitle="Enter the email address you booked with and we'll send you a code."
+                onAuthSuccess={handleLoginSuccess}
+                onRegisterClick={handleRegisterClick}
             />
-            <p style={styles.hint}>
-                Enter the phone number or email address you used when booking to find your account.
-            </p>
-
-            {error && <p style={styles.error}>{error}</p>}
-            <button style={styles.button} type="submit" disabled={isLoading}>
-                {isLoading ? "Searching..." : "Find My Account"}
-            </button>
             <button style={styles.cancelButton} type="button" onClick={onCancel}>
                 Cancel Booking
             </button>
-        </form>
+        </div>
     );
 
     const renderRegisterView = () => {
-        // Determine if we started with email or phone
-        const isEmail = searchInput.includes("@");
-
         return (
             <form onSubmit={handleRegister}>
                 {renderSummary()}
                 <h4>Create Your Account</h4>
-                <p>Let's create an account for <strong>{searchInput}</strong>:</p>
+                <p>A few details and we're done:</p>
 
                 <label style={styles.label}>Your Full Name*</label>
                 <input
@@ -713,34 +649,35 @@ export default function BookingForm({
                     required
                 />
 
-                {/* Show phone field only if we started with email */}
-                {isEmail && (
-                    <>
-                        <label style={styles.label}>Your Phone Number*</label>
-                        <input
-                            style={styles.input}
-                            type="tel"
-                            value={registerData.phone}
-                            onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
-                            placeholder="07123456789"
-                            required
-                        />
-                    </>
-                )}
+                {/* Both fields, always. They were previously conditional on
+                    whether the customer had typed a phone or an email into the
+                    old single "find my account" box — which no longer exists,
+                    and which left whichever field was hidden unvalidated. The
+                    email is also where future logins send a code, so it is not
+                    optional. */}
+                <label style={styles.label}>Your Email Address*</label>
+                <input
+                    style={styles.input}
+                    type="email"
+                    value={registerData.email}
+                    onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                    placeholder="you@example.com"
+                    required
+                />
+                <p style={styles.hint}>
+                    This is where we'll send your booking confirmations, and the code you'll
+                    use to sign in next time.
+                </p>
 
-                {/* Show email field only if we started with phone */}
-                {!isEmail && (
-                    <>
-                        <label style={styles.label}>Your Email Address*</label>
-                        <input
-                            style={styles.input}
-                            type="email"
-                            value={registerData.email}
-                            onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                            required
-                        />
-                    </>
-                )}
+                <label style={styles.label}>Your Phone Number*</label>
+                <input
+                    style={styles.input}
+                    type="tel"
+                    value={registerData.phone}
+                    onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
+                    placeholder="07123456789"
+                    required
+                />
 
                 <label style={styles.label}>Your Full Address*</label>
                 <input

@@ -64,91 +64,39 @@ function HuntersHoundsBooking() {
     checkForAuthenticatedUser();
   }, []);
 
+  /**
+   * Who is booking, from the session cookie alone.
+   *
+   * This used to read ?userId=&phone=&email= off the URL and look the customer
+   * up from it, which made the page a login: anyone holding a link with a
+   * client's email address in it became that client, and the page then minted a
+   * session cookie to match. The links were only ever generated internally by
+   * the dashboard, and no email ever contained one, so dropping that path costs
+   * nothing — anyone arriving from the dashboard already has the cookie.
+   *
+   * Signing in now happens where it should, inside BookingForm, via a code
+   * emailed to the address on file.
+   */
   const checkForAuthenticatedUser = async () => {
     try {
-      // Check URL parameters for user context from dashboard
-      const urlParams = new URLSearchParams(window.location.search);
-      const userId = urlParams.get('userId');
-      const userPhone = urlParams.get('phone');
-      const userEmail = urlParams.get('email');
+      const sessionResponse = await fetch('/api/dog-walking/customer-session');
+      const sessionData = await sessionResponse.json();
 
-      console.log("🔍 Checking authentication - URL params:", { userId, userPhone, userEmail });
+      if (sessionData.authenticated && sessionData.customer) {
+        const user: User = {
+          owner_id: sessionData.customer.owner_id,
+          owner_name: sessionData.customer.owner_name,
+          phone: sessionData.customer.phone,
+          email: sessionData.customer.email,
+          address: sessionData.customer.address,
+          has_had_meetgreet: sessionData.customer.has_had_meetgreet,
+          dogs: sessionData.customer.dogs || []
+        };
 
-      // If user context provided via URL, fetch user data
-      if (userPhone || userEmail) {
-        const queryParam = userEmail
-          ? `email=${encodeURIComponent(userEmail)}`
-          : userPhone
-          ? `phone=${encodeURIComponent(userPhone)}`
-          : '';
-
-        if (queryParam) {
-          console.log("📞 Fetching authenticated user with:", queryParam);
-          const response = await fetch(`/api/dog-walking/customer-lookup?${queryParam}`);
-          const data = await response.json();
-
-          console.log("📋 Authentication response:", { status: response.status, found: data.found });
-
-          if (response.ok && data.found) {
-            // Convert customer to user format
-            const user: User = {
-              owner_id: data.customer.owner_id,
-              owner_name: data.customer.owner_name,
-              phone: data.customer.phone,
-              email: data.customer.email,
-              address: data.customer.address,
-              has_had_meetgreet: data.customer.has_had_meetgreet,
-              dogs: data.customer.dogs || []
-            };
-
-            setAuthenticatedUser(user);
-            console.log("✅ User authenticated via URL:", user.owner_name);
-
-            // Also set session cookie for future visits
-            try {
-              await fetch('/api/dog-walking/customer-session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  owner_id: user.owner_id,
-                  owner_name: user.owner_name,
-                  email: user.email,
-                  phone: user.phone
-                })
-              });
-            } catch (sessionErr) {
-              console.error('[BookNow] Failed to set session cookie:', sessionErr);
-            }
-          } else {
-            console.log("❌ User authentication failed");
-          }
-        }
+        setAuthenticatedUser(user);
+        console.log("✅ User authenticated via session cookie:", user.owner_name);
       } else {
-        // No URL params - check for existing session cookie
-        console.log("🍪 No URL params - checking session cookie...");
-        try {
-          const sessionResponse = await fetch('/api/dog-walking/customer-session');
-          const sessionData = await sessionResponse.json();
-
-          if (sessionData.authenticated && sessionData.customer) {
-            const user: User = {
-              owner_id: sessionData.customer.owner_id,
-              owner_name: sessionData.customer.owner_name,
-              phone: sessionData.customer.phone,
-              email: sessionData.customer.email,
-              address: sessionData.customer.address,
-              has_had_meetgreet: sessionData.customer.has_had_meetgreet,
-              dogs: sessionData.customer.dogs || []
-            };
-
-            setAuthenticatedUser(user);
-            console.log("✅ User authenticated via session cookie:", user.owner_name);
-          } else {
-            console.log("ℹ️ No session cookie found - normal booking flow");
-          }
-        } catch (sessionErr) {
-          console.error("🍪 Session check failed:", sessionErr);
-        }
+        console.log("ℹ️ No session cookie found - normal booking flow");
       }
     } catch (error) {
       console.error("💥 Authentication check failed:", error);

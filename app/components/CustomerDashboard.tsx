@@ -374,7 +374,11 @@ export default function CustomerDashboard() {
                         ✉️ ernesto@hunters-hounds.london
                     </a>
                     <a
-                        href={customer ? `/book-now?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}` : "/book-now"}
+                        // No identity in the query string any more. /book-now
+                        // reads the session cookie, which is already set — and
+                        // a URL carrying an email address was a login link for
+                        // anyone who got hold of it.
+                        href="/book-now"
                         style={{
                             color: "#10b981",
                             textDecoration: "none",

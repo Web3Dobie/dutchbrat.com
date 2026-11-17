@@ -1411,3 +1411,106 @@ function generateNotionNewsletterEmail(content: NewsletterContent): string {
     </html>
     `;
 }
+
+// ---------------------------------------------------------------------------
+// Login code
+// ---------------------------------------------------------------------------
+
+export interface LoginCodeEmailData {
+    ownerName: string;
+    code: string;
+    /** How long the code lasts, already formatted — "10 minutes". */
+    validFor: string;
+}
+
+/**
+ * The emailed code that logs a client in.
+ *
+ * Deliberately contains no link. A login link tapped inside the Gmail or
+ * Outlook app opens in that app's embedded browser, so the session cookie
+ * lands somewhere the client will never look again — it appears broken when it
+ * is not. Corporate mail scanners also pre-fetch links, which would consume a
+ * single-use one before the client ever saw it. A typed code has neither
+ * problem.
+ *
+ * The code is in the subject as well as the body so it shows up in the phone
+ * notification, which saves opening the mail at all.
+ */
+export function generateLoginCodeEmail(data: LoginCodeEmailData): { subject: string; html: string } {
+    const ownerName = esc(data.ownerName);
+    const code = esc(data.code);
+    const validFor = esc(data.validFor);
+
+    const subject = `${data.code} is your Hunter's Hounds login code`;
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Your login code - Hunter's Hounds</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Hunter's Hounds</h1>
+                <p style="color: #dbeafe; margin: 10px 0 0 0; font-size: 16px;">Professional Dog Walking &amp; Pet Care</p>
+            </div>
+
+            <!-- Main content -->
+            <div style="padding: 40px 30px;">
+
+                <h2 style="color: #1f2937; margin: 0 0 20px 0; font-size: 24px;">Hi ${ownerName}!</h2>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0 0 25px 0;">
+                    Here is the code to sign in to your bookings. Type it into the page
+                    you already have open — there is nothing to click here.
+                </p>
+
+                <!-- The code -->
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="display: inline-block; background-color: #f1f5f9; border: 2px dashed #94a3b8; border-radius: 10px; padding: 24px 40px;">
+                        <div style="color: #0f172a; font-size: 40px; font-weight: bold; letter-spacing: 10px; font-family: 'Courier New', Courier, monospace;">
+                            ${code}
+                        </div>
+                    </div>
+                    <p style="color: #6b7280; font-size: 14px; margin: 14px 0 0 0;">
+                        Valid for ${validFor}, and only once.
+                    </p>
+                </div>
+
+                <p style="color: #4b5563; line-height: 1.6; font-size: 15px; margin: 25px 0 0 0;">
+                    If you didn't try to sign in, you can ignore this email — nobody can
+                    get into your account without the code above. Do let me know, though,
+                    so I can keep an eye on it.
+                </p>
+
+                <!-- Personal signature -->
+                <div style="margin-top: 30px; padding-top: 25px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #4b5563; line-height: 1.6; font-size: 16px; margin: 0;">
+                        Warm regards,<br>
+                        <strong>Ernesto</strong><br>
+                        Hunter's Hounds
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                    Hunter's Hounds - Professional Dog Walking Service<br>
+                    Serving Highbury Fields &amp; Clissold Park Areas
+                </p>
+            </div>
+
+        </div>
+    </body>
+    </html>
+    `;
+
+    return { subject, html };
+}

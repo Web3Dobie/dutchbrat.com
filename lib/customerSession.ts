@@ -2,8 +2,10 @@
 //
 // Client-side handling of an expired customer session.
 //
-// Why this exists: customer sessions last 7 days (SESSION_TTL_SECONDS in
-// lib/session.ts). Once one expires, every guarded route returns
+// Why this exists: a customer session eventually expires (90 days, sliding —
+// CUSTOMER_TTL_SECONDS in lib/session.ts; it was 7 days fixed when this file was
+// written, which is what made the dead end below a weekly event rather than a
+// rare one). Once one expires, every guarded route returns
 // 401 {"error":"Not authenticated"} — and each dashboard component used to do
 //
 //     if (!response.ok) throw new Error(data.error || "...")

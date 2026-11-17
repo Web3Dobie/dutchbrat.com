@@ -124,7 +124,23 @@ export const CUSTOMER_COOKIE = 'dog-walking-customer-session';
 export const HUNTER_COOKIE = 'hunter-auth';
 export const HELPING_PAWS_COOKIE = 'helping-paws-auth';
 
-export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days, as before
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days — admin, hunter, helping-paws
+
+/**
+ * Customer sessions last far longer than the staff ones, deliberately.
+ *
+ * A client logs in by entering a code emailed to the address on file, so the
+ * session is backed by proof of mailbox control rather than by knowing an email
+ * address. That is what makes a long cookie safe here and not before: a 90-day
+ * session granted on a guessable identifier would have been 90 days of access
+ * to someone's address, phone and booking history.
+ *
+ * It also fixes the complaint in lib/customerSession.ts — at 7 days every
+ * client was silently logged out roughly weekly, and reported it as a bug. A
+ * code four times a year is a fair trade; a code every week is not, and would
+ * have made the whole login worse than the one it replaced.
+ */
+export const CUSTOMER_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days
 
 /** Shared cookie attributes. Secure is unconditional: every domain is HTTPS via Cloudflare. */
 export const SESSION_COOKIE_OPTIONS = {
@@ -133,4 +149,10 @@ export const SESSION_COOKIE_OPTIONS = {
     sameSite: 'lax' as const,
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
+};
+
+/** As above, with the customer lifetime. Keep the two in step. */
+export const CUSTOMER_COOKIE_OPTIONS = {
+    ...SESSION_COOKIE_OPTIONS,
+    maxAge: CUSTOMER_TTL_SECONDS,
 };

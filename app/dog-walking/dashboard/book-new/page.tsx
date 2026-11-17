@@ -80,48 +80,26 @@ export default function AuthenticatedBookingPage() {
     }, []);
 
     // --- API Functions ---
+    /**
+     * Who is booking, from the session cookie.
+     *
+     * This used to take ?phone= or ?email= from the URL and call
+     * /customer-lookup with it, which meant a link containing a client's email
+     * address was a login for that client's account. The dashboard reaches this
+     * page with a session cookie already set, so the parameters were never
+     * needed — and /customer-lookup is now admin-only for that reason.
+     */
     const checkDashboardAuth = async () => {
         try {
-            // Try to get user from session/localStorage or URL params
-            const urlParams = new URLSearchParams(window.location.search);
-            const userId = urlParams.get('userId');
-            const userPhone = urlParams.get('phone');
-            const userEmail = urlParams.get('email');
+            const response = await fetch('/api/dog-walking/customer-session');
+            const data = await response.json();
 
-            console.log("🔍 Auth check - URL params:", { userId, userPhone, userEmail });
-
-            // Always prefer phone/email over userId for customer lookup
-            if (userPhone || userEmail) {
-                // User came from dashboard with context, do a customer lookup using phone or email
-                const queryParam = userEmail 
-                    ? `email=${encodeURIComponent(userEmail)}`
-                    : userPhone 
-                    ? `phone=${encodeURIComponent(userPhone)}`
-                    : '';
-
-                if (!queryParam) {
-                    console.log("❌ No valid query param for customer lookup");
-                    setIsAuthenticated(false);
-                    return;
-                }
-
-                console.log("📞 Calling customer lookup with:", queryParam);
-                const response = await fetch(`/api/dog-walking/customer-lookup?${queryParam}`);
-                const data = await response.json();
-
-                console.log("📋 Customer lookup response:", { status: response.status, data });
-
-                if (response.ok && data.found) {
-                    console.log("✅ Customer authenticated:", data.customer.owner_name);
-                    setCustomer(data.customer);
-                    setIsAuthenticated(true);
-                } else {
-                    console.error("❌ Customer lookup failed:", data);
-                    setIsAuthenticated(false);
-                }
+            if (data.authenticated && data.customer) {
+                console.log("✅ Customer authenticated:", data.customer.owner_name);
+                setCustomer(data.customer);
+                setIsAuthenticated(true);
             } else {
-                // No phone/email context provided, require authentication
-                console.log("❌ No phone/email provided, requiring authentication");
+                console.log("❌ No customer session, showing login");
                 setIsAuthenticated(false);
             }
         } catch (error) {

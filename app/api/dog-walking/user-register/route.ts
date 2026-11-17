@@ -4,7 +4,7 @@ import { sendEmail } from "@/lib/emailService";
 import { generateWelcomeEmail, type WelcomeEmailData } from "@/lib/emailTemplates";
 import { getPool } from '@/lib/database';
 import { formatDogAge, formatDogBirthday } from '@/lib/dogAge';
-import { CUSTOMER_COOKIE, SESSION_COOKIE_OPTIONS, SESSION_TTL_SECONDS, signSession } from '@/lib/session';
+import { CUSTOMER_COOKIE, CUSTOMER_COOKIE_OPTIONS, CUSTOMER_TTL_SECONDS, signSession } from '@/lib/session';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -158,8 +158,8 @@ export async function POST(request: NextRequest) {
 
         response.cookies.set(
             CUSTOMER_COOKIE,
-            signSession({ realm: 'customer', owner_id: newOwnerId }, SESSION_TTL_SECONDS),
-            SESSION_COOKIE_OPTIONS
+            signSession({ realm: 'customer', owner_id: newOwnerId }, CUSTOMER_TTL_SECONDS),
+            CUSTOMER_COOKIE_OPTIONS
         );
 
         return response;

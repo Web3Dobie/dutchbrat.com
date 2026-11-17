@@ -1,23 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { isAuthenticated, unauthorizedResponse } from '@/lib/auth';
 import { clientIp, rateLimit, tooManyRequests } from '@/lib/rateLimit';
 
 // Database Connection
 const pool = getPool();
 
-// 20 lookups per 15 minutes per IP.
+// ADMIN ONLY as of 2026-11-17.
 //
-// This endpoint is unauthenticated by design — supplying an email or phone IS the
-// login step. But a match returns the client's full record (address, phone,
-// partner details, dogs), so without a limit it could be used to harvest clients
-// by guessing identifiers in bulk. Knowing an exact email or phone is a real
-// barrier, unlike the integer enumeration that used to work on other endpoints;
-// rate limiting makes guessing at scale impractical. Proper identity proof (an
-// emailed code) is the remaining step.
+// This used to be unauthenticated "by design", because supplying an email or
+// phone WAS the customer login. A match returns the whole record — address,
+// phone, partner name and contact details, payment preference, every dog — so
+// anyone who knew a client's email address could read all of it, and email
+// addresses are not secret.
+//
+// The customer login now goes through an emailed one-time code
+// (customer-session/request-code), and a successful login returns the record
+// from customer-session itself. No client-side caller needs this route any
+// more, so rather than delete a useful tool it is now behind the admin cookie:
+// looking a client up by email or phone number is a reasonable thing for
+// Ernesto to do, and an unreasonable thing for a stranger to do.
+//
+// The rate limit stays. It is cheap, and it still applies to a leaked admin
+// session.
 const MAX_LOOKUPS = 20;
 const WINDOW_SECONDS = 15 * 60;
 
 export async function GET(request: NextRequest) {
+    if (!isAuthenticated(request)) return unauthorizedResponse();
+
     const ip = clientIp(request);
     const limit = rateLimit(`customer-lookup:${ip}`, MAX_LOOKUPS, WINDOW_SECONDS);
     if (!limit.allowed) {
