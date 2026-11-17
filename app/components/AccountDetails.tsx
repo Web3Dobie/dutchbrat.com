@@ -51,6 +51,8 @@ interface AccountFormData {
     // Vet & Insurance details
     vet_info: string;
     pet_insurance: string;
+    // Whether their dog's photos may be used publicly
+    photo_sharing_consent: boolean;
 }
 
 export default function AccountDetails({ customer, onCustomerUpdated, onBack }: AccountDetailsProps) {
@@ -65,6 +67,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
         partner_phone: customer.partner_phone || '',
         vet_info: customer.vet_info || '',
         pet_insurance: customer.pet_insurance || '',
+        photo_sharing_consent: customer.photo_sharing_consent === true,
     });
 
     const [isLoading, setIsLoading] = useState(false);
@@ -282,6 +285,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
             // Always include vet and insurance fields
             updateData.vet_info = formData.vet_info;
             updateData.pet_insurance = formData.pet_insurance;
+            updateData.photo_sharing_consent = formData.photo_sharing_consent;
 
             const response = await customerFetch(`/api/dog-walking/customer-update`, {
                 method: "PUT",
@@ -314,6 +318,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                 partner_phone: hasPartner ? formData.partner_phone || null : null,
                 vet_info: formData.vet_info || null,
                 pet_insurance: formData.pet_insurance || null,
+                photo_sharing_consent: formData.photo_sharing_consent,
             };
 
             setSuccessMessage("Account details updated successfully!");
@@ -689,51 +694,75 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                     </div>
                 </div>
 
-                {/* Photo Sharing Consent (Read-Only) */}
+                {/* Photo Sharing Consent.
+
+                    Was read-only, with "to change this setting, please contact
+                    Hunter's Hounds directly" underneath it. Someone's consent to
+                    publish photographs of their dog should not need a human in
+                    the loop to change, in either direction.
+
+                    Two radios rather than one checkbox, deliberately. An
+                    unticked box cannot be told apart from an unread one, which
+                    is exactly how 17 clients came to be recorded as refusing
+                    when most had probably just scrolled past it. */}
                 <div style={styles.card}>
                     <h3 style={styles.sectionHeader}>Photo Sharing Permission</h3>
-                    <div style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        padding: "16px",
-                        backgroundColor: "#1f2937",
-                        borderRadius: "6px",
-                        border: "1px solid #4b5563"
-                    }}>
-                        <span style={{
-                            fontSize: "1.5rem"
-                        }}>
-                            {customer.photo_sharing_consent ? "✅" : "❌"}
-                        </span>
-                        <div>
-                            <div style={{
-                                color: customer.photo_sharing_consent ? "#10b981" : "#9ca3af",
-                                fontWeight: "600",
-                                marginBottom: "4px"
-                            }}>
-                                {customer.photo_sharing_consent
-                                    ? "You have allowed photo sharing"
-                                    : "Photo sharing not allowed"}
-                            </div>
-                            <div style={{
-                                color: "#6b7280",
-                                fontSize: "0.875rem"
-                            }}>
-                                {customer.photo_sharing_consent
-                                    ? "Your dog's photos may appear on our website and social media."
-                                    : "Your dog's photos will not be shared publicly."}
-                            </div>
-                        </div>
-                    </div>
-                    <p style={{
-                        color: "#6b7280",
-                        fontSize: "0.8rem",
-                        marginTop: "12px",
-                        fontStyle: "italic"
-                    }}>
-                        To change this setting, please contact Hunter's Hounds directly.
+                    <p style={{ color: "#9ca3af", fontSize: "0.9rem", marginBottom: "16px", lineHeight: 1.5 }}>
+                        May we use photos of your dog on our website and social media?
+                        You can change your mind whenever you like.
                     </p>
+
+                    {([
+                        {
+                            value: true,
+                            icon: "\u2705",
+                            title: "Yes, that's fine",
+                            detail: "Your dog's photos may appear on our website and social media.",
+                            accent: "#10b981",
+                        },
+                        {
+                            value: false,
+                            icon: "\u274c",
+                            title: "No, please don't",
+                            detail: "Your dog's photos stay private, and are only ever shared with you.",
+                            accent: "#9ca3af",
+                        },
+                    ] as const).map((option) => {
+                        const selected = formData.photo_sharing_consent === option.value;
+                        return (
+                            <label
+                                key={String(option.value)}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "12px",
+                                    padding: "16px",
+                                    marginBottom: "10px",
+                                    backgroundColor: selected ? "#111827" : "#1f2937",
+                                    borderRadius: "6px",
+                                    border: "2px solid " + (selected ? option.accent : "#4b5563"),
+                                    cursor: "pointer",
+                                }}
+                            >
+                                <input
+                                    type="radio"
+                                    name="photo_sharing_consent"
+                                    checked={selected}
+                                    onChange={() =>
+                                        setFormData((prev) => ({ ...prev, photo_sharing_consent: option.value }))
+                                    }
+                                    style={{ marginTop: "4px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
+                                />
+                                <span style={{ fontSize: "1.25rem", lineHeight: 1.2 }}>{option.icon}</span>
+                                <div>
+                                    <div style={{ color: selected ? option.accent : "#d1d5db", fontWeight: 600, marginBottom: "4px" }}>
+                                        {option.title}
+                                    </div>
+                                    <div style={{ color: "#6b7280", fontSize: "0.875rem" }}>{option.detail}</div>
+                                </div>
+                            </label>
+                        );
+                    })}
                 </div>
 
                 {/* Action Buttons */}

@@ -118,7 +118,7 @@ export default function BookingForm({
         dogName: "",
         dogBreed: "",
         dogAge: "",
-        photoConsent: false,  // Photo sharing consent
+        photoConsent: null as boolean | null,  // null = not yet answered
     });
     const [newDogData, setNewDogData] = useState({
         dogName: "",
@@ -722,7 +722,13 @@ export default function BookingForm({
                     required
                 />
 
-                {/* Photo Sharing Consent */}
+                {/* An explicit choice, nothing pre-selected, and required.
+
+                    A single unticked checkbox cannot be told apart from an
+                    unread one, so "no" and "didn't notice" were stored as the
+                    same value -- which is how 17 of 27 clients came to be
+                    recorded as refusing. Pre-ticking it would be worse:
+                    consent from a pre-ticked box is not consent. */}
                 <div style={{
                     marginTop: "20px",
                     padding: "16px",
@@ -730,28 +736,46 @@ export default function BookingForm({
                     borderRadius: "8px",
                     border: "1px solid #374151"
                 }}>
-                    <label style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "12px",
-                        cursor: "pointer",
-                        color: "#d1d5db"
-                    }}>
-                        <input
-                            type="checkbox"
-                            checked={registerData.photoConsent}
-                            onChange={(e) => setRegisterData({ ...registerData, photoConsent: e.target.checked })}
-                            style={{
-                                marginTop: "4px",
-                                width: "18px",
-                                height: "18px",
-                                cursor: "pointer"
-                            }}
-                        />
-                        <span style={{ fontSize: "14px", lineHeight: "1.5" }}>
-                            I give permission for Hunter's Hounds to share photos of my dog on their website and social media
-                        </span>
-                    </label>
+                    <p style={{ fontSize: "14px", color: "#d1d5db", marginBottom: "12px", lineHeight: "1.5" }}>
+                        May we share photos of your dog on our website and social media?
+                        <span style={{ color: "#f87171" }}> *</span>
+                    </p>
+                    {([
+                        { value: true, label: "Yes, that's fine" },
+                        { value: false, label: "No, please don't" },
+                    ] as const).map((option) => {
+                        const selected = registerData.photoConsent === option.value;
+                        return (
+                            <label
+                                key={String(option.value)}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "12px",
+                                    padding: "12px",
+                                    marginBottom: "8px",
+                                    borderRadius: "6px",
+                                    border: "2px solid " + (selected ? "#3b82f6" : "#374151"),
+                                    backgroundColor: selected ? "#1e3a8a22" : "transparent",
+                                    cursor: "pointer",
+                                    color: selected ? "#fff" : "#d1d5db",
+                                }}
+                            >
+                                <input
+                                    type="radio"
+                                    name="photoConsent"
+                                    required
+                                    checked={selected}
+                                    onChange={() => setRegisterData({ ...registerData, photoConsent: option.value })}
+                                    style={{ width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
+                                />
+                                <span style={{ fontSize: "14px", lineHeight: "1.5" }}>{option.label}</span>
+                            </label>
+                        );
+                    })}
+                    <p style={{ fontSize: "12px", color: "#6b7280", marginTop: "8px" }}>
+                        You can change this at any time from your account page.
+                    </p>
                 </div>
 
                 {error && <p style={styles.error}>{error}</p>}

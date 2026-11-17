@@ -12,7 +12,7 @@ interface RegisterData {
     dogBreed: string;
     dogBirthMonth: string;
     dogBirthYear: string;
-    photoConsent: boolean;
+    photoConsent: boolean | null;
 }
 
 interface RegisteredUser {
@@ -41,7 +41,7 @@ export default function AdminRegisterClient() {
         dogBreed: "",
         dogBirthMonth: "",
         dogBirthYear: "",
-        photoConsent: false,
+        photoConsent: null,  // null = not yet answered
     });
 
     const [isLoading, setIsLoading] = useState(false);
@@ -109,7 +109,7 @@ export default function AdminRegisterClient() {
                 dogBreed: "",
                 dogBirthMonth: "",
                 dogBirthYear: "",
-                photoConsent: false,
+                photoConsent: null,  // null = not yet answered
             });
 
         } catch (err: any) {
@@ -352,29 +352,52 @@ export default function AdminRegisterClient() {
                 </div>
 
                 <div style={styles.sectionTitle}>Photo Sharing Consent</div>
-                <label style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "12px",
-                    cursor: "pointer",
-                    color: "#d1d5db",
-                    marginBottom: "24px"
-                }}>
-                    <input
-                        type="checkbox"
-                        checked={formData.photoConsent}
-                        onChange={(e) => setFormData(prev => ({ ...prev, photoConsent: e.target.checked }))}
-                        style={{
-                            marginTop: "4px",
-                            width: "18px",
-                            height: "18px",
-                            cursor: "pointer"
-                        }}
-                    />
-                    <span style={{ fontSize: "14px", lineHeight: "1.5" }}>
-                        Client gives permission to share photos of their dog on website and social media
-                    </span>
-                </label>
+                {/* An explicit choice, nothing pre-selected, and required.
+
+                    A single unticked checkbox cannot be told apart from an
+                    unread one, so "no" and "didn't notice" were stored as the
+                    same value -- which is how 17 of 27 clients came to be
+                    recorded as refusing. Pre-ticking it would be worse:
+                    consent from a pre-ticked box is not consent. */}
+                <div style={{ marginBottom: "24px" }}>
+                    <p style={{ fontSize: "14px", color: "#d1d5db", marginBottom: "12px", lineHeight: "1.5" }}>
+                        Has the client agreed to photos of their dog being used on the
+                        website and social media? <span style={{ color: "#f87171" }}>*</span>
+                    </p>
+                    {([
+                        { value: true, label: "Yes, they've agreed" },
+                        { value: false, label: "No, they haven't" },
+                    ] as const).map((option) => {
+                        const selected = formData.photoConsent === option.value;
+                        return (
+                            <label
+                                key={String(option.value)}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "12px",
+                                    padding: "12px",
+                                    marginBottom: "8px",
+                                    borderRadius: "6px",
+                                    border: "2px solid " + (selected ? "#3b82f6" : "#374151"),
+                                    backgroundColor: selected ? "#1e3a8a22" : "transparent",
+                                    cursor: "pointer",
+                                    color: selected ? "#fff" : "#d1d5db",
+                                }}
+                            >
+                                <input
+                                    type="radio"
+                                    name="photoConsent"
+                                    required
+                                    checked={selected}
+                                    onChange={() => setFormData(prev => ({ ...prev, photoConsent: option.value }))}
+                                    style={{ width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
+                                />
+                                <span style={{ fontSize: "14px", lineHeight: "1.5" }}>{option.label}</span>
+                            </label>
+                        );
+                    })}
+                </div>
 
                 <button
                     type="submit"

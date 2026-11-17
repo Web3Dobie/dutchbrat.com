@@ -179,18 +179,45 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
             const response = await fetch(`/api/dog-walking/admin/clients/${client.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
+                // Only send fields the list endpoint actually gave us.
+                //
+                // This form is initialised from the row in the client list, and
+                // every value is coerced with `|| false` / `|| ''` for the
+                // inputs. So any field the list did NOT return arrived as
+                // undefined, became a falsy default, and was then written back
+                // over the real value — silently, on every unrelated edit.
+                //
+                // That is exactly what happened to photo_sharing_consent
+                // between 2025-12-30 and 2026-11-17: the list never selected
+                // it, so editing a client's phone number quietly revoked their
+                // consent to use their dog's photo. vet_info and pet_insurance
+                // were going the same way.
+                //
+                // The list now returns all three. This guard is here so the
+                // next field added to this form cannot repeat it: if it is
+                // missing from the list, we send nothing for it and the PUT
+                // route (which ignores undefined) leaves the stored value
+                // alone.
                 body: JSON.stringify({
                     owner_name: formData.owner_name,
                     phone: formData.phone,
                     email: formData.email,
                     address: formData.address,
-                    vet_info: formData.vet_info,
-                    pet_insurance: formData.pet_insurance,
-                    photo_sharing_consent: formData.photo_sharing_consent,
-                    extended_travel_time: formData.extended_travel_time,
-                    payment_preference: formData.payment_preference,
-                    payment_account_names: formData.payment_account_names,
-                    dogs: formData.dogs
+                    dogs: formData.dogs,
+                    ...(client.vet_info !== undefined ? { vet_info: formData.vet_info } : {}),
+                    ...(client.pet_insurance !== undefined ? { pet_insurance: formData.pet_insurance } : {}),
+                    ...(client.photo_sharing_consent !== undefined
+                        ? { photo_sharing_consent: formData.photo_sharing_consent }
+                        : {}),
+                    ...(client.extended_travel_time !== undefined
+                        ? { extended_travel_time: formData.extended_travel_time }
+                        : {}),
+                    ...(client.payment_preference !== undefined
+                        ? { payment_preference: formData.payment_preference }
+                        : {}),
+                    ...(client.payment_account_names !== undefined
+                        ? { payment_account_names: formData.payment_account_names }
+                        : {}),
                 })
             });
 

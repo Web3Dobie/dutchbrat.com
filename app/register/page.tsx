@@ -15,7 +15,7 @@ interface RegisterData {
     dogBreed: string;
     dogBirthMonth: string;
     dogBirthYear: string;
-    photoConsent: boolean;
+    photoConsent: boolean | null;
 }
 
 interface User {
@@ -51,7 +51,7 @@ export default function RegisterPage() {
         dogBreed: '',
         dogBirthMonth: '',
         dogBirthYear: '',
-        photoConsent: false,
+        photoConsent: null,  // null = not yet answered
     });
 
     // Check domain on client side
@@ -289,19 +289,48 @@ export default function RegisterPage() {
                         </select>
                     </div>
 
-                    {/* Photo Sharing Consent */}
+                    {/* An explicit choice, with nothing pre-selected, and required.
+
+                        It used to be a single unticked checkbox. An unticked box
+                        cannot be distinguished from an unread one, so "no" and
+                        "didn't notice" were stored as the same value -- which is
+                        how 17 of 27 clients came to be recorded as refusing.
+                        Pre-ticking it would be worse: consent from a pre-ticked
+                        box is not consent. Forcing a choice is the only option
+                        that produces an answer meaning what it says. */}
                     <div className="mt-6 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
-                        <label className="flex items-start gap-3 cursor-pointer text-gray-300">
-                            <input
-                                type="checkbox"
-                                checked={formData.photoConsent}
-                                onChange={(e) => setFormData({ ...formData, photoConsent: e.target.checked })}
-                                className="mt-1 w-5 h-5 cursor-pointer"
-                            />
-                            <span className="text-sm leading-relaxed">
-                                I give permission for Hunter's Hounds to share photos of my dog on their website and social media
-                            </span>
-                        </label>
+                        <p className="text-sm text-gray-300 mb-3 leading-relaxed">
+                            May we share photos of your dog on our website and social media?
+                            <span className="text-red-400"> *</span>
+                        </p>
+                        <div className="space-y-2">
+                            {[
+                                { value: true, label: "Yes, that's fine" },
+                                { value: false, label: "No, please don't" },
+                            ].map((option) => (
+                                <label
+                                    key={String(option.value)}
+                                    className={`flex items-center gap-3 cursor-pointer rounded-lg border p-3 transition-colors ${
+                                        formData.photoConsent === option.value
+                                            ? 'border-blue-500 bg-blue-500/10 text-white'
+                                            : 'border-gray-700 text-gray-300 hover:border-gray-500'
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="photoConsent"
+                                        required
+                                        checked={formData.photoConsent === option.value}
+                                        onChange={() => setFormData({ ...formData, photoConsent: option.value })}
+                                        className="w-5 h-5 cursor-pointer"
+                                    />
+                                    <span className="text-sm">{option.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                            You can change this at any time from your account page.
+                        </p>
                     </div>
 
                     {/* Error Display */}

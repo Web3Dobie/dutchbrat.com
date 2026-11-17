@@ -19,6 +19,15 @@ interface UpdateCustomerRequest {
     partner_phone?: string;
     vet_info?: string;
     pet_insurance?: string;
+    /**
+     * Whether their dog's photos may be used publicly.
+     *
+     * Clients could previously see this in their dashboard but not change it --
+     * the panel said "to change this setting, please contact Hunter's Hounds
+     * directly". Their own consent is the one thing they should never have to
+     * ask permission to withdraw, so it is now theirs to set.
+     */
+    photo_sharing_consent?: boolean;
 }
 
 export async function PUT(request: NextRequest) {
@@ -90,15 +99,22 @@ export async function PUT(request: NextRequest) {
         const allowedFields = [
             'owner_name', 'phone', 'email', 'address',
             'partner_name', 'partner_email', 'partner_phone',
-            'vet_info', 'pet_insurance'
+            'vet_info', 'pet_insurance', 'photo_sharing_consent'
         ];
 
         for (const field of allowedFields) {
             if (requestData[field as keyof UpdateCustomerRequest] !== undefined) {
                 const value = requestData[field as keyof UpdateCustomerRequest];
                 updates.push(`${field} = $${paramIndex}`);
-                // Trim string values, allow empty strings to clear fields
-                values.push(typeof value === 'string' ? value.trim() : value);
+                if (field === 'photo_sharing_consent') {
+                    // Coerce explicitly. A JSON string "false" is truthy, and
+                    // this column decides whether someone's dog appears on the
+                    // internet -- it must not depend on how a caller spells it.
+                    values.push(value === true || value === 'true');
+                } else {
+                    // Trim string values, allow empty strings to clear fields
+                    values.push(typeof value === 'string' ? value.trim() : value);
+                }
                 paramIndex++;
             }
         }
@@ -120,7 +136,7 @@ export async function PUT(request: NextRequest) {
             UPDATE hunters_hounds.owners
             SET ${updates.join(', ')}
             WHERE id = $${paramIndex}
-            RETURNING id, owner_name, phone, email, address, partner_name, partner_email, partner_phone, vet_info, pet_insurance
+            RETURNING id, owner_name, phone, email, address, partner_name, partner_email, partner_phone, vet_info, pet_insurance, photo_sharing_consent
         `;
 
         const updateResult = await client.query(updateQuery, values);

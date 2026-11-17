@@ -104,6 +104,9 @@ export async function GET(request: NextRequest) {
                 o.email,
                 o.address,
                 o.created_at,
+                o.vet_info,
+                o.pet_insurance,
+                o.photo_sharing_consent,
                 o.extended_travel_time,
                 o.payment_preference,
                 o.payment_account_names,
@@ -128,7 +131,7 @@ export async function GET(request: NextRequest) {
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             ${searchCondition}
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.extended_travel_time, o.payment_preference, o.payment_account_names
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference, o.payment_account_names
             ORDER BY ${orderBy}
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;

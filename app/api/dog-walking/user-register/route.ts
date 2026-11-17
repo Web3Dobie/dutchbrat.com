@@ -19,7 +19,11 @@ interface RegisterRequest {
     dogBreed: string;
     dogBirthday?: string; // YYYY-MM-01 format (month/year)
     dogAge?: number;      // Legacy fallback
-    photoSharingConsent?: boolean;
+    /**
+     * Required. Not optional-with-a-default, because `undefined || false`
+     * silently records a refusal nobody made -- see the note on the form.
+     */
+    photoSharingConsent?: boolean | null;
 }
 
 // --- Main POST Function ---
@@ -55,6 +59,16 @@ export async function POST(request: NextRequest) {
         );
     }
 
+    // Must be an explicit true or false. Accepting undefined here is what let a
+    // missing answer become a stored "no": every caller used `|| false`
+    // downstream, so silence looked identical to a refusal.
+    if (typeof data.photoSharingConsent !== 'boolean') {
+        return NextResponse.json(
+            { error: "Please choose whether we may share photos of your dog" },
+            { status: 400 }
+        );
+    }
+
     const client = await pool.connect();
 
     try {
@@ -66,7 +80,7 @@ export async function POST(request: NextRequest) {
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id;
         `;
-        const ownerValues = [data.ownerName, data.phone, data.email, data.address, data.photoSharingConsent || false];
+        const ownerValues = [data.ownerName, data.phone, data.email, data.address, data.photoSharingConsent];
         const ownerResult = await client.query(ownerQuery, ownerValues);
         const newOwnerId = ownerResult.rows[0].id;
 
