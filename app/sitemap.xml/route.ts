@@ -38,6 +38,12 @@ export async function GET(request: NextRequest) {
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>${baseUrl}/guides/festive-dog-friendly-london</loc>
+    <lastmod>${currentDate}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>${baseUrl}/my-account</loc>
     <lastmod>${currentDate}</lastmod>
     <changefreq>weekly</changefreq>

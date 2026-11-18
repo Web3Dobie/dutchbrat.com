@@ -110,6 +110,12 @@ export default function Navbar() {
                                 Services & Pricing
                             </Link>
                             <Link
+                                href="/guides/festive-dog-friendly-london"
+                                className="text-amber-300 hover:text-amber-200 transition-colors duration-300"
+                            >
+                                🎄 Festive Guide
+                            </Link>
+                            <Link
                                 href="/book-now"
                                 className="text-gray-200 hover:text-white transition-colors duration-300"
                             >
@@ -190,6 +196,13 @@ export default function Navbar() {
                                     onClick={closeMobileMenu}
                                 >
                                     Services & Pricing
+                                </Link>
+                                <Link
+                                    href="/guides/festive-dog-friendly-london"
+                                    className="block text-amber-300 hover:text-amber-200 transition-colors duration-300 py-2"
+                                    onClick={closeMobileMenu}
+                                >
+                                    🎄 Festive Guide
                                 </Link>
                                 <Link
                                     href="/book-now"
