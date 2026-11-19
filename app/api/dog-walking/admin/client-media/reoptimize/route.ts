@@ -2,11 +2,37 @@ import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { execFile } from "child_process";
+import { randomBytes } from "crypto";
 import { promisify } from "util";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { getPool } from '@/lib/database';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * A temp-file suffix that cannot collide.
+ *
+ * pid+timestamp is not enough. On 2026-11-19 a request abandoned by the browser
+ * (nginx logged 499) kept running server-side while the next press started, so
+ * two loops in the SAME process produced identical `pid.millisecond` names; one
+ * renamed the temp file and the other's rename failed ENOENT, 141 times.
+ */
+function tempSuffix(): string {
+    return `${process.pid}.${Date.now()}.${randomBytes(6).toString("hex")}`;
+}
+
+/**
+ * Only one run at a time, per process.
+ *
+ * Two concurrent runs are pure waste -- both walk the whole library to the same
+ * conclusion -- and on files that genuinely need encoding they are dangerous:
+ * two ffmpeg processes writing one output path, then both renaming it into the
+ * served directory. Unique temp names make that safe, and this makes it moot.
+ *
+ * A client that gives up and presses again is the normal way in, so the second
+ * caller gets a quick, explicit answer instead of starting a rival pass.
+ */
+let runInProgress = false;
 
 // Database connection
 const pool = getPool();
@@ -15,6 +41,17 @@ const CLIENT_MEDIA_DIR = "/app/client-media";
 const ORIGINALS_DIR = path.join(CLIENT_MEDIA_DIR, "originals");
 const OPTIMIZED_DIR = path.join(CLIENT_MEDIA_DIR, "optimized");
 const OPTIMIZED_MARKER_DIR = path.join(CLIENT_MEDIA_DIR, ".optimized");
+
+// Marker files assert "this video is optimised". Until 2026-11-19 they were
+// written by a version of this route that only remuxed the container, so the
+// 858 markers already on disk (written between 29 Jan and 10 Sep 2026) assert
+// something that was never true: the video stream was left untouched.
+//
+// So markers carry a version. Anything without the current prefix is treated as
+// absent, which makes the fix self-healing -- the first run after a deploy pays
+// the cost of checking the real files and rewrites the markers it trusts. Bump
+// this whenever a change means an older marker can no longer be believed.
+const MARKER_VERSION = "v2";
 
 // Encode target. Matches scripts/reencode-client-media.sh so a file produced
 // here is indistinguishable from one the overnight batch produced.
@@ -40,9 +77,16 @@ const PRESET = "medium";
 // timeout to answer to. This endpoint is for the handful of clips uploaded
 // since the last run.
 const DEFAULT_LIMIT = 3;
-const DEFAULT_BUDGET_MS = 75_000;
+// 45s, not 75s: the browser abandoned a 44.9s request on 2026-11-19. Cloudflare
+// also gives up around 100s and this route's nginx location at 120s, so staying
+// well under all three matters more than squeezing in another file per press.
+const DEFAULT_BUDGET_MS = 45_000;
 // Don't start a file unless there is a sensible slice of budget left for it.
 const MIN_SLICE_MS = 20_000;
+// Keep a little budget back so the inspection pass itself cannot overrun.
+// One probe is ~67ms, so this leaves room for a good many files and still
+// returns well inside the proxy timeout.
+const PROBE_RESERVE_MS = 5_000;
 // Absolute ceiling for one file, whatever the budget says.
 const PER_FILE_TIMEOUT_MS = 10 * 60_000;
 
@@ -79,11 +123,43 @@ async function probe(entries: string, file: string): Promise<string> {
     }
 }
 
+/**
+ * Several stream fields in ONE ffprobe call, parsed by key.
+ *
+ * Keys are kept (no nokey=1) so fields are matched by name rather than by the
+ * order ffprobe happens to emit them in. This matters for cost, not elegance:
+ * checking the real state of every video is two probes per file if codec and
+ * pixel format are fetched separately, and at ~40ms a probe that is 70s across
+ * the library -- most of the request budget spent before any encoding starts.
+ */
+async function probeFields(entries: string, file: string): Promise<Record<string, string>> {
+    try {
+        const { stdout } = await execFileAsync(
+            "ffprobe",
+            [
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", entries,
+                "-of", "default=noprint_wrappers=1",
+                file,
+            ],
+            { timeout: 30_000, maxBuffer: 1 << 20 }
+        );
+        const out: Record<string, string> = {};
+        for (const line of stdout.split("\n")) {
+            const eq = line.indexOf("=");
+            if (eq > 0) out[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
 /** h264, 8-bit: the format every client device can actually play. */
 async function isPhoneSafe(file: string): Promise<boolean> {
-    const codec = await probe("stream=codec_name", file);
-    const pixfmt = await probe("stream=pix_fmt", file);
-    return codec === "h264" && pixfmt === "yuv420p";
+    const f = await probeFields("stream=codec_name,pix_fmt", file);
+    return f.codec_name === "h264" && f.pix_fmt === "yuv420p";
 }
 
 async function durationOf(file: string): Promise<number> {
@@ -98,18 +174,48 @@ async function sizeOf(file: string): Promise<number> {
     }
 }
 
+/**
+ * Record that a file is done. Best effort, and deliberately unable to fail the
+ * request: the marker is a cache, and the file on disk is the real evidence.
+ *
+ * Written via a temp file and rename rather than straight over the target.
+ * Overwriting in place needs write permission on the FILE, and the marker
+ * directory is a mix of owners -- 850 belong to the container's user and 8 to
+ * the host user from an early 2026 run. Those 8 are mode 664, so the container
+ * falls into "other" and gets read-only. On 2026-11-19 that raised EACCES
+ * partway through the directory and took the whole request down with it.
+ * Rename only needs write permission on the DIRECTORY, which is 777, so this
+ * works whoever happens to own the existing file.
+ */
 async function markVideoOptimized(filename: string): Promise<void> {
-    await fs.mkdir(OPTIMIZED_MARKER_DIR, { recursive: true });
-    await fs.writeFile(
-        path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`),
-        new Date().toISOString()
-    );
+    const target = path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`);
+    const tmp = `${target}.tmp.${tempSuffix()}`;
+    try {
+        await fs.mkdir(OPTIMIZED_MARKER_DIR, { recursive: true });
+        await fs.writeFile(tmp, `${MARKER_VERSION}:${new Date().toISOString()}`);
+        await fs.rename(tmp, target);
+    } catch (error: any) {
+        await fs.rm(tmp, { force: true }).catch(() => {});
+        // Not fatal. Without a marker this file is simply re-checked next time,
+        // which costs one probe and reaches the same conclusion.
+        console.warn(`Could not write marker for ${filename}: ${error?.code || error?.message}`);
+    }
 }
 
-async function hasMarker(filename: string): Promise<boolean> {
+/**
+ * A marker we can believe: present AND written by this version of the route.
+ *
+ * Reading the contents rather than just testing for the file is the whole
+ * point. The markers on disk from the old `-c copy` route look identical to a
+ * real one from the outside, and trusting them would skip every video forever.
+ */
+async function hasCurrentMarker(filename: string): Promise<boolean> {
     try {
-        await fs.access(path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`));
-        return true;
+        const body = await fs.readFile(
+            path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`),
+            "utf-8"
+        );
+        return body.startsWith(`${MARKER_VERSION}:`);
     } catch {
         return false;
     }
@@ -168,7 +274,10 @@ async function optimizeVideoForStreaming(
     // Stage inside the destination directory so publishing is a rename on the
     // same filesystem, i.e. atomic. The old code wrote to /tmp and copyFile'd
     // in, which can expose a half-written video to a client mid-copy.
-    const tmpPath = path.join(OPTIMIZED_DIR, `${filename}.reoptimizing.tmp.mp4`);
+    // Unique per call. A fixed name here would let two concurrent runs point
+    // two ffmpeg processes at one output file and then both rename it into the
+    // served directory -- a corrupt video that could still pass verification.
+    const tmpPath = path.join(OPTIMIZED_DIR, `${filename}.reoptimizing.${tempSuffix()}.tmp.mp4`);
     const optimizedPath = path.join(OPTIMIZED_DIR, filename);
 
     try {
@@ -276,6 +385,19 @@ export async function POST(request: NextRequest) {
         // No body is the normal case from the admin button.
     }
 
+    if (runInProgress) {
+        return NextResponse.json({
+            success: true,
+            alreadyRunning: true,
+            message: "A re-optimisation pass is already running. Give it a moment and press again.",
+            optimized: 0,
+            alreadyOptimized: 0,
+            failed: 0,
+            remaining: 0,
+        });
+    }
+    runInProgress = true;
+
     const startedAt = Date.now();
     const client = await pool.connect();
 
@@ -302,6 +424,10 @@ export async function POST(request: NextRequest) {
         const errors: string[] = [];
 
         for (const row of result.rows) {
+          // One awkward file must never abort the batch. On 2026-11-19 an
+          // EACCES on a single marker threw out of this loop and failed the
+          // whole request after 53 files had been processed successfully.
+          try {
             const filePath = path.join(CLIENT_MEDIA_DIR, row.file_path);
 
             // file_path comes from the scanner, but keep it inside the media
@@ -315,10 +441,27 @@ export async function POST(request: NextRequest) {
 
             const optimizedPath = path.join(OPTIMIZED_DIR, row.filename);
 
-            // Fast path: trust the marker. Slow path: look at the real file,
-            // because the batch script leaves no markers behind.
-            if (await hasMarker(row.filename)) {
+            // Fast path: a marker this version wrote. Costs one small read, so
+            // it runs for every row regardless of budget.
+            if (await hasCurrentMarker(row.filename)) {
                 alreadyOptimized++;
+                continue;
+            }
+
+            let msLeft = budgetMs - (Date.now() - startedAt);
+
+            // Slow path: look at the real file. Needed both for the stale
+            // `-c copy` markers and because the batch script writes none.
+            //
+            // This is gated on the budget too, which is not over-caution: a
+            // probe measured 67ms against the live library, so checking all 858
+            // files is 58 seconds of the 75s budget before any encoding starts.
+            // Ungated, the first run after a deploy would risk the 504 this
+            // budget exists to avoid. Whatever does not fit is simply counted
+            // and picked up on the next press, and each file checked here gets
+            // a marker, so repeated presses converge quickly.
+            if (msLeft < PROBE_RESERVE_MS) {
+                remaining++;
                 continue;
             }
             if (await alreadyOptimised(resolved, optimizedPath)) {
@@ -330,7 +473,7 @@ export async function POST(request: NextRequest) {
             // Out of batch, or not enough time left to give this file a fair
             // run: count the rest and leave them for the next press rather than
             // risk nginx returning a 504 mid-transcode.
-            const msLeft = budgetMs - (Date.now() - startedAt);
+            msLeft = budgetMs - (Date.now() - startedAt);
             if (optimized + failed >= limit || msLeft < MIN_SLICE_MS) {
                 remaining++;
                 continue;
@@ -349,6 +492,11 @@ export async function POST(request: NextRequest) {
                 failed++;
                 errors.push(`${row.filename}: ${outcome.error}`);
             }
+          } catch (error: any) {
+            failed++;
+            errors.push(`${row.filename}: ${error?.code || error?.message || "unexpected error"}`);
+            console.error(`Unexpected error on ${row.filename}:`, error);
+          }
         }
 
         return NextResponse.json({
@@ -373,6 +521,7 @@ export async function POST(request: NextRequest) {
         );
     } finally {
         client.release();
+        runInProgress = false;
     }
 }
 

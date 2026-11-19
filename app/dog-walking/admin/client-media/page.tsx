@@ -378,7 +378,10 @@ export default function ClientMediaPage() {
 
             const data = await response.json();
 
-            if (data.success) {
+            if (data.success && data.alreadyRunning) {
+                setSuccessMessage(data.message);
+                setTimeout(() => setSuccessMessage(null), 8000);
+            } else if (data.success) {
                 let msg = `Optimised ${data.optimized} video${data.optimized !== 1 ? "s" : ""} for streaming`;
                 if (data.transcoded > 0 || data.remuxed > 0) {
                     const parts: string[] = [];
