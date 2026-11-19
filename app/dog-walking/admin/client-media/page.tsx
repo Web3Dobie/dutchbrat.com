@@ -379,18 +379,33 @@ export default function ClientMediaPage() {
             const data = await response.json();
 
             if (data.success) {
-                let msg = `Optimized ${data.optimized} videos for streaming`;
+                let msg = `Optimised ${data.optimized} video${data.optimized !== 1 ? "s" : ""} for streaming`;
+                if (data.transcoded > 0 || data.remuxed > 0) {
+                    const parts: string[] = [];
+                    if (data.transcoded > 0) parts.push(`${data.transcoded} re-encoded`);
+                    if (data.remuxed > 0) parts.push(`${data.remuxed} already playable, container only`);
+                    msg += ` (${parts.join(", ")})`;
+                }
+                if (data.bytesBefore > 0 && data.bytesAfter > 0) {
+                    const mb = (b: number) => Math.round(b / 1048576);
+                    msg += ` — ${mb(data.bytesBefore)} MB to ${mb(data.bytesAfter)} MB`;
+                }
                 if (data.alreadyOptimized > 0) {
-                    msg += ` (${data.alreadyOptimized} already optimized)`;
+                    msg += `. ${data.alreadyOptimized} already done`;
                 }
                 if (data.failed > 0) {
-                    msg += ` - ${data.failed} failed`;
+                    msg += `. ${data.failed} failed`;
                     if (data.errors && data.errors.length > 0) {
                         console.error("Video optimization errors:", data.errors);
                     }
                 }
+                // Re-encoding is far slower than the old remux, so each call does
+                // a bounded batch. Say plainly that the button needs pressing again.
+                if (data.remaining > 0) {
+                    msg += `. ${data.remaining} still to do — press again to continue`;
+                }
                 setSuccessMessage(msg);
-                setTimeout(() => setSuccessMessage(null), 8000);
+                setTimeout(() => setSuccessMessage(null), 12000);
             } else {
                 throw new Error(data.error);
             }
