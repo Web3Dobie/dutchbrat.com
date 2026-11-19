@@ -1,6 +1,7 @@
 // app/layout.tsx - Enhanced with comprehensive SEO metadata for all domains
 import './globals.css'
 import Navbar from './components/Navbar'
+import DomainProvider from './components/DomainProvider'
 import Script from 'next/script'
 import { getDomainType } from '@/lib/domainDetection'
 
@@ -269,8 +270,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="msvalidate.01" content="your-bing-verification-code" />
       </head>
       <body className="bg-gray-950 text-white">
-        <Navbar />
-        <main className="px-6 py-10 min-h-screen">{children}</main>
+        <DomainProvider domainType={domainType}>
+          <Navbar />
+          <main className="px-6 py-10 min-h-screen">{children}</main>
+        </DomainProvider>
       </body>
     </html>
   )

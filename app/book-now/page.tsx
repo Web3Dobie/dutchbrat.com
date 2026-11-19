@@ -7,7 +7,7 @@ import MobileBookingCalendar from '../components/MobileBookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 import { DashboardServiceCard } from '@/app/components/DashboardServiceCard';
 import { serviceCatalogue } from '@/lib/pricing';
-import { isHuntersHoundsClient } from '@/lib/clientDomainDetection'; // CLIENT-SIDE version
+import { isHuntersHoundsClient, useClientDomainDetection } from '@/lib/clientDomainDetection';
 
 // --- Types ---
 interface User {
@@ -424,8 +424,10 @@ function DutchBratDogWalking() {
 }
 
 export default function BookNowPage() {
-  // Check domain and render appropriate experience
-  if (isHuntersHoundsClient()) {
+  // The hook, not isHuntersHoundsClient(): this runs during render, and on the
+  // server that helper always says "not Hunter's Hounds".
+  const domainType = useClientDomainDetection();
+  if (domainType === 'hunters-hounds') {
     return <HuntersHoundsBooking />;
   }
 
