@@ -31,7 +31,13 @@ RUN npm list ioredis || npm install ioredis@5.8.0
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED 1
 
-RUN npm run build
+# next build's type-check needs more than Node's default heap, which is sized
+# from the machine's RAM (~2 GB on a 4 GB host) and runs out part-way through.
+ENV NODE_OPTIONS=--max-old-space-size=3072
+
+# The type-check runs in a worker, and when that worker dies next build can
+# still exit 0 with no output. Fail here, not three steps later on a COPY.
+RUN npm run build && test -d .next/standalone
 
 # Production image
 FROM base AS runner
