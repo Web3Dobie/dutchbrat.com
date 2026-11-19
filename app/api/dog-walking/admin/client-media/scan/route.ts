@@ -1,13 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
 import ExifReader from "exifreader";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { getPool } from '@/lib/database';
+import {
+    OPTIMIZED_DIR,
+    PER_FILE_TIMEOUT_MS,
+    alreadyOptimised,
+    hasCurrentMarker,
+    markVideoOptimized,
+    optimizeVideoForStreaming,
+} from "@/lib/videoOptimizer";
 
-const execAsync = promisify(exec);
 
 // Database connection
 const pool = getPool();
@@ -19,83 +24,40 @@ let optimizationStats = { queued: 0, completed: 0, failed: 0 };
 async function runBackgroundOptimization(videos: Array<{ filename: string; filePath: string }>) {
     optimizationRunning = true;
     optimizationStats = { queued: videos.length, completed: 0, failed: 0 };
-    for (const { filename, filePath } of videos) {
-        const ok = await optimizeVideoForStreaming(filePath, filename);
-        if (ok) optimizationStats.completed++;
-        else optimizationStats.failed++;
+    try {
+        for (const { filename, filePath } of videos) {
+            try {
+                // Already fine on disk (e.g. produced by the batch script, which
+                // writes no markers)? Record that and move on without encoding.
+                if (await alreadyOptimised(filePath, path.join(OPTIMIZED_DIR, filename))) {
+                    await markVideoOptimized(filename);
+                    optimizationStats.completed++;
+                    continue;
+                }
+                // No HTTP request is waiting on this, so each file gets the
+                // full per-file ceiling rather than a slice of a request budget.
+                const result = await optimizeVideoForStreaming(filePath, filename, PER_FILE_TIMEOUT_MS);
+                if (result.success) optimizationStats.completed++;
+                else optimizationStats.failed++;
+            } catch (error) {
+                console.error(`Background optimisation failed for ${filename}:`, error);
+                optimizationStats.failed++;
+            }
+        }
+    } finally {
+        // Always release the flag, or one bad file would block every later scan
+        // from starting a pass until the container restarted.
+        optimizationRunning = false;
     }
-    optimizationRunning = false;
 }
 
 const CLIENT_MEDIA_DIR = "/app/client-media";
 const ORIGINALS_DIR = path.join(CLIENT_MEDIA_DIR, "originals");
-const OPTIMIZED_DIR = path.join(CLIENT_MEDIA_DIR, "optimized");
-const OPTIMIZED_MARKER_DIR = path.join(CLIENT_MEDIA_DIR, ".optimized");
 
 // Supported file extensions
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"];
 const VIDEO_EXTENSIONS = [".mp4", ".mov", ".avi", ".m4v"];
 const ALL_EXTENSIONS = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS];
-
-// Check if video has been optimized (marker file exists)
-async function isVideoOptimized(filename: string): Promise<boolean> {
-    try {
-        await fs.access(path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`));
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-// Mark video as optimized
-async function markVideoOptimized(filename: string): Promise<void> {
-    await fs.mkdir(OPTIMIZED_MARKER_DIR, { recursive: true });
-    await fs.writeFile(
-        path.join(OPTIMIZED_MARKER_DIR, `${filename}.optimized`),
-        new Date().toISOString()
-    );
-}
-
-// Optimize video with faststart for streaming (moves moov atom to beginning)
-// Stores optimized version in /optimized/ directory (originals are read-only)
-async function optimizeVideoForStreaming(filePath: string, filename: string): Promise<boolean> {
-    const tempPath = `/tmp/${filename}.temp.mp4`;
-    const optimizedPath = path.join(OPTIMIZED_DIR, filename);
-
-    try {
-        // Check if already optimized
-        if (await isVideoOptimized(filename)) {
-            console.log(`Video already optimized: ${filename}`);
-            return true;
-        }
-
-        // Ensure optimized directory exists
-        await fs.mkdir(OPTIMIZED_DIR, { recursive: true });
-
-        // Apply faststart optimization (remux only, no re-encoding)
-        const command = `ffmpeg -i "${filePath}" -c copy -movflags +faststart "${tempPath}" -y`;
-        console.log(`Optimizing video for streaming: ${filename}`);
-
-        await execAsync(command);
-
-        // Move optimized version to /optimized/ directory
-        await fs.copyFile(tempPath, optimizedPath);
-        await fs.unlink(tempPath);
-
-        // Mark as optimized
-        await markVideoOptimized(filename);
-
-        console.log(`Video optimized successfully: ${filename} -> optimized/${filename}`);
-        return true;
-    } catch (error) {
-        console.error(`Failed to optimize video ${filename}:`, error);
-        // Clean up temp file if it exists
-        try {
-            await fs.unlink(tempPath);
-        } catch {}
-        return false;
-    }
-}
 
 interface ScannedFile {
     filename: string;
@@ -190,7 +152,7 @@ export async function POST(request: NextRequest) {
             try {
                 const stats = await fs.stat(filePath);
                 if (stats.isDirectory()) continue;
-                if (!(await isVideoOptimized(filename))) {
+                if (!(await hasCurrentMarker(filename))) {
                     unoptimizedVideos.push({ filename, filePath });
                 }
             } catch (err) {
