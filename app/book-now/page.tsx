@@ -7,7 +7,7 @@ import MobileBookingCalendar from '../components/MobileBookingCalendar';
 import { ServiceCard } from '@/app/components/ServiceCard';
 import { DashboardServiceCard } from '@/app/components/DashboardServiceCard';
 import { serviceCatalogue } from '@/lib/pricing';
-import { isHuntersHoundsClient, useClientDomainDetection } from '@/lib/clientDomainDetection';
+import { useClientDomainDetection } from '@/lib/clientDomainDetection';
 
 // --- Types ---
 interface User {
