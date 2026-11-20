@@ -23,6 +23,20 @@ const OWNER_SELF_ID = 1;
 // themselves; drop them here so the table holds people only.
 const BOT_UA = /bot\b|bot\/|crawl|spider|slurp|headless|lighthouse|pagespeed|preview|monitor|uptime|python|curl|wget|scrapy|phantom|puppeteer|playwright|facebookexternalhit|gptbot|claude|perplexity|bytespider/i;
 
+// Scanners that drive a real browser and announce nothing. They give themselves
+// away in two ways: a known address block, or a desktop Chrome years out of
+// date (desktop Chrome updates itself, so people are almost never that far
+// behind; phones can be, so they are not judged on version).
+const SCANNER_IP_PREFIXES = ['205.169.39.'];
+const MIN_DESKTOP_CHROME = 120; // released December 2023
+
+function looksLikeScanner(ip: string, ua: string): boolean {
+    if (SCANNER_IP_PREFIXES.some(p => ip.startsWith(p))) return true;
+    if (/Mobi|Android|iPhone|iPad/i.test(ua)) return false;
+    const chrome = ua.match(/Chrome\/(\d+)\./);
+    return !!chrome && Number(chrome[1]) < MIN_DESKTOP_CHROME;
+}
+
 const done = () => new NextResponse(null, { status: 204 });
 
 function londonDate(): string {
@@ -71,6 +85,8 @@ export async function POST(request: NextRequest) {
 
         const ownerId = getOwnerIdFromSession(request);
         const isAdmin = isAuthenticated(request) || ownerId === OWNER_SELF_ID;
+        // A logged-in client is a person whatever their browser looks like.
+        if (!ownerId && !isAdmin && looksLikeScanner(ip, ua)) return done();
 
         const visitorHash = crypto
             .createHmac('sha256', secret)
