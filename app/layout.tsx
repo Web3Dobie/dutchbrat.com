@@ -51,9 +51,10 @@ export async function generateMetadata() {
         description: 'One-on-one dog walking in Highbury Fields & Clissold Park',
         images: ['/images/dog-walking/hunter-and-me.jpg']
       },
-      alternates: {
-        canonical: 'https://hunters-hounds.london'
-      },
+      // No canonical here: a layout's canonical is inherited by every page
+      // beneath it, which told search engines the whole site was a copy of
+      // the home page. Each page now declares its own (the home page's is in
+      // app/page.tsx).
       other: {
         'business:contact_data:locality': 'London',
         'business:contact_data:region': 'England',
@@ -210,7 +211,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 "url": "https://hunters-hounds.london",
                 "telephone": "+44-793-274-9772",
                 "address": {
-                  "@type": "N5 1JG",
+                  "@type": "PostalAddress",
+                  "postalCode": "N5 1JG",
                   "addressLocality": "London",
                   "addressRegion": "England",
                   "addressCountry": "GB"

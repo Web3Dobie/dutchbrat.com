@@ -11,6 +11,7 @@ export const metadata: Metadata = {
             'Our favourite local winter walk loops, dog-friendly cafes, and London Christmas events to enjoy with your pup this season.',
         type: 'article',
     },
+    alternates: { canonical: 'https://hunters-hounds.london/guides/festive-dog-friendly-london' },
 }
 
 /**

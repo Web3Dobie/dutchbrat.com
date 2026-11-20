@@ -209,6 +209,15 @@ function DutchBratHomepage() {
   )
 }
 
+// The home page's own canonical. Other domains return nothing here and keep
+// whatever the root layout gives them.
+export function generateMetadata() {
+  if (getDomainType() === 'hunters-hounds') {
+    return { alternates: { canonical: 'https://hunters-hounds.london' } }
+  }
+  return {}
+}
+
 export default function HomePage() {
   const domainType = getDomainType()
 

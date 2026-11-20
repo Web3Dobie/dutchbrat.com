@@ -2,6 +2,14 @@ import { Fragment } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { allPriceBooks, priceBookFor, londonDate, type PriceBook } from '@/lib/pricing'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+    title: "Dog Walking Services & Prices in Highbury & Islington | Hunter's Hounds",
+    description:
+        "One-on-one dog walks, dog sitting and a free meet & greet around Highbury Fields and Clissold Park, with the full rate card.",
+    alternates: { canonical: 'https://hunters-hounds.london/services' },
+}
 
 /**
  * Prices live in lib/pricing.ts and appear ONCE on this page, in the rate card
