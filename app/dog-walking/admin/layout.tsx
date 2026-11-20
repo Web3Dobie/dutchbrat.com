@@ -90,6 +90,9 @@ export default function AdminLayout({
                             <Link href="/dog-walking/admin/client-media" style={styles.navLink}>
                                 Client Media
                             </Link>
+                            <Link href="/dog-walking/admin/traffic" style={styles.navLink}>
+                                Traffic
+                            </Link>
                         </div>
                     </div>
                 </nav>
