@@ -1289,6 +1289,9 @@ export function generateNewsletterEmail(content: NewsletterContent): string {
                         Unsubscribe from Hunter's Pack newsletter
                     </a>
                 </p>
+                <p style="color: #9ca3af; font-size: 11px; margin: 8px 0 0 0;">
+                    We note opens and link clicks to see what's useful.
+                </p>
             </div>
 
         </div>
@@ -1403,6 +1406,9 @@ function generateNotionNewsletterEmail(content: NewsletterContent): string {
                     <a href="{{UNSUBSCRIBE_URL}}" style="color: #9ca3af; text-decoration: underline;">
                         Unsubscribe from Hunter's Pack newsletter
                     </a>
+                </p>
+                <p style="color: #9ca3af; font-size: 11px; margin: 8px 0 0 0;">
+                    We note opens and link clicks to see what's useful.
                 </p>
             </div>
 
