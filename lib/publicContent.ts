@@ -93,15 +93,52 @@ export async function getPublicReviews(limit = 50, offset = 0): Promise<PublicRe
 }
 
 /**
- * The newsletter JSON was written for the email, where "new pack members"
- * carries each owner's full name. Nothing public renders that, so it does not
- * leave the server.
+ * What a newsletter may show in public — an ALLOW-list, on purpose.
+ *
+ * content_json is the email's working data. Besides the text it carries each
+ * new pack member's owner name and, for birthday dogs, the owner's id, name
+ * and EMAIL ADDRESS, plus the raw Notion blocks. Until 2026-11-20 the public
+ * API returned all of it. Anything added to the JSON in future stays private
+ * until it is named here.
  */
 function publicContent(content: any): any {
-    if (!content || !Array.isArray(content.newPackMembers)) return content;
+    if (!content || typeof content !== 'object') return {};
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+
+    const newPackMembers = (Array.isArray(content.newPackMembers) ? content.newPackMembers : []).map((d: any) => ({
+        dogId: d.dogId ?? d.dog_id,
+        dogName: d.dogName ?? d.dog_name,
+        breed: d.breed ?? d.dog_breed,
+        imageFilename: d.imageFilename ?? d.image_filename ?? null,
+    }));
+
+    const birthdayDogs = (Array.isArray(content.birthdayDogs) ? content.birthdayDogs : []).map((d: any) => ({
+        dogId: d.dog_id ?? d.dogId,
+        dogName: d.dog_name ?? d.dogName,
+        breed: d.breed ?? d.dog_breed,
+        ageYears: Number(d.age_years ?? d.ageYears) || 0,
+        imageFilename: d.image_filename ?? d.imageFilename ?? null,
+    }));
+
     return {
-        ...content,
-        newPackMembers: content.newPackMembers.map(({ ownerName, ...dog }: any) => dog),
+        title: str(content.title),
+        month: str(content.month),
+        source: str(content.source),
+        notionHtml: str(content.notionHtml),
+        welcomeMessage: str(content.welcomeMessage),
+        welcomeBlocks: Array.isArray(content.welcomeBlocks)
+            ? content.welcomeBlocks.map((b: any) => ({ type: b?.type, content: b?.content, caption: b?.caption }))
+            : undefined,
+        walkHighlights: content.walkHighlights
+            ? { text: str(content.walkHighlights.text), images: Array.isArray(content.walkHighlights.images) ? content.walkHighlights.images : [] }
+            : undefined,
+        packFarewells: str(content.packFarewells),
+        seasonalTips: str(content.seasonalTips),
+        newFeatures: str(content.newFeatures),
+        includeNewPackMembers: content.includeNewPackMembers !== false,
+        newPackMembers,
+        includeBirthdays: content.includeBirthdays !== false,
+        birthdayDogs,
     };
 }
 

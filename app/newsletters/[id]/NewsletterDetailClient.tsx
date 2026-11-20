@@ -15,9 +15,15 @@ interface PackMember {
     dogId: number;
     dogName: string;
     breed: string;
-    ownerName: string;
     imageFilename: string | null;
-    firstServiceDate: string;
+}
+
+interface BirthdayDog {
+    dogId: number;
+    dogName: string;
+    breed: string;
+    ageYears: number;
+    imageFilename: string | null;
 }
 
 interface NewsletterContent {
@@ -33,6 +39,8 @@ interface NewsletterContent {
     seasonalTips?: string;
     newFeatures?: string;
     includeNewPackMembers?: boolean;
+    includeBirthdays?: boolean;
+    birthdayDogs?: BirthdayDog[];
 }
 
 interface Newsletter {
@@ -143,6 +151,43 @@ export default function NewsletterDetailClient({ initial }: { initial: Newslette
                                                 )}
                                                 <div className="font-semibold text-gray-800">{dog.dogName}</div>
                                                 <div className="text-gray-500 text-sm">{dog.breed}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                        {/* Birthdays — same block as the email, and after new members as there */}
+                        {newsletter.content.includeBirthdays !== false &&
+                            newsletter.content.birthdayDogs &&
+                            newsletter.content.birthdayDogs.length > 0 && (
+                                <div className="p-8 bg-amber-50 border-t border-amber-200">
+                                    <h2 className="text-xl font-bold text-amber-800 mb-2">
+                                        🎂 Birthday Pups {newsletter.content.month ? `in ${newsletter.content.month}` : "This Month"}!
+                                    </h2>
+                                    <p className="text-amber-900 mb-6">
+                                        Wishing a very happy birthday to{" "}
+                                        {newsletter.content.birthdayDogs.length === 1 ? "this special pup" : "these special pups"}!
+                                    </p>
+                                    <div className="flex flex-wrap gap-6 justify-center">
+                                        {newsletter.content.birthdayDogs.map(dog => (
+                                            <div key={dog.dogId} className="text-center w-40">
+                                                {dog.imageFilename ? (
+                                                    <img
+                                                        src={`/api/dog-images/${dog.imageFilename}`}
+                                                        alt={dog.dogName}
+                                                        className="w-32 h-32 rounded-full object-cover border-4 border-amber-400 mx-auto mb-2"
+                                                    />
+                                                ) : (
+                                                    <div className="w-32 h-32 rounded-full bg-gradient-to-br from-amber-400 to-amber-300 mx-auto mb-2 flex items-center justify-center text-4xl">
+                                                        🎂
+                                                    </div>
+                                                )}
+                                                <div className="font-semibold text-gray-800">{dog.dogName}</div>
+                                                <div className="text-amber-800 text-sm">
+                                                    {dog.breed}
+                                                    {dog.ageYears > 0 ? ` — turned ${dog.ageYears}!` : ""}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
