@@ -3,6 +3,7 @@ import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { sendEmail } from "@/lib/emailService";
 import { generateNewsletterEmail } from "@/lib/emailTemplates";
 import { getPool } from '@/lib/database';
+import { addTracking } from '@/lib/newsletterTracking';
 
 // Database Connection
 const pool = getPool();
@@ -62,7 +63,12 @@ export async function POST(request: NextRequest) {
         if (test_email) {
             try {
                 // Replace unsubscribe placeholder with a harmless link for test emails
-                const testHtml = emailHtml.replace('{{UNSUBSCRIBE_URL}}', '#');
+                // Owner 0 = test: links go through the same redirect as the real
+                // send, so they can be checked, but nothing is recorded.
+                const testHtml = addTracking(
+                    emailHtml.replace('{{UNSUBSCRIBE_URL}}', '#'),
+                    { newsletterId: newsletter_id, ownerId: 0, isPartner: false }
+                );
 
                 await sendEmail({
                     to: test_email,
@@ -139,9 +145,11 @@ export async function POST(request: NextRequest) {
             try {
                 // Generate personalized email with unsubscribe link
                 const unsubscribeUrl = `https://hunters-hounds.london/newsletter/unsubscribe?token=${recipient.unsubscribeToken}`;
-                const personalizedHtml = emailHtml.replace(
-                    '{{UNSUBSCRIBE_URL}}',
-                    unsubscribeUrl
+                // Each copy gets its own signed open pixel and link redirects
+                // (lib/newsletterTracking.ts); the unsubscribe link is left direct.
+                const personalizedHtml = addTracking(
+                    emailHtml.replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl),
+                    { newsletterId: newsletter_id, ownerId: recipient.ownerId, isPartner: !recipient.isPrimary }
                 );
 
                 // Retry up to 3 times on rate-limit errors
@@ -196,7 +204,7 @@ export async function POST(request: NextRequest) {
         // Mark newsletter as sent
         await client.query(`
             UPDATE hunters_hounds.newsletters
-            SET sent_at = CURRENT_TIMESTAMP, recipient_count = $1
+            SET sent_at = CURRENT_TIMESTAMP, recipient_count = $1, tracked = true
             WHERE id = $2;
         `, [successCount, newsletter_id]);
 
