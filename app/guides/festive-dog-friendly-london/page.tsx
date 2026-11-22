@@ -43,8 +43,9 @@ interface FestiveEvent {
     time: string
     location: string
     description: string
-    linkLabel: string
-    href: string
+    /** Omitted where there is no verified page to link to. */
+    linkLabel?: string
+    href?: string
 }
 
 const LOCAL_SPOTS: LocalSpot[] = [
@@ -104,6 +105,14 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'This annual festive parade invites rescue dogs and friends to show off their best Christmas jumpers for charity, finishing with a group photo in front of Buckingham Palace. The exact meeting point is still to be announced, so check the listing nearer the time.',
         linkLabel: 'Join the waitlist via The Dogvine',
         href: 'https://thedogvine.com/events/rescue-dogs-of-london-friends-dog-christmas-jumper-parade/',
+    },
+    {
+        name: 'Carols at the Barn',
+        date: 'Saturday 28 November 2026',
+        time: '16:30',
+        location: 'Highbury Barn Square, N5',
+        description:
+            'One on our own doorstep: carols in the square outside The Highbury Barn, led by the Choir of St Joan of Arc. It is out in the open air, so a calm dog on a lead can stand and listen with you — though it will be dark and there will be a crowd and singing, so it is one for dogs who are comfortable with both.',
     },
     {
         name: 'Christmas Charity Pack Walk',
@@ -376,8 +385,8 @@ export default function FestiveDogFriendlyLondonPage() {
                         London Christmas dog events, 2026
                     </h2>
                     <p className="mb-10 max-w-2xl text-gray-400">
-                        Worth the trip across town. Most raise money for rescue, and several book up,
-                        so check before you travel.
+From our own square to the other side of town. Most raise money for rescue, and
+                        several book up, so check before you travel.
                     </p>
 
                     <div className="space-y-5">
@@ -405,14 +414,16 @@ export default function FestiveDogFriendlyLondonPage() {
                                         <p className="mb-4 leading-relaxed text-gray-300">
                                             {event.description}
                                         </p>
-                                        <a
-                                            href={event.href}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-sm text-amber-400 underline hover:text-amber-300"
-                                        >
-                                            {event.linkLabel} &rarr;
-                                        </a>
+                                        {event.href && (
+                                            <a
+                                                href={event.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-sm text-amber-400 underline hover:text-amber-300"
+                                            >
+                                                {event.linkLabel} &rarr;
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
                             </div>
