@@ -1,13 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { isAuthenticated, unauthorizedResponse } from '@/lib/auth';
 import { clientIp, rateLimit, tooManyRequests } from '@/lib/rateLimit';
 
 // --- Database Connection ---
 const pool = getPool();
 
 export async function GET(request: NextRequest) {
-    // Unauthenticated by design (it is a lookup), but it returns customer details,
-    // so bulk guessing is rate limited. 20 per 15 minutes per IP.
+    // ADMIN ONLY as of 2026-11-22, like its twin customer-lookup. It returns a
+    // client's name, address, phone, email and dogs for a bare phone number or
+    // email, and nothing on the site calls it any more. The rate limit stays:
+    // 20 per 15 minutes per IP.
+    if (!isAuthenticated(request)) return unauthorizedResponse();
+
     const ip = clientIp(request);
     const limit = rateLimit(`user-lookup:${ip}`, 20, 15 * 60);
     if (!limit.allowed) {
