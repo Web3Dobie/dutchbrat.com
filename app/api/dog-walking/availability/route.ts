@@ -36,7 +36,46 @@ interface TimeRange {
     end: Date;
 }
 
+// Ernesto's own client record; his browsing is not a client looking for a walk.
+const OWNER_SELF_ID = 1;
+
+/**
+ * Note which date a logged-in client looked at and how many start times they
+ * were offered (see sql/create_availability_checks.sql). Never allowed to
+ * affect the answer: it runs after the response is built and swallows its own
+ * errors, including a missing table.
+ */
+async function noteCheck(request: NextRequest, response: NextResponse): Promise<void> {
+    try {
+        if (response.status !== 200) return;
+        const ownerId = getOwnerIdFromSession(request);
+        if (ownerId === null || ownerId === OWNER_SELF_ID) return;
+        const params = request.nextUrl.searchParams;
+        if (params.get("exclude_booking_id")) return; // rescheduling, not a new want
+        const date = params.get("date");
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        const body = await response.json();
+        if (!Array.isArray(body?.availableRanges)) return;
+        await pool.query(
+            `INSERT INTO hunters_hounds.availability_checks (owner_id, wanted_date, service_type, slots)
+             VALUES ($1, $2, $3, $4)`,
+            [ownerId, date, (params.get("service_type") || "").slice(0, 40) || null, body.availableRanges.length]
+        );
+        await pool.query(
+            `DELETE FROM hunters_hounds.availability_checks WHERE checked_at < now() - interval '7 days'`
+        );
+    } catch (err) {
+        console.error("[availability] check not recorded:", (err as Error).message);
+    }
+}
+
 export async function GET(request: NextRequest) {
+    const response = await computeAvailability(request);
+    await noteCheck(request, response.clone() as NextResponse);
+    return response;
+}
+
+async function computeAvailability(request: NextRequest): Promise<NextResponse> {
     const searchParams = request.nextUrl.searchParams;
     const dateQuery = searchParams.get("date"); // e.g., "2023-10-31"
     const serviceType = searchParams.get("service_type"); // NEW: Get service type

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import NewsletterEngagement from "./NewsletterEngagement";
+import UnmetDemand from "./UnmetDemand";
 
 interface Day { day: string; views: number; visitors: number }
 interface PageRow { path: string; views: number; visitors: number; clients: number }
@@ -222,6 +223,8 @@ export default function TrafficPage() {
                 {simpleList("Country", data.countries.map((x) => ({ name: x.country, visitors: x.visitors })), "Nothing yet.")}
                 {simpleList("Device", data.devices.map((x) => ({ name: x.device === "mobile" ? "Phone or tablet" : x.device === "desktop" ? "Computer" : x.device, visitors: x.visitors })), "Nothing yet.")}
             </div>
+
+            <UnmetDemand />
 
             <NewsletterEngagement />
         </div>
