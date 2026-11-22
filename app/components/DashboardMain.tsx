@@ -724,7 +724,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                             Quick Actions
                         </h3>
                         <a
-                            href={`/book-now?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}`}
+                            href="/book-now"
                             className="inline-block px-4 py-2 text-sm font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 mr-2 mt-2 no-underline"
                         >
                             📅 Book New Service
@@ -912,7 +912,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                                     Ready to schedule your first dog walking service?
                                 </p>
                                 <a
-                                    href={`/book-now?userId=${customer.owner_id}&phone=${encodeURIComponent(customer.phone)}&email=${encodeURIComponent(customer.email)}`}
+                                    href="/book-now"
                                     className="inline-block px-4 py-2 text-sm font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200 mr-2 mt-2 no-underline"
                                 >
                                     Book Your First Walk

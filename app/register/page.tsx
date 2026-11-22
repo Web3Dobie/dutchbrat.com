@@ -65,7 +65,7 @@ export default function RegisterPage() {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
         } else if (registeredUser && countdown === 0) {
-            router.push(`/book-now?phone=${encodeURIComponent(registeredUser.phone)}`);
+            router.push("/book-now");
         }
     }, [registeredUser, countdown, router]);
 
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                             Redirecting to booking in {countdown} seconds...
                         </p>
                         <Link
-                            href={`/book-now?phone=${encodeURIComponent(registeredUser.phone)}`}
+                            href="/book-now"
                             className="inline-block bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3 px-8 rounded-xl transition-all duration-300 shadow-lg"
                         >
                             Book Your First Walk →
