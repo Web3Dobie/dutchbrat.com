@@ -46,6 +46,21 @@ interface FestiveEvent {
     /** Omitted where there is no verified page to link to. */
     linkLabel?: string
     href?: string
+    /**
+     * The same facts in machine-readable form, published as schema.org Event
+     * data so search engines and AI assistants do not have to parse the prose.
+     * Times are London local time; every date here falls in GMT. Omitted for
+     * entries that are not a dated event.
+     */
+    schema?: {
+        start: string
+        end?: string
+        venue: string
+        /** Street address or area, as far as the organiser has published it. */
+        address: string
+        free?: boolean
+        priceGBP?: number
+    }
 }
 
 const LOCAL_SPOTS: LocalSpot[] = [
@@ -105,6 +120,12 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'This annual festive parade invites rescue dogs and friends to show off their best Christmas jumpers for charity, finishing with a group photo in front of Buckingham Palace. The exact meeting point is still to be announced, so check the listing nearer the time.',
         linkLabel: 'Join the waitlist via The Dogvine',
         href: 'https://thedogvine.com/events/rescue-dogs-of-london-friends-dog-christmas-jumper-parade/',
+        schema: {
+            start: '2026-11-28T10:00:00+00:00',
+            end: '2026-11-28T12:00:00+00:00',
+            venue: "St James's Park area (meeting point to be announced)",
+            address: 'Central London',
+        },
     },
     {
         name: 'Carols at the Barn',
@@ -113,6 +134,11 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
         location: 'Highbury Barn Square, N5',
         description:
             'One on our own doorstep: carols in the square outside The Highbury Barn, led by the Choir of St Joan of Arc. It is out in the open air, so a calm dog on a lead can stand and listen with you — though it will be dark and there will be a crowd and singing, so it is one for dogs who are comfortable with both.',
+        schema: {
+            start: '2026-11-28T16:30:00+00:00',
+            venue: 'Highbury Barn Square',
+            address: 'Highbury Barn, London N5',
+        },
     },
     {
         name: 'Christmas Charity Pack Walk',
@@ -123,6 +149,13 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'Supporting the Canine Welfare Fund, this on-lead group walk includes a dog fancy-dress competition and access to a dog-friendly cafe. Booking and payment are required in advance and are non-refundable, and the meeting point is only shared once payment clears.',
         linkLabel: 'Register via Find Dog Friendly Places',
         href: 'https://www.finddogfriendlyplaces.co.uk/events/christmas-pack-walk-london-charity-dogs',
+        schema: {
+            start: '2026-12-12T11:00:00+00:00',
+            end: '2026-12-12T15:00:00+00:00',
+            venue: 'London (meeting point shared on booking)',
+            address: 'London',
+            priceGBP: 20,
+        },
     },
     {
         name: 'Family Wild Walk: Hackney Downs to Hackney Central',
@@ -133,6 +166,13 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'A gentle family walk led by Outdoor People, gathering at 10:45 and setting off at 11. Well-behaved dogs on leads are welcome. There is no fee — they simply ask that you take a friend out on a walk of your own sometime.',
         linkLabel: 'Book a free place via Humanitix',
         href: 'https://events.humanitix.com/family-wild-walk-hackney-downs-to-hackney-central',
+        schema: {
+            start: '2026-12-12T10:45:00+00:00',
+            end: '2026-12-12T13:00:00+00:00',
+            venue: 'Hackney Downs',
+            address: 'Hackney Downs, London E5',
+            free: true,
+        },
     },
     {
         name: 'All Dogs Matter: Dog Christmas Jingle & Mingle',
@@ -143,6 +183,13 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'Dust off your best — or worst — Christmas jumper for an All Dogs Matter get-together at the Spaniards Inn. Carols at 1pm, mince pies and mulled wine, and prizes for the best Christmas jumpers. Free entry, everyone welcome.',
         linkLabel: 'All Dogs Matter events',
         href: 'https://alldogsmatter.co.uk/get-involved/events/',
+        schema: {
+            start: '2026-12-13T11:00:00+00:00',
+            end: '2026-12-13T14:00:00+00:00',
+            venue: 'The Spaniards Inn',
+            address: 'Hampstead Heath, London NW3 7JJ',
+            free: true,
+        },
     },
     {
         name: 'Santa Paws at Capel Manor Gardens',
@@ -153,6 +200,12 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'On-lead dogs can visit Santa in the Manor House grotto, try a dog agility course, and browse festive pet stalls across the 30-acre grounds. The Santa Paws experience is £5 per dog on top of Gardens admission and must be booked in advance; dogs are not allowed in the mini zoo. Free parking on site.',
         linkLabel: 'Book tickets at Capel Manor Gardens',
         href: 'https://www.capelmanorgardens.co.uk/event/santa-paws-at-capel-manor-gardens-2/',
+        schema: {
+            start: '2026-12-19T10:00:00+00:00',
+            end: '2026-12-19T16:00:00+00:00',
+            venue: 'Capel Manor Gardens',
+            address: 'Enfield',
+        },
     },
     {
         name: 'Hackney Flea Mas Market',
@@ -163,6 +216,13 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
             'Two days of festive flea market across the hall, first floor and basement, with free entry. The organisers list it as dog friendly, and it is an easy detour from Highbury if you are already heading up Church Street.',
         linkLabel: 'Hackney Flea on Eventbrite',
         href: 'https://www.eventbrite.co.uk/e/hackney-flea-mas-market-tickets-1992335582359',
+        schema: {
+            start: '2026-12-19T10:00:00+00:00',
+            end: '2026-12-20T17:00:00+00:00',
+            venue: 'Abney Public Hall',
+            address: '73a Stoke Newington Church Street, London N16 0AS',
+            free: true,
+        },
     },
     {
         name: 'Early Morning Christmas Lights Walk',
@@ -175,6 +235,44 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
         href: 'https://www.ravenimagery.co.uk/dog-photography-journal/christmas-with-your-dog-london',
     },
 ]
+
+const PAGE_URL = 'https://hunters-hounds.london/guides/festive-dog-friendly-london'
+
+const EVENTS_JSON_LD = {
+    '@context': 'https://schema.org',
+    '@graph': FESTIVE_EVENTS.filter((e) => e.schema).map((e) => ({
+        '@type': 'Event',
+        name: e.name,
+        description: e.description,
+        startDate: e.schema!.start,
+        ...(e.schema!.end ? { endDate: e.schema!.end } : {}),
+        eventStatus: 'https://schema.org/EventScheduled',
+        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        location: {
+            '@type': 'Place',
+            name: e.schema!.venue,
+            address: {
+                '@type': 'PostalAddress',
+                streetAddress: e.schema!.address,
+                addressLocality: 'London',
+                addressCountry: 'GB',
+            },
+        },
+        ...(e.schema!.free ? { isAccessibleForFree: true } : {}),
+        ...(e.schema!.priceGBP
+            ? {
+                  offers: {
+                      '@type': 'Offer',
+                      price: e.schema!.priceGBP,
+                      priceCurrency: 'GBP',
+                      url: e.href ?? PAGE_URL,
+                  },
+              }
+            : {}),
+        // The organiser's own page where there is one, otherwise this guide.
+        url: e.href ?? PAGE_URL,
+    })),
+}
 
 /**
  * Falling snow across the whole page.
@@ -294,6 +392,10 @@ function LightString() {
 export default function FestiveDogFriendlyLondonPage() {
     return (
         <div className="relative min-h-screen bg-gradient-to-br from-gray-900 via-emerald-950 to-gray-900 text-white">
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(EVENTS_JSON_LD) }}
+            />
             <Snowfall />
 
             {/* Hero */}
