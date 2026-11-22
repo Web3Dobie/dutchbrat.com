@@ -132,7 +132,7 @@ export default function TrafficPage() {
                 </div>
                 <div style={s.tile}>
                     <div style={s.tileNumber}>{data.totals.views}</div>
-                    <div style={s.tileLabel}>Pages viewed</div>
+                    <div style={s.tileLabel}>Pages viewed (a repeat of the same page that day counts once)</div>
                 </div>
                 <div style={s.tile}>
                     <div style={s.tileNumber}>{data.totals.clients}</div>

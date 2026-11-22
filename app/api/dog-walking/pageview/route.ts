@@ -37,6 +37,20 @@ function looksLikeScanner(ip: string, ua: string): boolean {
     return !!chrome && Number(chrome[1]) < MIN_DESKTOP_CHROME;
 }
 
+// What identifies a connection for counting. Phones on home broadband change
+// the second half of their IPv6 address every few hours, which made one person
+// look like several; the first half (the /64) is the household, so use that.
+function networkKey(ip: string): string {
+    if (!ip.includes(':')) return ip;
+    const [head, tail = ''] = ip.toLowerCase().split('::');
+    const h = head ? head.split(':') : [];
+    const t = tail ? tail.split(':') : [];
+    const full = ip.includes('::')
+        ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t]
+        : h;
+    return full.slice(0, 4).map(x => x.replace(/^0+(?=.)/, '')).join(':');
+}
+
 const done = () => new NextResponse(null, { status: 204 });
 
 function londonDate(): string {
@@ -90,7 +104,7 @@ export async function POST(request: NextRequest) {
 
         const visitorHash = crypto
             .createHmac('sha256', secret)
-            .update(`pageview|${londonDate()}|${ip}|${ua}`)
+            .update(`pageview|${londonDate()}|${networkKey(ip)}|${ua}`)
             .digest('hex')
             .slice(0, 20);
 
