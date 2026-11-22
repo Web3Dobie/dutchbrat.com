@@ -269,8 +269,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {domainType === 'hunter-memorial' && (
           <meta name="google-site-verification" content="cSBUBXyY95mR5jA0ctaMVUPH0JpT8pJbm-o3byBEJAs" />
         )}
-        {/* Bing Webmaster verification */}
-        <meta name="msvalidate.01" content="your-bing-verification-code" />
+        {/* Bing Webmaster verification: one code per Bing account, so it covers every site served here */}
+        <meta name="msvalidate.01" content="57C7A7644EDB759B4ECAFC2B32894809" />
       </head>
       <body className="bg-gray-950 text-white">
         <DomainProvider domainType={domainType}>
