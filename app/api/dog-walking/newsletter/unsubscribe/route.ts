@@ -4,8 +4,23 @@ import { getPool } from '@/lib/database';
 // Database Connection
 const pool = getPool();
 
-// GET - Unsubscribe via token (public endpoint - no auth required)
-export async function GET(request: NextRequest) {
+// GET changes nothing, on purpose.
+//
+// It used to unsubscribe, and the page called it as soon as it loaded. Mail
+// security scanners open every link in an email, some of them in a real
+// browser, so a scanner could unsubscribe a client who had done nothing. (One
+// did exactly that to newsletter 13 on 2026-11-19; it only failed because its
+// token did not match.) Unsubscribing now takes a deliberate button press on
+// the page, which sends DELETE.
+export async function GET() {
+    return NextResponse.json(
+        { error: "Open the unsubscribe page and press the Unsubscribe button." },
+        { status: 405, headers: { Allow: "DELETE, POST" } }
+    );
+}
+
+// DELETE - Unsubscribe via token (public endpoint - the token is the proof)
+export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get("token");
 

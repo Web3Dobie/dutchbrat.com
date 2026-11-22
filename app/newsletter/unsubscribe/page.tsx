@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react"; // Added Suspense
+import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 // 1. Move all your logic into a sub-component
@@ -8,18 +8,19 @@ function UnsubscribeContent() {
     const searchParams = useSearchParams();
     const token = searchParams.get("token");
 
-    const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-    const [message, setMessage] = useState("");
+    // Starts at "confirm": nothing happens until the button is pressed. The
+    // page used to unsubscribe on load, which let link-scanning mail software
+    // unsubscribe people by accident.
+    const [status, setStatus] = useState<"confirm" | "loading" | "success" | "error">(
+        token ? "confirm" : "error"
+    );
+    const [message, setMessage] = useState(token ? "" : "No unsubscribe token provided.");
     const [email, setEmail] = useState("");
 
-    useEffect(() => {
-        if (!token) {
-            setStatus("error");
-            setMessage("No unsubscribe token provided.");
-            return;
-        }
-
-        fetch(`/api/dog-walking/newsletter/unsubscribe?token=${token}`)
+    const unsubscribe = () => {
+        if (!token) return;
+        setStatus("loading");
+        fetch(`/api/dog-walking/newsletter/unsubscribe?token=${encodeURIComponent(token)}`, { method: "DELETE" })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -35,7 +36,7 @@ function UnsubscribeContent() {
                 setStatus("error");
                 setMessage("An error occurred. Please try again later.");
             });
-    }, [token]);
+    };
 
     return (
         <div style={{
@@ -54,6 +55,33 @@ function UnsubscribeContent() {
                     Hunter's Hounds
                 </h1>
             </div>
+
+            {status === "confirm" && (
+                <div>
+                    <h2 style={{ color: "#fff", fontSize: "20px", marginBottom: "15px" }}>
+                        Unsubscribe from the newsletter?
+                    </h2>
+                    <p style={{ color: "#94a3b8", lineHeight: "1.6", marginBottom: "25px" }}>
+                        You will stop receiving the Hunter&apos;s Hounds monthly newsletter.
+                        Booking confirmations and walk reminders are not affected.
+                    </p>
+                    <button
+                        onClick={unsubscribe}
+                        style={{
+                            backgroundColor: "#dc2626",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "8px",
+                            padding: "12px 28px",
+                            fontSize: "16px",
+                            fontWeight: 600,
+                            cursor: "pointer"
+                        }}
+                    >
+                        Unsubscribe
+                    </button>
+                </div>
+            )}
 
             {status === "loading" && (
                 <div>
