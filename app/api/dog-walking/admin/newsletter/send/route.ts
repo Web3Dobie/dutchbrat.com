@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { sendEmail } from "@/lib/emailService";
 import { generateNewsletterEmail } from "@/lib/emailTemplates";
+import { htmlToText } from "@/lib/htmlToText";
 import { getPool } from '@/lib/database';
 import { addTracking } from '@/lib/newsletterTracking';
 
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
                     to: test_email,
                     subject: `[TEST] ${newsletter.title}`,
                     html: testHtml,
+                    text: htmlToText(emailHtml.replace('{{UNSUBSCRIBE_URL}}', '#')),
                 });
 
                 return NextResponse.json({
@@ -147,6 +149,12 @@ export async function POST(request: NextRequest) {
                 const unsubscribeUrl = `https://hunters-hounds.london/newsletter/unsubscribe?token=${recipient.unsubscribeToken}`;
                 // Each copy gets its own signed open pixel and link redirects
                 // (lib/newsletterTracking.ts); the unsubscribe link is left direct.
+                // Plain-text twin of the same copy (untracked, readable links)
+                // and the unsubscribe header mail providers expect on bulk
+                // mail. The header's URL only acts on a POST (RFC 8058), so a
+                // scanner that merely opens it changes nothing.
+                const plainText = htmlToText(emailHtml.replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl));
+                const oneClickUrl = `https://hunters-hounds.london/api/dog-walking/newsletter/unsubscribe/one-click?token=${recipient.unsubscribeToken}`;
                 const personalizedHtml = addTracking(
                     emailHtml.replace('{{UNSUBSCRIBE_URL}}', unsubscribeUrl),
                     { newsletterId: newsletter_id, ownerId: recipient.ownerId, isPartner: !recipient.isPrimary }
@@ -160,6 +168,12 @@ export async function POST(request: NextRequest) {
                             to: recipient.email,
                             subject: newsletter.title,
                             html: personalizedHtml,
+                            text: plainText,
+                            headers: {
+                                'List-Unsubscribe': `<${oneClickUrl}>`,
+                                'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                            },
+                            skipBusinessBcc: true,
                         });
                         sent = true;
                         break;

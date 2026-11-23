@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
+import { unsubscribeByToken } from '@/lib/newsletterUnsubscribe';
 
 // Database Connection
 const pool = getPool();
@@ -40,54 +41,25 @@ export async function DELETE(request: NextRequest) {
         );
     }
 
-    const client = await pool.connect();
-
     try {
-        // Try primary owner token first
-        const primaryResult = await client.query(`
-            UPDATE hunters_hounds.owners
-            SET newsletter_subscribed = false
-            WHERE newsletter_unsubscribe_token = $1
-            RETURNING owner_name, email;
-        `, [token]);
-
-        if (primaryResult.rows.length > 0) {
-            return NextResponse.json({
-                success: true,
-                message: "Successfully unsubscribed from Hunter's Pack newsletter",
-                email: primaryResult.rows[0].email
-            });
+        const email = await unsubscribeByToken(token);
+        if (email === null) {
+            return NextResponse.json(
+                { error: "Invalid or expired unsubscribe link" },
+                { status: 404 }
+            );
         }
-
-        // Try partner token
-        const partnerResult = await client.query(`
-            UPDATE hunters_hounds.owners
-            SET partner_newsletter_subscribed = false
-            WHERE partner_newsletter_unsubscribe_token = $1
-            RETURNING partner_email;
-        `, [token]);
-
-        if (partnerResult.rows.length > 0) {
-            return NextResponse.json({
-                success: true,
-                message: "Successfully unsubscribed from Hunter's Pack newsletter",
-                email: partnerResult.rows[0].partner_email
-            });
-        }
-
-        return NextResponse.json(
-            { error: "Invalid or expired unsubscribe link" },
-            { status: 404 }
-        );
-
+        return NextResponse.json({
+            success: true,
+            message: "Successfully unsubscribed from Hunter's Pack newsletter",
+            email,
+        });
     } catch (error) {
         console.error("Unsubscribe error:", error);
         return NextResponse.json(
             { error: "Failed to process unsubscribe request" },
             { status: 500 }
         );
-    } finally {
-        client.release();
     }
 }
 

@@ -28,6 +28,10 @@ interface EmailOptions {
     to: string | string[];
     subject: string;
     html: string;
+    /** Plain-text version, sent alongside the HTML as a multipart email. */
+    text?: string;
+    /** Extra mail headers, e.g. List-Unsubscribe on the newsletter. */
+    headers?: Record<string, string>;
     from?: string;  // Optional override for from address
     bcc?: string | string[]; // Optional additional BCC recipients
     /**
@@ -36,8 +40,10 @@ interface EmailOptions {
      * Every other email here is business correspondence worth a copy. Login
      * codes are not: copying them would put a live credential for each of 42
      * clients into the bookings inbox, and would mean 42 people's login
-     * attempts arriving as mail nobody will read. Use this ONLY for
-     * credentials.
+     * attempts arriving as mail nobody will read. Use this for credentials,
+     * and for the newsletter: its copies carry each client's own unsubscribe
+     * header and open pixel, so a copy opened in the bookings inbox would be
+     * counted as (or unsubscribe) that client.
      */
     skipBusinessBcc?: boolean;
 }
@@ -140,6 +146,8 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
             ...(bccList.length > 0 ? { bcc: bccList } : {}),
             subject: options.subject.replace(/[\r\n]+/g, ' ').trim(),
             html: options.html,
+            ...(options.text ? { text: options.text } : {}),
+            ...(options.headers ? { headers: options.headers } : {}),
         });
 
         if (error) {
