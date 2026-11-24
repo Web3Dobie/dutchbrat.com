@@ -5,6 +5,7 @@ import DomainProvider from './components/DomainProvider'
 import PageViewTracker from './components/PageViewTracker'
 import Script from 'next/script'
 import { getDomainType } from '@/lib/domainDetection'
+import { huntersHoundsJsonLd } from '@/lib/businessSchema'
 
 export async function generateMetadata() {
   const domainType = getDomainType()
@@ -200,40 +201,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Script>
 
         {/* Domain-specific Schema markup */}
+        {/* A plain script tag, not next/script: next/script only adds this
+            after the page's JavaScript has run, so crawlers that do not run
+            JavaScript (Bing, AI assistants) never saw it. */}
         {domainType === 'hunters-hounds' && (
-          <Script id="hunters-hounds-schema" type="application/ld+json">
-            {`
-              {
-                "@context": "https://schema.org",
-                "@type": "LocalBusiness",
-                "name": "Hunter's Hounds",
-                "description": "Professional dog walking service in North London",
-                "url": "https://hunters-hounds.london",
-                "telephone": "+44-793-274-9772",
-                "address": {
-                  "@type": "PostalAddress",
-                  "postalCode": "N5 1JG",
-                  "addressLocality": "London",
-                  "addressRegion": "England",
-                  "addressCountry": "GB"
-                },
-                "geo": {
-                  "@type": "GeoCoordinates",
-                  "latitude": "51.5614",
-                  "longitude": "-0.1048"
-                },
-                "areaServed": [
-                  "Highbury Fields",
-                  "Clissold Park", 
-                  "Islington",
-                  "North London"
-                ],
-                "serviceType": "Pet Care Services",
-                "priceRange": "££",
-                "openingHours": "Mo-Fri 09:00-20:00"
-              }
-            `}
-          </Script>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(huntersHoundsJsonLd()).replace(/</g, '\\u003c'),
+            }}
+          />
         )}
 
         {domainType === 'dutchbrat' && (
