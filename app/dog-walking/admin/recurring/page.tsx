@@ -59,6 +59,9 @@ interface SeriesRow {
     confirmed_total: number;
     next_walk: string | null;
     last_walk: string | null;
+    // Shared walks: the other household's dog, and how many upcoming walks are not shared yet
+    shared_with?: string | null;
+    upcoming_unshared?: number;
 }
 
 interface PlannedMove {
@@ -259,6 +262,15 @@ export default function AdminRecurringPage() {
         blocked: AvailDate[];
         endDate: string;
     } | null>(null);
+    // "Make shared" panel: turn a series' upcoming walks into shared walks
+    const [shareId, setShareId] = useState<number | null>(null);
+    const [shareOwner, setShareOwner] = useState<number>(0);
+    const [shareDog, setShareDog] = useState<number>(0);
+    const [sharePriceFirst, setSharePriceFirst] = useState("");
+    const [sharePriceSecond, setSharePriceSecond] = useState("");
+    const [shareEmail, setShareEmail] = useState(false);
+    const [sharePreview, setSharePreview] = useState<any>(null);
+
     // date -> alternative time the admin picked for a clashing date
     const [rescued, setRescued] = useState<Record<string, string>>({});
 
@@ -335,7 +347,86 @@ export default function AdminRecurringPage() {
         [series, amendId]
     );
 
+    const shareTarget = useMemo(
+        () => series.find((x) => x.id === shareId) ?? null,
+        [series, shareId]
+    );
+    const sharePartner = useMemo(
+        () => clients.find((c) => c.id === shareOwner) ?? null,
+        [clients, shareOwner]
+    );
+
+    const startShare = (row: SeriesRow) => {
+        setShareId(row.id);
+        setShareOwner(0);
+        setShareDog(0);
+        setSharePriceFirst("");
+        setSharePriceSecond("");
+        setShareEmail(false);
+        setSharePreview(null);
+        setAmendId(null);
+        setNotice(null);
+        setError(null);
+        if (clients.length === 0) loadClients();
+    };
+
+    // dryRun = true shows exactly what would happen; false does it.
+    const runShare = async (dryRun: boolean) => {
+        if (!shareId || !shareOwner || !shareDog) {
+            setError("Choose the second client and their dog.");
+            return;
+        }
+        const price = (v: string) => (v.trim() === "" ? null : Number(v));
+        const p1 = price(sharePriceFirst);
+        const p2 = price(sharePriceSecond);
+        if ((p1 !== null && !(p1 >= 0)) || (p2 !== null && !(p2 >= 0))) {
+            setError("Prices must be numbers, or left blank to use the rate card.");
+            return;
+        }
+        setBusy(true);
+        setError(null);
+        setNotice(null);
+        try {
+            const r = await fetch("/api/dog-walking/admin/shared-walk/series", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    series_id: shareId,
+                    partner: { owner_id: shareOwner, dog_id: shareDog },
+                    price_first: p1,
+                    price_second: p2,
+                    send_email: shareEmail,
+                    dry_run: dryRun,
+                }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                setSharePreview(null);
+                setError(j.error ?? `Could not share the series (${r.status})`);
+                return;
+            }
+            if (dryRun) {
+                setSharePreview(j);
+                return;
+            }
+            const warn = (j.warnings ?? []).length ? ` Notes: ${j.warnings.join(" ")}` : "";
+            setNotice(
+                `Series #${shareId} is now shared: ${j.walks.length} walks for ${j.first.dog_name} and ${j.partner.dog_name}.` +
+                    (j.partner_series_id ? ` ${j.partner.owner_name}'s walks are series #${j.partner_series_id}.` : "") +
+                    warn
+            );
+            setShareId(null);
+            setSharePreview(null);
+            loadSeries();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not share the series");
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const startAmend = (row: SeriesRow) => {
+        setShareId(null);
         setAmendId(row.id);
         setPreview(null);
         setNotice(null);
@@ -965,6 +1056,166 @@ export default function AdminRecurringPage() {
                 </div>
             )}
 
+            {/* ---------- Make shared ---------- */}
+            {shareTarget && (
+                <div style={s.card}>
+                    <h2 style={s.h2}>
+                        Share series #{shareTarget.id}: {shareTarget.owner_name} with {shareTarget.dog_name_1}
+                    </h2>
+                    <p style={{ color: "#9ca3af", marginBottom: "14px", fontSize: "0.9rem" }}>
+                        Every upcoming walk in this series that is not already shared ({shareTarget.upcoming_unshared ?? shareTarget.upcoming}) becomes a
+                        shared walk. The second client gets a booking at each of the same times. Past walks are not touched.
+                    </p>
+                    <div style={s.row}>
+                        <div style={s.field}>
+                            <span style={s.label}>Second client</span>
+                            <select
+                                style={s.input}
+                                value={shareOwner}
+                                onChange={(e) => {
+                                    const id = Number(e.target.value);
+                                    setShareOwner(id);
+                                    const c = clients.find((x) => x.id === id);
+                                    setShareDog(c?.dogs?.[0]?.id ?? 0);
+                                    setSharePreview(null);
+                                }}
+                            >
+                                <option value={0}>Select…</option>
+                                {clients
+                                    .filter((c) => c.id !== shareTarget.owner_id && (c.dogs?.length ?? 0) > 0)
+                                    .map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.owner_name}
+                                        </option>
+                                    ))}
+                            </select>
+                        </div>
+                        <div style={s.field}>
+                            <span style={s.label}>Their dog</span>
+                            <select
+                                style={s.input}
+                                value={shareDog}
+                                onChange={(e) => {
+                                    setShareDog(Number(e.target.value));
+                                    setSharePreview(null);
+                                }}
+                                disabled={!sharePartner}
+                            >
+                                {!sharePartner && <option value={0}>—</option>}
+                                {(sharePartner?.dogs ?? []).map((d) => (
+                                    <option key={d.id} value={d.id}>
+                                        {d.dog_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={s.field}>
+                            <span style={s.label}>{shareTarget.owner_name} pays £ per walk</span>
+                            <input
+                                style={{ ...s.input, width: "150px" }}
+                                type="number"
+                                min="0"
+                                step="0.50"
+                                placeholder="rate card"
+                                value={sharePriceFirst}
+                                onChange={(e) => {
+                                    setSharePriceFirst(e.target.value);
+                                    setSharePreview(null);
+                                }}
+                            />
+                        </div>
+                        <div style={s.field}>
+                            <span style={s.label}>{sharePartner?.owner_name ?? "Second client"} pays £ per walk</span>
+                            <input
+                                style={{ ...s.input, width: "150px" }}
+                                type="number"
+                                min="0"
+                                step="0.50"
+                                placeholder="rate card"
+                                value={sharePriceSecond}
+                                onChange={(e) => {
+                                    setSharePriceSecond(e.target.value);
+                                    setSharePreview(null);
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <p style={{ color: "#9ca3af", margin: "10px 0", fontSize: "0.85rem" }}>
+                        Leave a price blank to use the rate card&apos;s shared-walk price for each walk&apos;s date.
+                    </p>
+                    <label style={{ display: "flex", alignItems: "center", gap: "8px", color: "#d1d5db", marginBottom: "14px" }}>
+                        <input type="checkbox" checked={shareEmail} onChange={(e) => setShareEmail(e.target.checked)} />
+                        Email both clients one summary listing all the walks
+                    </label>
+                    <div style={{ display: "flex", gap: "10px" }}>
+                        <button style={{ ...s.btn, opacity: busy ? 0.5 : 1 }} disabled={busy} onClick={() => runShare(true)}>
+                            {busy && !sharePreview ? "Checking…" : "Preview"}
+                        </button>
+                        <button
+                            style={s.btnGhost}
+                            onClick={() => {
+                                setShareId(null);
+                                setSharePreview(null);
+                            }}
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    {sharePreview && (
+                        <div style={{ marginTop: "18px" }}>
+                            <p style={{ color: "#d1d5db", marginBottom: "8px" }}>
+                                <strong>{sharePreview.walks.length} walks</strong> will be shared.{" "}
+                                {sharePreview.first.owner_name}: £{Number(sharePreview.first.total).toFixed(2)} in total.{" "}
+                                {sharePreview.partner.owner_name}: £{Number(sharePreview.partner.total).toFixed(2)} in total
+                                {sharePreview.partner.converted_bookings > 0
+                                    ? ` (${sharePreview.partner.converted_bookings} of their existing walks will be converted, ${sharePreview.partner.new_bookings} new)`
+                                    : ` (${sharePreview.partner.new_bookings} new bookings)`}
+                                .
+                            </p>
+                            <div style={{ overflowX: "auto" }}>
+                                <table style={s.table}>
+                                    <thead>
+                                        <tr>
+                                            <th style={s.th}>Walk</th>
+                                            <th style={s.th}>{sharePreview.first.dog_name}</th>
+                                            <th style={s.th}>{sharePreview.partner.dog_name}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sharePreview.walks.map((w: any) => (
+                                            <tr key={w.start_time}>
+                                                <td style={s.td}>{fmtDateTime(w.start_time)}</td>
+                                                <td style={s.td}>
+                                                    £{Number(w.price_first).toFixed(2)}
+                                                    {w.old_price_first !== null && Number(w.old_price_first) !== Number(w.price_first) && (
+                                                        <span style={{ color: "#9ca3af" }}> (now £{Number(w.old_price_first).toFixed(2)})</span>
+                                                    )}
+                                                </td>
+                                                <td style={s.td}>
+                                                    £{Number(w.price_partner).toFixed(2)}
+                                                    {w.partner_converted && <span style={{ color: "#9ca3af" }}> (existing walk)</span>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {(sharePreview.warnings ?? []).map((w: string) => (
+                                <p key={w} style={{ color: "#fbbf24", marginTop: "8px" }}>⚠ {w}</p>
+                            ))}
+                            <button
+                                style={{ ...s.btn, marginTop: "14px", backgroundColor: "#0d9488", opacity: busy ? 0.5 : 1 }}
+                                disabled={busy}
+                                onClick={() => runShare(false)}
+                            >
+                                {busy ? "Sharing…" : `Share these ${sharePreview.walks.length} walks`}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* ---------- List ---------- */}
             <div style={s.card}>
                 <h2 style={s.h2}>All series</h2>
@@ -995,6 +1246,11 @@ export default function AdminRecurringPage() {
                                         <td style={s.td}>{row.owner_name}</td>
                                         <td style={s.td}>
                                             {row.dog_name_2 ? `${row.dog_name_1} & ${row.dog_name_2}` : row.dog_name_1}
+                                            {row.shared_with && (
+                                                <span style={{ marginLeft: "6px", backgroundColor: "#0d9488", color: "#fff", fontSize: "0.65rem", fontWeight: 600, padding: "2px 5px", borderRadius: "3px" }}>
+                                                    shared with {row.shared_with}
+                                                </span>
+                                            )}
                                         </td>
                                         <td style={s.td}>{dayLabel(row.days_of_week, row.next_walk)}</td>
                                         <td style={s.td}>{row.preferred_time?.slice(0, 5) ?? "—"}</td>
@@ -1009,6 +1265,15 @@ export default function AdminRecurringPage() {
                                             >
                                                 Amend
                                             </button>
+                                            {row.service_type === "solo" && !row.dog_name_2 && (
+                                                <button
+                                                    style={{ ...s.btnGhost, padding: "6px 12px", marginRight: "8px" }}
+                                                    onClick={() => startShare(row)}
+                                                    disabled={busy || (row.upcoming_unshared ?? row.upcoming) === 0}
+                                                >
+                                                    Make shared
+                                                </button>
+                                            )}
                                             <button
                                                 style={{ ...s.btnDanger, padding: "6px 12px" }}
                                                 onClick={() => cancelSeries(row)}

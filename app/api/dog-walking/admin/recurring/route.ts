@@ -34,6 +34,15 @@ export async function GET(request: NextRequest) {
                 o.email,
                 d1.dog_name AS dog_name_1,
                 d2.dog_name AS dog_name_2,
+                -- The other household's dog, where upcoming walks are shared
+                (SELECT string_agg(DISTINCT pd.dog_name, ' & ')
+                   FROM hunters_hounds.bookings sb
+                   JOIN hunters_hounds.bookings pb
+                     ON pb.shared_walk_id = sb.shared_walk_id AND pb.id <> sb.id AND pb.status <> 'cancelled'
+                   JOIN hunters_hounds.dogs pd ON pd.id IN (pb.dog_id_1, pb.dog_id_2)
+                  WHERE sb.series_id = bs.id AND sb.status = 'confirmed' AND sb.start_time > NOW()) AS shared_with,
+                COUNT(b.id) FILTER (WHERE b.status = 'confirmed' AND b.start_time > NOW()
+                                      AND b.shared_walk_id IS NULL)                        AS upcoming_unshared,
                 COUNT(b.id) FILTER (WHERE b.status = 'confirmed')                          AS confirmed_total,
                 COUNT(b.id) FILTER (WHERE b.status = 'confirmed' AND b.start_time > NOW()) AS upcoming,
                 COUNT(b.id) FILTER (WHERE b.status = 'cancelled')                          AS cancelled_total,
@@ -56,6 +65,7 @@ export async function GET(request: NextRequest) {
                 ...r,
                 confirmed_total: Number(r.confirmed_total),
                 upcoming: Number(r.upcoming),
+                upcoming_unshared: Number(r.upcoming_unshared),
                 cancelled_total: Number(r.cancelled_total),
             })),
         });

@@ -275,6 +275,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             console.error("Failed to send cancellation email:", emailError);
         }
 
+        // Shared walks among the cancelled bookings whose other half is still on.
+        let sharedStillBooked = 0;
+        try {
+            const sharedResult = await pool.query(
+                `SELECT COUNT(*)::int AS n
+                   FROM hunters_hounds.bookings c
+                   JOIN hunters_hounds.bookings p
+                     ON p.shared_walk_id = c.shared_walk_id AND p.id <> c.id AND p.status = 'confirmed'
+                  WHERE c.id = ANY($1::int[])`,
+                [cancelledIds]
+            );
+            sharedStillBooked = sharedResult.rows[0].n;
+        } catch (sharedError) {
+            console.error("Failed to check shared walks on series cancel:", sharedError);
+        }
+
         // Send Telegram notification
         const telegramMessage = `
 ❌ <b>RECURRING BOOKING CANCELLED</b>
@@ -285,7 +301,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 👤 ${series.owner_name}
 🐾 ${dogNames}
 
-<i>Slots are now free for re-booking.</i>
+${sharedStillBooked > 0
+    ? `⚠️ <b>${sharedStillBooked} of these were SHARED WALKS.</b> The other client is still booked at those times at the shared price, so those slots are NOT free.`
+    : '<i>Slots are now free for re-booking.</i>'}
         `;
 
         try {

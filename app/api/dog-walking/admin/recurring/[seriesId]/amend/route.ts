@@ -69,6 +69,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
     }
 
+    // A shared series is mirrored by another household's bookings at the same
+    // times. Amending this one alone would leave the two out of step.
+    const sharedCheck = await pool.query(
+        `SELECT 1 FROM hunters_hounds.bookings
+          WHERE series_id = $1 AND status = 'confirmed' AND start_time > NOW()
+            AND shared_walk_id IS NOT NULL
+          LIMIT 1`,
+        [seriesIdNum]
+    );
+    if (sharedCheck.rows.length > 0) {
+        return NextResponse.json(
+            { error: "This series has shared walks, so it can't be amended in one go yet: the other client's walks would stay at the old time. Move the walks one at a time from Manage Bookings, for both clients." },
+            { status: 409 }
+        );
+    }
+
     const client = await pool.connect();
 
     try {
