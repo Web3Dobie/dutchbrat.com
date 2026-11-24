@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
 import { requireOwner } from '@/lib/customerAuth';
+import { sharedWithSql } from '@/lib/sharedWalk';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,9 @@ export async function GET(request: NextRequest) {
                 b.created_at,
                 b.series_id,
                 b.series_index,
+                b.shared_walk_id,
+                -- The other household's dog on a shared walk: name only.
+                ${sharedWithSql('b')} AS shared_with,
                 bs.recurrence_pattern,
                 bs.status AS series_status,
                 ARRAY_REMOVE(ARRAY[d1.dog_name, d2.dog_name], NULL) as dog_names,

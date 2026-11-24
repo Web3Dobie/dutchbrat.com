@@ -8,6 +8,7 @@ import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 import { requireOwner } from '@/lib/customerAuth';
+import { SHARED_WALK_LOCKED_MESSAGE } from '@/lib/sharedWalk';
 
 // Database Connection
 const pool = getPool();
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
                 b.status,
                 b.price_pounds,
                 b.google_event_id,
+                b.shared_walk_id,
                 b.dog_id_1 as current_dog_id_1,
                 b.dog_id_2 as current_dog_id_2,
                 o.owner_name,
@@ -83,6 +85,13 @@ export async function POST(request: NextRequest) {
         }
 
         const booking = bookingResult.rows[0];
+
+        // A shared walk is one dog per household at an agreed price; changing
+        // the dogs here would reprice it as a solo walk.
+        if (booking.shared_walk_id) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({ error: SHARED_WALK_LOCKED_MESSAGE }, { status: 409 });
+        }
 
         // Check if booking is in the future
         const startTime = new Date(booking.start_time);

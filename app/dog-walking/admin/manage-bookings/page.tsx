@@ -27,6 +27,9 @@ interface EditableBooking {
     series_id?: number | null;
     series_index?: number | null;
     recurrence_pattern?: string | null;
+    // Shared walk: the link, and the other household's dog (null if they cancelled)
+    shared_walk_id?: number | null;
+    shared_with?: string | null;
 }
 
 interface BookingsResponse {
@@ -853,7 +856,12 @@ export default function ManageBookings() {
                                     </td>
                                     <td style={styles.td}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            {getServiceDisplayName(booking.service_type)}
+                                            {booking.shared_walk_id ? 'Shared Walk' : getServiceDisplayName(booking.service_type)}
+                                            {booking.shared_walk_id && (
+                                                <span style={{ backgroundColor: booking.shared_with ? '#0d9488' : '#b45309', color: '#fff', fontSize: '0.6rem', fontWeight: '600', padding: '2px 4px', borderRadius: '3px' }}>
+                                                    {booking.shared_with ? `with ${booking.shared_with}` : 'partner cancelled'}
+                                                </span>
+                                            )}
                                             {booking.series_id && (
                                                 <span style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: '0.6rem', fontWeight: '600', padding: '2px 4px', borderRadius: '3px', textTransform: 'uppercase' }}>
                                                     #{booking.series_id}
@@ -893,8 +901,15 @@ export default function ManageBookings() {
                 <strong>{booking.owner_name}</strong> — {booking.dog_names.join(", ")}
             </div>
             <div style={{ color: "#9ca3af", fontSize: "0.875rem" }}>
-                {getServiceDisplayName(booking.service_type)} ({booking.duration_minutes} min)
+                {booking.shared_walk_id ? 'Shared Walk' : getServiceDisplayName(booking.service_type)} ({booking.duration_minutes} min)
             </div>
+            {booking.shared_walk_id && (
+                <div style={{ color: "#fbbf24", fontSize: "0.875rem", marginTop: "4px" }}>
+                    {booking.shared_with
+                        ? `Shared walk with ${booking.shared_with}. Changes here apply to this client's booking only, not to ${booking.shared_with}'s.`
+                        : "Shared walk whose partner has cancelled. This client is still booked at the shared price."}
+                </div>
+            )}
             <div style={{ color: "#9ca3af", fontSize: "0.875rem", marginTop: "4px" }}>
                 {formatDate(booking.start_time)}
             </div>

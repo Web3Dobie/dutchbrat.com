@@ -87,7 +87,8 @@ export async function getWalkLimitForDate(
         }
 
         const walkCountResult = await client.query(
-            `SELECT COUNT(*)::int as count FROM hunters_hounds.bookings
+            // A shared walk is two booking rows but one walk, so count it once.
+            `SELECT COUNT(DISTINCT COALESCE('s' || shared_walk_id, 'b' || id))::int as count FROM hunters_hounds.bookings
              WHERE service_type IN ('solo', 'quick')
                AND status = 'confirmed'
                AND start_time::date = $1::date

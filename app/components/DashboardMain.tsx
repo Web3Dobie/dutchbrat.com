@@ -50,6 +50,9 @@ interface Booking {
     // Series fields for recurring bookings
     series_id?: number | null;
     series_index?: number | null;
+    // Shared walk: the link, and the other household's dog (null if they cancelled)
+    shared_walk_id?: number | null;
+    shared_with?: string | null;
     recurrence_pattern?: string | null;
     series_status?: string | null;
     is_recurring?: boolean;
@@ -420,7 +423,8 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                 <h3 className="text-white text-lg font-semibold" style={{ margin: 0 }}>
-                                    {getServiceDisplayName(booking.service_type)}
+                                    {booking.shared_walk_id ? 'Shared Walk' : getServiceDisplayName(booking.service_type)}
+                                    {booking.shared_walk_id && booking.shared_with ? ` with ${booking.shared_with}` : ''}
                                 </h3>
                                 {booking.is_recurring && (
                                     <span style={{
@@ -697,7 +701,7 @@ export default function DashboardMain({ customer, onLogout, onBookingSelect, onA
                                         {dayBookings.map(b => (
                                             <div key={b.id} style={{ borderLeft: `3px solid ${getBookingStatusColor(b)}`, paddingLeft: '10px', marginBottom: '10px' }}>
                                                 <p style={{ color: '#fff', fontWeight: '600', margin: '0 0 4px', fontSize: '0.875rem' }}>
-                                                    {b.service_type === 'sitting' ? '🛏️' : '🐾'} {getServiceDisplayName(b.service_type)}
+                                                    {b.service_type === 'sitting' ? '🛏️' : '🐾'} {b.shared_walk_id ? `Shared Walk${b.shared_with ? ` with ${b.shared_with}` : ''}` : getServiceDisplayName(b.service_type)}
                                                 </p>
                                                 <p style={{ color: '#d1d5db', margin: '0 0 2px', fontSize: '0.8rem' }}>
                                                     {b.dog_names?.join(' & ')}

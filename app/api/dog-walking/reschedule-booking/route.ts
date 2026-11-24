@@ -10,6 +10,7 @@ import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 import { getWalkLimitForDate } from '@/lib/walkLimit';
 import { requireOwner } from '@/lib/customerAuth';
+import { SHARED_WALK_LOCKED_MESSAGE } from '@/lib/sharedWalk';
 
 // Database Connection
 const pool = getPool();
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
                 b.status,
                 b.price_pounds,
                 b.google_event_id,
+                b.shared_walk_id,
                 o.owner_name,
                 o.phone,
                 o.email,
@@ -101,7 +103,7 @@ export async function POST(request: NextRequest) {
             LEFT JOIN hunters_hounds.dogs d2 ON b.dog_id_2 = d2.id
             WHERE b.id = $1 AND b.status = 'confirmed' AND b.owner_id = $2
             GROUP BY b.id, b.service_type, b.booking_type, b.start_time, b.end_time, b.duration_minutes,
-                     b.status, b.price_pounds, b.google_event_id, o.owner_name, o.phone, o.email, o.address;
+                     b.status, b.price_pounds, b.google_event_id, b.shared_walk_id, o.owner_name, o.phone, o.email, o.address;
         `;
 
         const bookingResult = await client.query(bookingQuery, [data.booking_id, auth.ownerId]);
@@ -115,6 +117,13 @@ export async function POST(request: NextRequest) {
         }
 
         const booking = bookingResult.rows[0];
+
+        // One half of a shared walk cannot move on its own: the other household
+        // would be left at the old time. Ernesto moves both.
+        if (booking.shared_walk_id) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({ error: SHARED_WALK_LOCKED_MESSAGE }, { status: 409 });
+        }
 
         // Resolve effective service type (may be changing)
         const newServiceType = data.new_service_type || booking.service_type;

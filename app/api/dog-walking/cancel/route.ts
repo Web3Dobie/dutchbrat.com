@@ -36,6 +36,7 @@ interface BookingRow {
     series_index: number | null;
     booking_type: string | null;
     price_pounds: string | null;
+    shared_walk_id: number | null;
     owner_name: string;
     phone: string;
     email: string;
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
             const selectByTokenQuery = `
                 SELECT
                     b.id, b.google_event_id, b.start_time, b.end_time, b.service_type,
-                    b.series_id, b.series_index, b.booking_type, b.price_pounds,
+                    b.series_id, b.series_index, b.booking_type, b.price_pounds, b.shared_walk_id,
                     o.owner_name, o.phone, o.email,
                     d1.dog_name AS dog_name_1, d2.dog_name AS dog_name_2
                 FROM hunters_hounds.bookings b
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
             const selectByIdQuery = `
                 SELECT
                     b.id, b.google_event_id, b.start_time, b.end_time, b.service_type,
-                    b.series_id, b.series_index, b.booking_type, b.price_pounds,
+                    b.series_id, b.series_index, b.booking_type, b.price_pounds, b.shared_walk_id,
                     o.owner_name, o.phone, o.email,
                     d1.dog_name AS dog_name_1, d2.dog_name AS dog_name_2
                 FROM hunters_hounds.bookings b
@@ -230,6 +231,22 @@ export async function POST(request: NextRequest) {
         }
 
         // --- 5. Send Telegram Notification ---
+        // If this was half of a shared walk, the other household is still booked.
+        let sharedPartner: { id: number; owner_name: string; dogs: string; price_pounds: string | null } | null = null;
+        if (booking.shared_walk_id) {
+            const partnerResult = await client.query(
+                `SELECT pb.id, po.owner_name, pb.price_pounds,
+                        concat_ws(' & ', pd1.dog_name, pd2.dog_name) AS dogs
+                   FROM hunters_hounds.bookings pb
+                   JOIN hunters_hounds.owners po ON po.id = pb.owner_id
+                   JOIN hunters_hounds.dogs pd1 ON pd1.id = pb.dog_id_1
+                   LEFT JOIN hunters_hounds.dogs pd2 ON pd2.id = pb.dog_id_2
+                  WHERE pb.shared_walk_id = $1 AND pb.id <> $2 AND pb.status = 'confirmed'
+                  LIMIT 1`,
+                [booking.shared_walk_id, booking.id]
+            );
+            sharedPartner = partnerResult.rows[0] ?? null;
+        }
         const telegramMessage = `
             ❌ <b>BOOKING CANCELLED</b> ❌
 
@@ -244,7 +261,9 @@ export async function POST(request: NextRequest) {
                     ? `<b>\u26a0\ufe0f Inside notice period but UNPRICED</b> \u2014 no fee charged (${feeResult.daysUntilStart}d notice)`
                     : ''}
 
-            <i>Slot is now free for re-booking.</i>
+            ${sharedPartner
+                ? `<b>\u26a0\ufe0f This was a SHARED WALK.</b> ${sharedPartner.dogs} (${sharedPartner.owner_name}, booking #${sharedPartner.id}) is still booked at this time for \u00a3${Number(sharedPartner.price_pounds ?? 0).toFixed(2)}. The slot is NOT free, and you may want to tell them or change their price.`
+                : '<i>Slot is now free for re-booking.</i>'}
         `;
         await sendTelegramNotification(telegramMessage);
 

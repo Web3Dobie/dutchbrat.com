@@ -7,6 +7,7 @@ import { sendBookingEmail } from "@/lib/emailService";
 import { getSoloWalkPrice } from "@/lib/pricing";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { getPool } from '@/lib/database';
+
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
 
 const pool = getPool();
@@ -55,6 +56,7 @@ export async function PUT(
                 b.status,
                 b.price_pounds,
                 b.google_event_id,
+                b.shared_walk_id,
                 b.dog_id_1 as current_dog_id_1,
                 b.dog_id_2 as current_dog_id_2,
                 o.owner_name,
@@ -77,6 +79,16 @@ export async function PUT(
         }
 
         const booking = bookingResult.rows[0];
+
+        // A shared walk is one dog per household at an agreed price; this route
+        // would reprice it as a solo walk.
+        if (booking.shared_walk_id) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+                { error: "This is a shared walk (one dog from each client). Cancel it and book a normal walk if the dogs need to change." },
+                { status: 409 }
+            );
+        }
 
         // Validate dogs belong to this owner
         const dogsToValidate = [data.dog_id_1];

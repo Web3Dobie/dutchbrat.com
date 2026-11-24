@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { getPool } from '@/lib/database';
+import { sharedWithSql } from '@/lib/sharedWalk';
 
 // Database Connection
 const pool = getPool();
@@ -33,6 +34,8 @@ export async function GET(request: NextRequest) {
                     b.dog_id_1,
                     b.dog_id_2,
                     b.secondary_address_id,
+                    b.shared_walk_id,
+                    ${sharedWithSql('b')} AS shared_with,
                     bs.recurrence_pattern,
                     o.owner_name,
                     o.phone,

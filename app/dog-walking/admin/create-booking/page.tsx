@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { format, addMinutes, isPast } from "date-fns";
-import { getSoloWalkPrice, getQuickWalkPrice } from "@/lib/pricing";
+import { getSoloWalkPrice, getQuickWalkPrice, getPooledWalkPrice } from "@/lib/pricing";
 import { formatDogAge } from "@/lib/dogAge";
 
 // Updated service options with both solo walk durations
@@ -11,6 +11,9 @@ const SERVICE_OPTIONS = [
     { id: "Quick Walk (30 min)", name: "Quick Walk (30 min)", duration: 30, type: "quick_walk" },
     { id: "Solo Walk (60 min)", name: "Solo Walk (1 hour)", duration: 60, type: "solo_walk" },
     { id: "Solo Walk (120 min)", name: "Solo Walk (2 hours)", duration: 120, type: "solo_walk" },
+    // Two dogs from two homes on one walk. Booked through its own endpoint.
+    { id: "Shared Walk (60 min)", name: "Shared Walk (1 hour) - two clients", duration: 60, type: "shared_walk" },
+    { id: "Shared Walk (120 min)", name: "Shared Walk (2 hours) - two clients", duration: 120, type: "shared_walk" },
     { id: "Dog Sitting (Variable)", name: "Dog Sitting (Variable, POA)", duration: null, type: "variable" },
 ];
 
@@ -74,6 +77,12 @@ export default function AdminCreateBooking() {
     const [endDate, setEndDate] = useState("");
     const [endTime, setEndTime] = useState("");
 
+    // Shared walk: the second household, and what each household pays.
+    const [partnerClientId, setPartnerClientId] = useState<number>(0);
+    const [partnerDogId, setPartnerDogId] = useState<number>(0);
+    const [priceFirst, setPriceFirst] = useState("");
+    const [priceSecond, setPriceSecond] = useState("");
+
     const [isLoading, setIsLoading] = useState(false);
     const [loadingClients, setLoadingClients] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -115,6 +124,30 @@ export default function AdminCreateBooking() {
         }
         return new Date();
     };
+
+    const selectedService = SERVICE_OPTIONS.find(s => s.id === bookingData.service_type);
+    const isShared = selectedService?.type === "shared_walk";
+    const partnerClient = clients.find(c => c.id === partnerClientId) || null;
+    const firstDog = customer?.dogs.find(d => d.id === selectedDogs[0]) || null;
+    const partnerDog = partnerClient?.dogs.find(d => d.id === partnerDogId) || null;
+
+    // The rate card's shared price for that date, or the solo price where the
+    // card has none (nothing before 1 Jan 2027 does). Only a starting point:
+    // both boxes are there to be changed.
+    const sharedDuration = isShared ? selectedService!.duration! : null;
+    const defaultSharedPrice = sharedDuration
+        ? (getPooledWalkPrice(sharedDuration, priceDate()) ?? getSoloWalkPrice(sharedDuration, 1, priceDate()))
+        : null;
+    const sharedPriceIsFromCard = sharedDuration
+        ? getPooledWalkPrice(sharedDuration, priceDate()) !== null
+        : false;
+
+    useEffect(() => {
+        if (defaultSharedPrice !== null) {
+            setPriceFirst(defaultSharedPrice.toFixed(2));
+            setPriceSecond(defaultSharedPrice.toFixed(2));
+        }
+    }, [defaultSharedPrice]);
 
     // Calculate pricing display for solo walks
     const getSoloWalkPriceDisplay = (duration: number, dogCount: number) => {
@@ -212,6 +245,11 @@ export default function AdminCreateBooking() {
             return;
         }
 
+        if (isShared) {
+            await submitSharedWalk();
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
 
@@ -270,6 +308,72 @@ export default function AdminCreateBooking() {
 
         } catch (err: any) {
             setError(err.message || "Failed to create booking");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const resetForm = () => {
+        setCustomer(null);
+        setSelectedClientId(null);
+        setSelectedDogs([]);
+        setBookingDate("");
+        setBookingTime("");
+        setEndDate("");
+        setEndTime("");
+        setPartnerClientId(0);
+        setPartnerDogId(0);
+        setBookingData({
+            service_type: "Meet & Greet - for new clients",
+            duration_minutes: 30,
+            create_calendar_event: true,
+            send_email: false,
+        });
+    };
+
+    const submitSharedWalk = async () => {
+        if (!customer) return;
+        if (selectedDogs.length !== 1) {
+            setError("A shared walk takes one dog from each client. Select just one dog for the first client.");
+            return;
+        }
+        if (!partnerClient || !partnerDogId) {
+            setError("Choose the second client and their dog.");
+            return;
+        }
+        const first = Number(priceFirst);
+        const second = Number(priceSecond);
+        if (priceFirst.trim() === "" || priceSecond.trim() === "" || !(first >= 0) || !(second >= 0)) {
+            setError("Enter a price for each client (0 for a free walk).");
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const response = await fetch("/api/dog-walking/admin/shared-walk", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    first: { owner_id: customer.owner_id, dog_id: selectedDogs[0], price: first },
+                    second: { owner_id: partnerClient.id, dog_id: partnerDogId, price: second },
+                    start_time: new Date(`${bookingDate}T${bookingTime}`).toISOString(),
+                    duration_minutes: sharedDuration,
+                    notes: bookingData.notes,
+                    create_calendar_event: bookingData.create_calendar_event,
+                    send_email: bookingData.send_email,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || "Failed to book the shared walk");
+            }
+            setSuccess(result);
+            resetForm();
+        } catch (err: any) {
+            setError(err.message || "Failed to book the shared walk");
         } finally {
             setIsLoading(false);
         }
@@ -384,7 +488,22 @@ export default function AdminCreateBooking() {
             {error && <div style={styles.error}>{error}</div>}
             {success && (
                 <div style={styles.success}>
-                    Booking created successfully! ID: {success.booking_id}
+                    {success.shared_walk_id ? (
+                        <>
+                            <strong>Shared walk booked.</strong>
+                            {success.bookings.map((b: any) => (
+                                <div key={b.booking_id}>
+                                    {b.dog_name} ({b.owner_name}) - £{Number(b.price).toFixed(2)} - booking #{b.booking_id}
+                                    {b.converted_existing_booking ? " (their existing walk, now shared)" : " (new booking)"}
+                                </div>
+                            ))}
+                            {(success.warnings || []).map((w: string) => (
+                                <div key={w} style={{ color: "#fbbf24" }}>Note: {w}</div>
+                            ))}
+                        </>
+                    ) : (
+                        <>Booking created successfully! ID: {success.booking_id}</>
+                    )}
                 </div>
             )}
 
@@ -507,6 +626,91 @@ export default function AdminCreateBooking() {
                             </div>
                         </div>
 
+                        {/* Shared walk: the second household and both prices */}
+                        {isShared && (
+                            <div style={{ ...styles.section, backgroundColor: "#111827" }}>
+                                <h3 style={{ color: "#d1d5db", marginBottom: "12px" }}>Second client</h3>
+                                <select
+                                    value={partnerClientId}
+                                    onChange={(e) => {
+                                        const id = parseInt(e.target.value);
+                                        setPartnerClientId(id);
+                                        const c = clients.find(x => x.id === id);
+                                        setPartnerDogId(c?.dogs?.[0]?.id || 0);
+                                    }}
+                                    style={styles.select}
+                                >
+                                    <option value={0}>Select the second client...</option>
+                                    {clients
+                                        .filter(c => c.id !== customer?.owner_id && (c.dogs?.length || 0) > 0)
+                                        .map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.owner_name} - {c.dogs.map(d => d.dog_name).join(", ")}
+                                            </option>
+                                        ))}
+                                </select>
+
+                                {partnerClient && (
+                                    <div style={{ display: "flex", flexWrap: "wrap", marginBottom: "12px" }}>
+                                        {partnerClient.dogs.map((dog) => (
+                                            <div
+                                                key={dog.id}
+                                                onClick={() => setPartnerDogId(dog.id)}
+                                                style={{
+                                                    ...styles.dogCard,
+                                                    ...(partnerDogId === dog.id ? styles.dogCardSelected : {})
+                                                }}
+                                            >
+                                                <strong>{dog.dog_name}</strong><br />
+                                                <small>{dog.dog_breed}</small>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                                    <div>
+                                        <label style={styles.label}>
+                                            {customer?.owner_name}{firstDog ? ` (${firstDog.dog_name})` : ""} pays £
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.50"
+                                            value={priceFirst}
+                                            onChange={(e) => setPriceFirst(e.target.value)}
+                                            style={styles.input}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={styles.label}>
+                                            {partnerClient ? partnerClient.owner_name : "Second client"}{partnerDog ? ` (${partnerDog.dog_name})` : ""} pays £
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.50"
+                                            value={priceSecond}
+                                            onChange={(e) => setPriceSecond(e.target.value)}
+                                            style={styles.input}
+                                        />
+                                    </div>
+                                </div>
+                                <p style={{ color: "#9ca3af", fontSize: "14px", margin: 0 }}>
+                                    {sharedPriceIsFromCard
+                                        ? "Filled in from the rate card's shared-walk price for that date. Change either if you have agreed something else."
+                                        : "The rate card has no shared-walk price for that date, so the solo price is filled in. Change both to what you have agreed."}
+                                    {" "}If either client already has a walk booked at exactly this time, that booking becomes
+                                    their half of the shared walk and takes the price entered here. No second booking is made for them.
+                                </p>
+                                {selectedDogs.length > 1 && (
+                                    <p style={{ color: "#fbbf24", fontSize: "14px" }}>
+                                        A shared walk takes one dog from each client. Select just one dog above.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {/* Multi-day end time for dog sitting */}
                         {bookingData.service_type === "Dog Sitting (Variable)" && (
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -571,7 +775,7 @@ export default function AdminCreateBooking() {
                             disabled={isLoading}
                             style={styles.button}
                         >
-                            {isLoading ? "Creating..." : "Create Booking"}
+                            {isLoading ? "Creating..." : isShared ? "Book Shared Walk" : "Create Booking"}
                         </button>
                         <button
                             type="button"
