@@ -30,6 +30,8 @@ interface Customer {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Featured in public videos / profile page. null = never answered.
+    public_feature_consent?: boolean | null;
 }
 
 interface AccountDetailsProps {
@@ -51,8 +53,12 @@ interface AccountFormData {
     // Vet & Insurance details
     vet_info: string;
     pet_insurance: string;
-    // Whether their dog's photos may be used publicly
-    photo_sharing_consent: boolean;
+    // Whether their dog's photos may be used publicly. null = this session
+    // was not told the saved answer, so nothing is shown as chosen and nothing
+    // is sent on save.
+    photo_sharing_consent: boolean | null;
+    // Whether their dog may be featured. null = never answered.
+    public_feature_consent: boolean | null;
 }
 
 export default function AccountDetails({ customer, onCustomerUpdated, onBack }: AccountDetailsProps) {
@@ -67,7 +73,8 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
         partner_phone: customer.partner_phone || '',
         vet_info: customer.vet_info || '',
         pet_insurance: customer.pet_insurance || '',
-        photo_sharing_consent: customer.photo_sharing_consent === true,
+        photo_sharing_consent: typeof customer.photo_sharing_consent === 'boolean' ? customer.photo_sharing_consent : null,
+        public_feature_consent: typeof customer.public_feature_consent === 'boolean' ? customer.public_feature_consent : null,
     });
 
     const [isLoading, setIsLoading] = useState(false);
@@ -286,6 +293,16 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
             updateData.vet_info = formData.vet_info;
             updateData.pet_insurance = formData.pet_insurance;
             updateData.photo_sharing_consent = formData.photo_sharing_consent;
+            updateData.public_feature_consent = formData.public_feature_consent;
+
+            // An unanswered consent question is left out altogether, so saving
+            // a new phone number can never record an answer nobody gave.
+            const { photo_sharing_consent, public_feature_consent, ...rest } = updateData;
+            const payload = {
+                ...rest,
+                ...(photo_sharing_consent !== null ? { photo_sharing_consent } : {}),
+                ...(public_feature_consent !== null ? { public_feature_consent } : {}),
+            };
 
             const response = await customerFetch(`/api/dog-walking/customer-update`, {
                 method: "PUT",
@@ -296,7 +313,7 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                     owner_id: customer.owner_id,
                     verification_email: customer.email, // Use original email for verification
                     verification_phone: customer.phone, // Or phone if they logged in that way
-                    ...updateData,
+                    ...payload,
                 }),
             });
 
@@ -318,7 +335,8 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                 partner_phone: hasPartner ? formData.partner_phone || null : null,
                 vet_info: formData.vet_info || null,
                 pet_insurance: formData.pet_insurance || null,
-                photo_sharing_consent: formData.photo_sharing_consent,
+                photo_sharing_consent: formData.photo_sharing_consent ?? undefined,
+                public_feature_consent: formData.public_feature_consent,
             };
 
             setSuccessMessage("Account details updated successfully!");
@@ -749,7 +767,88 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                                     name="photo_sharing_consent"
                                     checked={selected}
                                     onChange={() =>
-                                        setFormData((prev) => ({ ...prev, photo_sharing_consent: option.value }))
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            photo_sharing_consent: option.value,
+                                            // No photos means no videos either.
+                                            public_feature_consent:
+                                                option.value === false && prev.public_feature_consent === true
+                                                    ? false
+                                                    : prev.public_feature_consent,
+                                        }))
+                                    }
+                                    style={{ marginTop: "4px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
+                                />
+                                <span style={{ fontSize: "1.25rem", lineHeight: 1.2 }}>{option.icon}</span>
+                                <div>
+                                    <div style={{ color: selected ? option.accent : "#d1d5db", fontWeight: 600, marginBottom: "4px" }}>
+                                        {option.title}
+                                    </div>
+                                    <div style={{ color: "#6b7280", fontSize: "0.875rem" }}>{option.detail}</div>
+                                </div>
+                            </label>
+                        );
+                    })}
+
+                    {/* Featuring: public videos and a profile page.
+
+                        A separate question from photos on purpose. Agreeing to
+                        a photo on the website is not agreeing to a video where
+                        the dog is given a voice. Starts with neither option
+                        chosen, and nothing is saved until one is. */}
+                    <h3 style={{ ...styles.sectionHeader, marginTop: "28px" }}>Videos &amp; Pack Profile</h3>
+                    <p style={{ color: "#9ca3af", fontSize: "0.9rem", marginBottom: "16px", lineHeight: 1.5 }}>
+                        We are starting short, light-hearted videos for social media in which the
+                        day&apos;s dogs &ldquo;talk&rdquo; about their walk &mdash; a photo of your dog,
+                        animated, with a computer-made voice. Featured dogs also get their own page
+                        on our website. Only your dog&apos;s first name and photos are used, never
+                        your name or address. May your dog take part? You can change your mind
+                        whenever you like.
+                    </p>
+
+                    {([
+                        {
+                            value: true,
+                            icon: "\ud83c\udfac",
+                            title: "Yes, my dog can star",
+                            detail: "Your dog may appear in our public videos and have a profile page. This also allows photo sharing above.",
+                            accent: "#10b981",
+                        },
+                        {
+                            value: false,
+                            icon: "\u274c",
+                            title: "No, please leave my dog out",
+                            detail: "Your dog will not appear in the videos or have a profile page.",
+                            accent: "#9ca3af",
+                        },
+                    ] as const).map((option) => {
+                        const selected = formData.public_feature_consent === option.value;
+                        return (
+                            <label
+                                key={"feature-" + String(option.value)}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "12px",
+                                    padding: "16px",
+                                    marginBottom: "10px",
+                                    backgroundColor: selected ? "#111827" : "#1f2937",
+                                    borderRadius: "6px",
+                                    border: "2px solid " + (selected ? option.accent : "#4b5563"),
+                                    cursor: "pointer",
+                                }}
+                            >
+                                <input
+                                    type="radio"
+                                    name="public_feature_consent"
+                                    checked={selected}
+                                    onChange={() =>
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            public_feature_consent: option.value,
+                                            // Saying yes to videos is saying yes to photos.
+                                            photo_sharing_consent: option.value === true ? true : prev.photo_sharing_consent,
+                                        }))
                                     }
                                     style={{ marginTop: "4px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
                                 />

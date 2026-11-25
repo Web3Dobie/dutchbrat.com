@@ -25,6 +25,8 @@ interface Client {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Featured in public videos / profile page. Set by the client only.
+    public_feature_consent?: boolean | null;
     // Extended travel time (30 min instead of 15 min)
     extended_travel_time?: boolean;
     // Payment preference
@@ -526,6 +528,34 @@ export default function ClientEditor({ client, onSave, onCancel }: ClientEditorP
                                 {formData.photo_sharing_consent ? "✅ Allowed" : "❌ Not allowed"}
                             </span>
                         </label>
+
+                        {/* Read-only on purpose: this answer is only ever the
+                            client's own, given in their dashboard. */}
+                        <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                            padding: "12px",
+                            marginTop: "10px",
+                            backgroundColor: "#1f2937",
+                            border: "1px solid #4b5563",
+                            borderRadius: "6px"
+                        }}>
+                            <span style={{ color: "#d1d5db" }}>
+                                Videos &amp; pack profile (client sets this in their dashboard)
+                            </span>
+                            <span style={{
+                                marginLeft: "auto",
+                                fontSize: "14px",
+                                color: client.public_feature_consent === true ? "#10b981" : "#9ca3af"
+                            }}>
+                                {client.public_feature_consent === true
+                                    ? "✅ Yes"
+                                    : client.public_feature_consent === false
+                                        ? "❌ No"
+                                        : "— Not answered yet"}
+                            </span>
+                        </div>
                     </div>
 
                     {/* Extended Travel Time Section */}

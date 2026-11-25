@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getPool } from '@/lib/database';
 import { requireOwner } from '@/lib/customerAuth';
+import { sendTelegramNotification } from '@/lib/telegram';
 
 // Database Connection
 const pool = getPool();
@@ -28,6 +29,12 @@ interface UpdateCustomerRequest {
      * ask permission to withdraw, so it is now theirs to set.
      */
     photo_sharing_consent?: boolean;
+    /**
+     * Whether their dog may be featured: public videos (including AI-voiced
+     * ones) and a profile page. Only the client sets this; there is no admin
+     * path, so a stored answer is always the client's own.
+     */
+    public_feature_consent?: boolean;
 }
 
 export async function PUT(request: NextRequest) {
@@ -99,7 +106,7 @@ export async function PUT(request: NextRequest) {
         const allowedFields = [
             'owner_name', 'phone', 'email', 'address',
             'partner_name', 'partner_email', 'partner_phone',
-            'vet_info', 'pet_insurance', 'photo_sharing_consent'
+            'vet_info', 'pet_insurance', 'photo_sharing_consent', 'public_feature_consent'
         ];
 
         for (const field of allowedFields) {
@@ -117,6 +124,9 @@ export async function PUT(request: NextRequest) {
                     // setting turns one of those into a real answer.
                     updates.push(`photo_consent_source = 'client'`);
                     updates.push(`photo_consent_recorded_at = NOW()`);
+                } else if (field === 'public_feature_consent') {
+                    values.push(value === true || value === 'true');
+                    updates.push(`public_feature_consent_recorded_at = NOW()`);
                 } else {
                     // Trim string values, allow empty strings to clear fields
                     values.push(typeof value === 'string' ? value.trim() : value);
@@ -142,10 +152,45 @@ export async function PUT(request: NextRequest) {
             UPDATE hunters_hounds.owners
             SET ${updates.join(', ')}
             WHERE id = $${paramIndex}
-            RETURNING id, owner_name, phone, email, address, partner_name, partner_email, partner_phone, vet_info, pet_insurance, photo_sharing_consent
+            RETURNING id, owner_name, phone, email, address, partner_name, partner_email, partner_phone, vet_info, pet_insurance, photo_sharing_consent, public_feature_consent
         `;
 
+        const before = await client.query(
+            `SELECT public_feature_consent FROM hunters_hounds.owners WHERE id = $1`,
+            [owner_id]
+        );
+
         const updateResult = await client.query(updateQuery, values);
+
+        // Being featured needs photos to be allowed. Whatever the caller sent,
+        // "no photos" always wins over "yes, feature my dog".
+        const featured = await client.query(
+            `UPDATE hunters_hounds.owners
+                SET public_feature_consent = false,
+                    public_feature_consent_recorded_at = NOW()
+              WHERE id = $1 AND photo_sharing_consent = false AND public_feature_consent = true`,
+            [owner_id]
+        );
+        if (updateResult.rows[0] && featured.rowCount) {
+            updateResult.rows[0].public_feature_consent = false;
+        }
+
+        // Tell Ernesto when the answer changes, so he knows which dogs he may
+        // film without checking each account.
+        const was = before.rows[0]?.public_feature_consent ?? null;
+        const now = updateResult.rows[0]?.public_feature_consent ?? null;
+        if (updateResult.rows[0] && was !== now) {
+            try {
+                await sendTelegramNotification(
+                    `🎬 <b>Featuring consent ${now ? 'given' : 'declined'}</b>\n\n` +
+                    `<b>Client:</b> ${updateResult.rows[0].owner_name}\n` +
+                    `<b>Videos and profile page:</b> ${now ? '✅ Yes' : '❌ No'}` +
+                    (was === null ? '' : `\n<i>Previously: ${was ? 'yes' : 'no'}</i>`)
+                );
+            } catch (telegramError) {
+                console.error('[Customer Update] Telegram notification failed:', telegramError);
+            }
+        }
 
         if (updateResult.rows.length === 0) {
             return NextResponse.json(

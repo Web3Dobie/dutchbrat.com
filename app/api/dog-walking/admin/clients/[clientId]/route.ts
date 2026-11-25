@@ -104,6 +104,8 @@ export async function GET(
                 o.vet_info,
                 o.pet_insurance,
                 o.photo_sharing_consent,
+                o.public_feature_consent,
+                o.public_feature_consent_recorded_at,
                 o.extended_travel_time,
                 o.payment_preference,
                 o.payment_account_names,
@@ -128,7 +130,7 @@ export async function GET(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference, o.payment_account_names
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.public_feature_consent, o.public_feature_consent_recorded_at, o.extended_travel_time, o.payment_preference, o.payment_account_names
         `;
 
         const result = await client.query(query, [clientId]);
@@ -378,6 +380,8 @@ export async function PUT(
                 o.vet_info,
                 o.pet_insurance,
                 o.photo_sharing_consent,
+                o.public_feature_consent,
+                o.public_feature_consent_recorded_at,
                 o.extended_travel_time,
                 o.payment_preference,
                 o.payment_account_names,
@@ -402,7 +406,7 @@ export async function PUT(
             FROM hunters_hounds.owners o
             LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
             WHERE o.id = $1
-            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.extended_travel_time, o.payment_preference, o.payment_account_names
+            GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.created_at, o.partner_name, o.partner_email, o.partner_phone, o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.public_feature_consent, o.public_feature_consent_recorded_at, o.extended_travel_time, o.payment_preference, o.payment_account_names
         `;
 
         const result = await client.query(updatedQuery, [clientId]);

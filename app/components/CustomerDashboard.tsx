@@ -33,6 +33,8 @@ interface Customer {
     pet_insurance?: string | null;
     // Photo sharing consent
     photo_sharing_consent?: boolean;
+    // Featured in public videos / profile page. null = never answered.
+    public_feature_consent?: boolean | null;
 }
 
 type DashboardView = "auth" | "main" | "booking" | "account" | "addresses" | "media";

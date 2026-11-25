@@ -36,6 +36,13 @@ const CUSTOMER_QUERY = `
         o.partner_email,
         o.partner_phone,
         o.payment_preference,
+        -- The account form edits these four. They were missing from this
+        -- query, so the form opened with photo consent showing "No" and the
+        -- vet and insurance boxes empty, and saving wrote that back.
+        o.vet_info,
+        o.pet_insurance,
+        o.photo_sharing_consent,
+        o.public_feature_consent,
         -- A meet & greet is a one-off for new clients. A cancelled one
         -- doesn't count, so they can rebook it.
         EXISTS (
@@ -61,7 +68,8 @@ const CUSTOMER_QUERY = `
     FROM hunters_hounds.owners o
     LEFT JOIN hunters_hounds.dogs d ON o.id = d.owner_id
     WHERE o.id = $1
-    GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.partner_name, o.partner_email, o.partner_phone, o.payment_preference;
+    GROUP BY o.id, o.owner_name, o.phone, o.email, o.address, o.partner_name, o.partner_email, o.partner_phone, o.payment_preference,
+             o.vet_info, o.pet_insurance, o.photo_sharing_consent, o.public_feature_consent;
 `;
 
 interface PgClient {
