@@ -141,6 +141,23 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
         },
     },
     {
+        name: 'Islington Menorah Lighting',
+        date: 'Sunday 6 December 2026',
+        time: '16:00 – 18:00 · free entry',
+        location: 'Islington Green, Upper Street, N1 8DU',
+        description:
+            'Chanukah on the Green: a public menorah lighting with klezmer music, dreidels and doughnuts, run by Chabad Islington and supported by Islington Council. It is not a dog event as such, but it is out in the open on Islington Green, so a calm dog on a lead can come along with you. Expect darkness, a crowd and live music — one for dogs who are settled around all three.',
+        linkLabel: 'Jewish Islington',
+        href: 'https://www.jewishislington.co.uk/',
+        schema: {
+            start: '2026-12-06T16:00:00+00:00',
+            end: '2026-12-06T18:00:00+00:00',
+            venue: 'Islington Green',
+            address: 'Upper Street, London N1 8DU',
+            free: true,
+        },
+    },
+    {
         name: 'Christmas Charity Pack Walk',
         date: 'Saturday 12 December 2026',
         time: '11:00 – 15:00 · £20 per person',
