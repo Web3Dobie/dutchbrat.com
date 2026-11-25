@@ -790,78 +790,11 @@ export default function AccountDetails({ customer, onCustomerUpdated, onBack }: 
                         );
                     })}
 
-                    {/* Featuring: public videos and a profile page.
-
-                        A separate question from photos on purpose. Agreeing to
-                        a photo on the website is not agreeing to a video where
-                        the dog is given a voice. Starts with neither option
-                        chosen, and nothing is saved until one is. */}
-                    <h3 style={{ ...styles.sectionHeader, marginTop: "28px" }}>Videos &amp; Pack Profile</h3>
-                    <p style={{ color: "#9ca3af", fontSize: "0.9rem", marginBottom: "16px", lineHeight: 1.5 }}>
-                        We are starting short, light-hearted videos for social media in which the
-                        day&apos;s dogs &ldquo;talk&rdquo; about their walk &mdash; a photo of your dog,
-                        animated, with a computer-made voice. Featured dogs also get their own page
-                        on our website. Only your dog&apos;s first name and photos are used, never
-                        your name or address. May your dog take part? You can change your mind
-                        whenever you like.
-                    </p>
-
-                    {([
-                        {
-                            value: true,
-                            icon: "\ud83c\udfac",
-                            title: "Yes, my dog can star",
-                            detail: "Your dog may appear in our public videos and have a profile page. This also allows photo sharing above.",
-                            accent: "#10b981",
-                        },
-                        {
-                            value: false,
-                            icon: "\u274c",
-                            title: "No, please leave my dog out",
-                            detail: "Your dog will not appear in the videos or have a profile page.",
-                            accent: "#9ca3af",
-                        },
-                    ] as const).map((option) => {
-                        const selected = formData.public_feature_consent === option.value;
-                        return (
-                            <label
-                                key={"feature-" + String(option.value)}
-                                style={{
-                                    display: "flex",
-                                    alignItems: "flex-start",
-                                    gap: "12px",
-                                    padding: "16px",
-                                    marginBottom: "10px",
-                                    backgroundColor: selected ? "#111827" : "#1f2937",
-                                    borderRadius: "6px",
-                                    border: "2px solid " + (selected ? option.accent : "#4b5563"),
-                                    cursor: "pointer",
-                                }}
-                            >
-                                <input
-                                    type="radio"
-                                    name="public_feature_consent"
-                                    checked={selected}
-                                    onChange={() =>
-                                        setFormData((prev) => ({
-                                            ...prev,
-                                            public_feature_consent: option.value,
-                                            // Saying yes to videos is saying yes to photos.
-                                            photo_sharing_consent: option.value === true ? true : prev.photo_sharing_consent,
-                                        }))
-                                    }
-                                    style={{ marginTop: "4px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
-                                />
-                                <span style={{ fontSize: "1.25rem", lineHeight: 1.2 }}>{option.icon}</span>
-                                <div>
-                                    <div style={{ color: selected ? option.accent : "#d1d5db", fontWeight: 600, marginBottom: "4px" }}>
-                                        {option.title}
-                                    </div>
-                                    <div style={{ color: "#6b7280", fontSize: "0.875rem" }}>{option.detail}</div>
-                                </div>
-                            </label>
-                        );
-                    })}
+                    {/* A second question, about featuring the dog in public
+                        videos and a profile page, was added and taken out again
+                        on 2026-11-25 while the format is still undecided. The
+                        public_feature_consent column and the save path remain;
+                        only the question is gone. */}
                 </div>
 
                 {/* Action Buttons */}
