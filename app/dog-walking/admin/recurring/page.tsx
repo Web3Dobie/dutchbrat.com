@@ -501,7 +501,9 @@ export default function AdminRecurringPage() {
             const r = await fetch(`/api/dog-walking/recurring/${row.id}/cancel`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ reason: "Cancelled by admin" }),
+                // cancel_type is required by the endpoint; without it every
+                // cancel from this page was refused.
+                body: JSON.stringify({ cancel_type: "series", reason: "Cancelled by admin" }),
             });
             const j = await r.json();
             if (!r.ok) {
