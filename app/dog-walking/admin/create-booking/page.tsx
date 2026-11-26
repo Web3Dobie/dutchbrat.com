@@ -82,6 +82,9 @@ export default function AdminCreateBooking() {
     const [partnerDogId, setPartnerDogId] = useState<number>(0);
     const [priceFirst, setPriceFirst] = useState("");
     const [priceSecond, setPriceSecond] = useState("");
+    // The second dog's walk can be a different length (0 = same as the first).
+    const [partnerMinutes, setPartnerMinutes] = useState<number>(0);
+    const [sharedAlign, setSharedAlign] = useState<"start" | "end">("start");
 
     const [isLoading, setIsLoading] = useState(false);
     const [loadingClients, setLoadingClients] = useState(true);
@@ -135,19 +138,23 @@ export default function AdminCreateBooking() {
     // card has none (nothing before 1 Jan 2027 does). Only a starting point:
     // both boxes are there to be changed.
     const sharedDuration = isShared ? selectedService!.duration! : null;
-    const defaultSharedPrice = sharedDuration
-        ? (getPooledWalkPrice(sharedDuration, priceDate()) ?? getSoloWalkPrice(sharedDuration, 1, priceDate()))
-        : null;
+    const secondDuration = sharedDuration ? (partnerMinutes || sharedDuration) : null;
+    const sharedDefault = (minutes: number | null) =>
+        minutes ? (getPooledWalkPrice(minutes, priceDate()) ?? getSoloWalkPrice(minutes, 1, priceDate())) : null;
+    // "Shared is shared": each client pays the shared price for the length of
+    // their own dog's walk, even when the other dog is only there for part of it.
+    const defaultSharedPrice = sharedDefault(sharedDuration);
+    const defaultSecondPrice = sharedDefault(secondDuration);
     const sharedPriceIsFromCard = sharedDuration
         ? getPooledWalkPrice(sharedDuration, priceDate()) !== null
         : false;
 
     useEffect(() => {
-        if (defaultSharedPrice !== null) {
-            setPriceFirst(defaultSharedPrice.toFixed(2));
-            setPriceSecond(defaultSharedPrice.toFixed(2));
-        }
+        if (defaultSharedPrice !== null) setPriceFirst(defaultSharedPrice.toFixed(2));
     }, [defaultSharedPrice]);
+    useEffect(() => {
+        if (defaultSecondPrice !== null) setPriceSecond(defaultSecondPrice.toFixed(2));
+    }, [defaultSecondPrice]);
 
     // Calculate pricing display for solo walks
     const getSoloWalkPriceDisplay = (duration: number, dogCount: number) => {
@@ -323,6 +330,8 @@ export default function AdminCreateBooking() {
         setEndTime("");
         setPartnerClientId(0);
         setPartnerDogId(0);
+        setPartnerMinutes(0);
+        setSharedAlign("start");
         setBookingData({
             service_type: "Meet & Greet - for new clients",
             duration_minutes: 30,
@@ -361,6 +370,8 @@ export default function AdminCreateBooking() {
                     second: { owner_id: partnerClient.id, dog_id: partnerDogId, price: second },
                     start_time: new Date(`${bookingDate}T${bookingTime}`).toISOString(),
                     duration_minutes: sharedDuration,
+                    second_duration_minutes: secondDuration,
+                    align: sharedAlign,
                     notes: bookingData.notes,
                     create_calendar_event: bookingData.create_calendar_event,
                     send_email: bookingData.send_email,
@@ -668,6 +679,45 @@ export default function AdminCreateBooking() {
                                     </div>
                                 )}
 
+                                <label style={styles.label}>
+                                    Length of {partnerDog ? `${partnerDog.dog_name}'s` : "the second dog's"} walk
+                                </label>
+                                <select
+                                    value={secondDuration ?? 0}
+                                    onChange={(e) => setPartnerMinutes(parseInt(e.target.value))}
+                                    style={styles.select}
+                                >
+                                    <option value={60}>1 hour{sharedDuration === 60 ? " (same as the first dog)" : ""}</option>
+                                    <option value={120}>2 hours{sharedDuration === 120 ? " (same as the first dog)" : ""}</option>
+                                </select>
+                                {secondDuration !== sharedDuration && (
+                                    <div style={{ marginBottom: "12px" }}>
+                                        {([
+                                            ["start", "They set off together"],
+                                            ["end", "They come home together"],
+                                        ] as const).map(([value, label]) => (
+                                            <label key={value} style={{ display: "block", color: "#d1d5db", marginBottom: "6px", cursor: "pointer" }}>
+                                                <input
+                                                    type="radio"
+                                                    name="sharedAlign"
+                                                    checked={sharedAlign === value}
+                                                    onChange={() => setSharedAlign(value)}
+                                                    style={{ marginRight: "8px" }}
+                                                />
+                                                {label}
+                                            </label>
+                                        ))}
+                                        <p style={{ color: "#9ca3af", fontSize: "14px", margin: "6px 0 0" }}>
+                                            The date and time above are for {firstDog ? firstDog.dog_name : "the first dog"}.
+                                            {sharedAlign === "start"
+                                                ? " The second dog starts at the same time."
+                                                : sharedDuration === 60
+                                                    ? " The second dog starts 1 hour earlier, so both finish together."
+                                                    : " The second dog starts 1 hour later, so both finish together."}
+                                        </p>
+                                    </div>
+                                )}
+
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                                     <div>
                                         <label style={styles.label}>
@@ -700,7 +750,7 @@ export default function AdminCreateBooking() {
                                     {sharedPriceIsFromCard
                                         ? "Filled in from the rate card's shared-walk price for that date. Change either if you have agreed something else."
                                         : "The rate card has no shared-walk price for that date, so the solo price is filled in. Change both to what you have agreed."}
-                                    {" "}If either client already has a walk booked at exactly this time, that booking becomes
+                                    {" "}If either client already has a walk booked at exactly their start time, that booking becomes
                                     their half of the shared walk and takes the price entered here. No second booking is made for them.
                                 </p>
                                 {selectedDogs.length > 1 && (

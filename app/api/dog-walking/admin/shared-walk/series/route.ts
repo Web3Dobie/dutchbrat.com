@@ -7,7 +7,10 @@ import { formatDurationForEmail } from "@/lib/emailTemplates";
 import { isAuthenticated, unauthorizedResponse } from "@/lib/auth";
 import { getPool } from "@/lib/database";
 import { getPooledWalkPrice } from "@/lib/pricing";
-import { attachSide, syncSharedWalkCalendar, Refusal, type Half } from "@/lib/sharedWalkBooking";
+import {
+    attachSide, syncSharedWalkCalendar, validDuration, partnerSlot, overlapNote,
+    Refusal, type Align, type Half,
+} from "@/lib/sharedWalkBooking";
 
 // Admin only: turn every upcoming walk of a recurring series into a shared
 // walk with a second household.
@@ -26,6 +29,10 @@ const TIMEZONE = "Europe/London";
 interface SeriesShareRequest {
     series_id: number;
     partner: { owner_id: number; dog_id: number };
+    /** Length of the partner's walks, if different from the series. */
+    partner_duration_minutes?: number;
+    /** With different lengths: do they set off together or come home together? */
+    align?: Align;
     /** Per walk, for the series' own client. Omit to use the rate card's shared price for each date. */
     price_first?: number | null;
     /** Per walk, for the partner. Omit to use the rate card's shared price for each date. */
@@ -58,7 +65,9 @@ export async function POST(request: NextRequest) {
     if (
         !Number.isInteger(data.series_id) ||
         !data.partner || !Number.isInteger(data.partner.owner_id) || !Number.isInteger(data.partner.dog_id) ||
-        !optionalPrice(data.price_first) || !optionalPrice(data.price_second)
+        !optionalPrice(data.price_first) || !optionalPrice(data.price_second) ||
+        (data.partner_duration_minutes !== undefined && !validDuration(data.partner_duration_minutes)) ||
+        (data.align !== undefined && data.align !== "start" && data.align !== "end")
     ) {
         return NextResponse.json({ error: "Choose the series, the second client and their dog." }, { status: 400 });
     }
@@ -70,6 +79,7 @@ export async function POST(request: NextRequest) {
     let partnerSeriesId: number | null = null;
     let createdForPartner = 0;
     let duration = 0;
+    let partnerDuration = 0;
     let sourceSeriesTotal = 0;
     const warnings: string[] = [];
 
@@ -98,6 +108,8 @@ export async function POST(request: NextRequest) {
             throw new Refusal("A shared walk is for two different clients.", 400);
         }
         duration = series.duration_minutes;
+        partnerDuration = data.partner_duration_minutes ?? duration;
+        const align: Align = data.align ?? "start";
         sourceSeriesTotal = series.total_booked;
 
         const upcoming = await client.query(
@@ -115,9 +127,9 @@ export async function POST(request: NextRequest) {
 
         // What each household pays for each walk: the figure given, or the rate
         // card's shared price for that walk's own date.
-        const priceFor = (given: number | null | undefined, start: Date): number => {
+        const priceFor = (given: number | null | undefined, minutes: number, start: Date): number => {
             if (given !== null && given !== undefined) return given;
-            const card = getPooledWalkPrice(duration, start);
+            const card = getPooledWalkPrice(minutes, start);
             if (card === null) {
                 throw new Refusal(
                     `The rate card has no shared-walk price for ${format(new TZDate(start, TIMEZONE), "d MMMM yyyy")}. Enter the price per walk for both clients.`,
@@ -140,10 +152,10 @@ export async function POST(request: NextRequest) {
             [
                 data.partner.owner_id,
                 data.partner.dog_id,
-                duration,
+                partnerDuration,
                 series.recurrence_pattern,
                 series.days_of_week,
-                series.preferred_time,
+                format(new TZDate(partnerSlot(first, duration, partnerDuration, align).start, TIMEZONE), "HH:mm:ss"),
                 londonDay(first),
                 londonDay(last),
                 `Shared walks with series #${series.id} (${series.owner_name})`,
@@ -163,13 +175,14 @@ export async function POST(request: NextRequest) {
 
             const a = await attachSide(
                 client,
-                { owner_id: series.owner_id, dog_id: series.dog_id_1, price: priceFor(data.price_first, start) },
+                { owner_id: series.owner_id, dog_id: series.dog_id_1, price: priceFor(data.price_first, duration, start) },
                 sharedWalkId, start, end, duration, "confirmed"
             );
+            const theirs = partnerSlot(start, duration, partnerDuration, align);
             const b = await attachSide(
                 client,
-                { owner_id: data.partner.owner_id, dog_id: data.partner.dog_id, price: priceFor(data.price_second, start) },
-                sharedWalkId, start, end, duration, "confirmed",
+                { owner_id: data.partner.owner_id, dog_id: data.partner.dog_id, price: priceFor(data.price_second, partnerDuration, theirs.start) },
+                sharedWalkId, theirs.start, theirs.end, partnerDuration, "confirmed",
                 { seriesId: partnerSeriesId, seriesIndex: createdForPartner + 1 }
             );
             if (!b.converted) createdForPartner++;
@@ -204,8 +217,8 @@ export async function POST(request: NextRequest) {
               ORDER BY pb.start_time`,
             [
                 data.partner.owner_id,
-                walks.map((w) => w.start.toISOString()),
-                walks.map((w) => w.end.toISOString()),
+                walks.map((w) => w.halves[1].startTime.toISOString()),
+                walks.map((w) => w.halves[1].endTime.toISOString()),
                 walks.map((w) => w.halves[1].bookingId),
             ]
         );
@@ -234,6 +247,7 @@ export async function POST(request: NextRequest) {
         series_id: data.series_id,
         partner_series_id: dryRun ? null : partnerSeriesId,
         duration_minutes: duration,
+        partner_duration_minutes: partnerDuration,
         first: { owner_name: firstOwner.ownerName, dog_name: firstOwner.dogName, total: total(0) },
         partner: {
             owner_name: partner.ownerName,
@@ -244,6 +258,7 @@ export async function POST(request: NextRequest) {
         },
         walks: walks.map((w) => ({
             start_time: w.start.toISOString(),
+            partner_start_time: w.halves[1].startTime.toISOString(),
             price_first: w.halves[0].price,
             old_price_first: w.halves[0].oldPrice,
             price_partner: w.halves[1].price,
@@ -262,7 +277,7 @@ export async function POST(request: NextRequest) {
     if (partnerSeriesId) seriesTotals[partnerSeriesId] = createdForPartner;
     for (const w of walks) {
         warnings.push(
-            ...(await syncSharedWalkCalendar(w.halves, w.start, w.end, duration, {
+            ...(await syncSharedWalkCalendar(w.halves, {
                 status: "confirmed",
                 isHistorical: false,
                 seriesTotals,
@@ -277,9 +292,9 @@ export async function POST(request: NextRequest) {
             [
                 `🐕🐕 SERIES #${data.series_id} IS NOW SHARED`,
                 "",
-                `🐾 ${firstOwner.dogName} — ${firstOwner.ownerName} — ${walks.length} walks, £${total(0).toFixed(2)}`,
-                `🐾 ${partner.dogName} — ${partner.ownerName} — ${walks.length} walks, £${total(1).toFixed(2)}${partnerSeriesId ? ` (new series #${partnerSeriesId})` : ""}`,
-                `📅 ${dateLine(walks[0].start)} → ${dateLine(walks[walks.length - 1].start)} (${duration}min)`,
+                `🐾 ${firstOwner.dogName} — ${firstOwner.ownerName} — ${walks.length} walks of ${duration}min, £${total(0).toFixed(2)}`,
+                `🐾 ${partner.dogName} — ${partner.ownerName} — ${walks.length} walks of ${partnerDuration}min from ${format(new TZDate(partner.startTime, TIMEZONE), "HH:mm")}, £${total(1).toFixed(2)}${partnerSeriesId ? ` (new series #${partnerSeriesId})` : ""}`,
+                `📅 ${dateLine(walks[0].start)} → ${dateLine(walks[walks.length - 1].start)}`,
                 ...warnings.map((w) => `⚠️ ${w}`),
             ].join("\n")
         );
@@ -298,13 +313,15 @@ export async function POST(request: NextRequest) {
                     const was = h.converted && h.oldPrice !== null && h.oldPrice !== h.price
                         ? ` (was £${h.oldPrice.toFixed(2)})`
                         : "";
-                    return `<li>${format(new TZDate(w.start, TIMEZONE), "EEEE, d MMMM 'at' HH:mm")} — £${h.price.toFixed(2)}${was}</li>`;
+                    return `<li>${format(new TZDate(h.startTime, TIMEZONE), "EEEE, d MMMM 'at' HH:mm")} — £${h.price.toFixed(2)}${was}</li>`;
                 })
                 .join("");
             const html = `
                 <h1>Shared Walks Confirmed</h1>
                 <p>Hi ${me.ownerName},</p>
-                <p>As we discussed, <strong>${me.dogName}</strong> will be walking with <strong>${other.dogName}</strong> on the following ${walks.length} walks (${formatDurationForEmail(duration)} each):</p>
+                <p>As we discussed, <strong>${me.dogName}</strong> will be walking with <strong>${other.dogName}</strong>${
+                    overlapNote(me, other) ? ` ${overlapNote(me, other)}` : ""
+                } on the following ${walks.length} walks (${formatDurationForEmail(me.durationMinutes)} each):</p>
                 <ul>${rows}</ul>
                 <p><strong>Total:</strong> £${total(i).toFixed(2)}</p>
                 <p>A shared walk is two dogs from two homes walking together. If either of you needs to change a time, just message me and I'll arrange it with both households. You can cancel any single walk from your dashboard at any time, with no fee.</p>

@@ -32,6 +32,10 @@ export interface Half {
     price: number;
     googleEventId: string | null;
     cancellationToken: string;
+    /** This household's own slot. The two halves can differ: see partnerSlot. */
+    startTime: Date;
+    endTime: Date;
+    durationMinutes: number;
     ownerName: string;
     phone: string;
     email: string;
@@ -43,6 +47,39 @@ export class Refusal extends Error {
     constructor(message: string, public status = 409) {
         super(message);
     }
+}
+
+export type Align = "start" | "end";
+
+export const validDuration = (d: unknown): d is 60 | 120 => d === 60 || d === 120;
+
+/**
+ * When the second dog walks, given the first dog's slot.
+ *
+ * The two walks may be different lengths (1 hour and 2 hours), but the shorter
+ * one must sit at one end of the longer one: both set off together, or both
+ * come home together. A short walk in the middle of a long one would mean an
+ * extra trip to collect and return a dog, at a shared price that does not
+ * cover it. Equal lengths always share the same slot.
+ */
+export function partnerSlot(
+    firstStart: Date,
+    firstDuration: number,
+    partnerDuration: number,
+    align: Align
+): { start: Date; end: Date } {
+    const MIN = 60_000;
+    const start =
+        align === "end" && partnerDuration !== firstDuration
+            ? new Date(firstStart.getTime() + (firstDuration - partnerDuration) * MIN)
+            : firstStart;
+    return { start, end: new Date(start.getTime() + partnerDuration * MIN) };
+}
+
+/** "for the first hour" / "for the last hour", when `other` is the shorter walk. */
+export function overlapNote(me: Half, other: Half): string {
+    if (other.durationMinutes >= me.durationMinutes) return "";
+    return other.startTime.getTime() === me.startTime.getTime() ? "for the first hour" : "for the last hour";
 }
 
 export const validSide = (s: Side | undefined): s is Side =>
@@ -106,7 +143,7 @@ export async function attachSide(
         }
         if (b.duration_minutes !== durationMinutes) {
             throw new Refusal(
-                `${person.owner_name}'s existing walk at that time is ${b.duration_minutes} minutes, not ${durationMinutes}. Change one of them so they match.`
+                `${person.owner_name}'s existing walk at that time is ${b.duration_minutes} minutes, not ${durationMinutes}. Choose ${b.duration_minutes} minutes for ${person.dog_name}, or change that booking first.`
             );
         }
         // Very old bookings have no cancellation link; give this one a link now.
@@ -127,6 +164,9 @@ export async function attachSide(
             price: side.price,
             googleEventId: b.google_event_id,
             cancellationToken: b.cancellation_token ?? fallbackToken,
+            startTime,
+            endTime,
+            durationMinutes,
             ownerName: person.owner_name,
             phone: person.phone,
             email: person.email,
@@ -166,6 +206,9 @@ export async function attachSide(
         price: side.price,
         googleEventId: null,
         cancellationToken,
+        startTime,
+        endTime,
+        durationMinutes,
         ownerName: person.owner_name,
         phone: person.phone,
         email: person.email,
@@ -181,9 +224,6 @@ export async function attachSide(
  */
 export async function syncSharedWalkCalendar(
     halves: Half[],
-    startTime: Date,
-    endTime: Date,
-    durationMinutes: number,
     opts: { notes?: string; status: string; isHistorical: boolean; seriesTotals?: Record<number, number> }
 ): Promise<string[]> {
     const warnings: string[] = [];
@@ -201,12 +241,17 @@ export async function syncSharedWalkCalendar(
             phone: half.phone,
             email: half.email,
             address: half.address,
-            duration_minutes: durationMinutes,
+            duration_minutes: half.durationMinutes,
             booking_type: "single",
-            start_time: startTime,
-            end_time: endTime,
+            start_time: half.startTime,
+            end_time: half.endTime,
             price: half.price,
-            notes: [`Shared walk with ${partner.dogName} (${partner.ownerName}).`, opts.notes?.trim()]
+            notes: [
+                `Shared walk with ${partner.dogName} (${partner.ownerName})${
+                    overlapNote(half, partner) ? ` ${overlapNote(half, partner)}` : ""
+                }.`,
+                opts.notes?.trim(),
+            ]
                 .filter(Boolean)
                 .join(" "),
             status: opts.status,
@@ -215,7 +260,7 @@ export async function syncSharedWalkCalendar(
                 ? { isRecurring: true, seriesId: half.seriesId, seriesIndex: half.seriesIndex, seriesTotal }
                 : {}),
         };
-        const event = generateCalendarEvent(eventData, startTime, endTime);
+        const event = generateCalendarEvent(eventData, half.startTime, half.endTime);
         try {
             if (half.googleEventId) {
                 await calendar.events.patch({

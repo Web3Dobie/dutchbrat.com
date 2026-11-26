@@ -269,6 +269,9 @@ export default function AdminRecurringPage() {
     const [sharePriceFirst, setSharePriceFirst] = useState("");
     const [sharePriceSecond, setSharePriceSecond] = useState("");
     const [shareEmail, setShareEmail] = useState(false);
+    // The second dog's walk can be a different length (0 = same as the series).
+    const [shareMinutes, setShareMinutes] = useState<number>(0);
+    const [shareAlign, setShareAlign] = useState<"start" | "end">("start");
     const [sharePreview, setSharePreview] = useState<any>(null);
 
     // date -> alternative time the admin picked for a clashing date
@@ -363,6 +366,8 @@ export default function AdminRecurringPage() {
         setSharePriceFirst("");
         setSharePriceSecond("");
         setShareEmail(false);
+        setShareMinutes(0);
+        setShareAlign("start");
         setSharePreview(null);
         setAmendId(null);
         setNotice(null);
@@ -395,6 +400,7 @@ export default function AdminRecurringPage() {
                     partner: { owner_id: shareOwner, dog_id: shareDog },
                     price_first: p1,
                     price_second: p2,
+                    ...(shareMinutes ? { partner_duration_minutes: shareMinutes, align: shareAlign } : {}),
                     send_email: shareEmail,
                     dry_run: dryRun,
                 }),
@@ -1064,7 +1070,7 @@ export default function AdminRecurringPage() {
                     </h2>
                     <p style={{ color: "#9ca3af", marginBottom: "14px", fontSize: "0.9rem" }}>
                         Every upcoming walk in this series that is not already shared ({shareTarget.upcoming_unshared ?? shareTarget.upcoming}) becomes a
-                        shared walk. The second client gets a booking at each of the same times. Past walks are not touched.
+                        shared walk. The second client gets a booking for each one. Past walks are not touched.
                     </p>
                     <div style={s.row}>
                         <div style={s.field}>
@@ -1110,6 +1116,37 @@ export default function AdminRecurringPage() {
                             </select>
                         </div>
                         <div style={s.field}>
+                            <span style={s.label}>Their walk length</span>
+                            <select
+                                style={s.input}
+                                value={shareMinutes || shareTarget.duration_minutes || 60}
+                                onChange={(e) => {
+                                    const m = Number(e.target.value);
+                                    setShareMinutes(m === shareTarget.duration_minutes ? 0 : m);
+                                    setSharePreview(null);
+                                }}
+                            >
+                                <option value={60}>1 hour{shareTarget.duration_minutes === 60 ? " (same)" : ""}</option>
+                                <option value={120}>2 hours{shareTarget.duration_minutes === 120 ? " (same)" : ""}</option>
+                            </select>
+                        </div>
+                        {shareMinutes !== 0 && (
+                            <div style={s.field}>
+                                <span style={s.label}>The two dogs</span>
+                                <select
+                                    style={s.input}
+                                    value={shareAlign}
+                                    onChange={(e) => {
+                                        setShareAlign(e.target.value as "start" | "end");
+                                        setSharePreview(null);
+                                    }}
+                                >
+                                    <option value="start">set off together</option>
+                                    <option value="end">come home together</option>
+                                </select>
+                            </div>
+                        )}
+                        <div style={s.field}>
                             <span style={s.label}>{shareTarget.owner_name} pays £ per walk</span>
                             <input
                                 style={{ ...s.input, width: "150px" }}
@@ -1141,7 +1178,7 @@ export default function AdminRecurringPage() {
                         </div>
                     </div>
                     <p style={{ color: "#9ca3af", margin: "10px 0", fontSize: "0.85rem" }}>
-                        Leave a price blank to use the rate card&apos;s shared-walk price for each walk&apos;s date.
+                        Leave a price blank to use the rate card&apos;s shared-walk price for each walk&apos;s date and each dog&apos;s own walk length.
                     </p>
                     <label style={{ display: "flex", alignItems: "center", gap: "8px", color: "#d1d5db", marginBottom: "14px" }}>
                         <input type="checkbox" checked={shareEmail} onChange={(e) => setShareEmail(e.target.checked)} />
@@ -1178,8 +1215,16 @@ export default function AdminRecurringPage() {
                                     <thead>
                                         <tr>
                                             <th style={s.th}>Walk</th>
-                                            <th style={s.th}>{sharePreview.first.dog_name}</th>
-                                            <th style={s.th}>{sharePreview.partner.dog_name}</th>
+                                            <th style={s.th}>
+                                                {sharePreview.first.dog_name}
+                                                {sharePreview.partner_duration_minutes !== sharePreview.duration_minutes &&
+                                                    ` (${sharePreview.duration_minutes / 60}h)`}
+                                            </th>
+                                            <th style={s.th}>
+                                                {sharePreview.partner.dog_name}
+                                                {sharePreview.partner_duration_minutes !== sharePreview.duration_minutes &&
+                                                    ` (${sharePreview.partner_duration_minutes / 60}h)`}
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1193,6 +1238,9 @@ export default function AdminRecurringPage() {
                                                     )}
                                                 </td>
                                                 <td style={s.td}>
+                                                    {w.partner_start_time && w.partner_start_time !== w.start_time && (
+                                                        <span>from {new Date(w.partner_start_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })} · </span>
+                                                    )}
                                                     £{Number(w.price_partner).toFixed(2)}
                                                     {w.partner_converted && <span style={{ color: "#9ca3af" }}> (existing walk)</span>}
                                                 </td>
