@@ -128,6 +128,20 @@ const FESTIVE_EVENTS: FestiveEvent[] = [
         },
     },
     {
+        name: 'De Beauvoir Christmas Fair & Trail',
+        date: 'Saturday 28 November 2026',
+        time: '11:00 – 15:00 · crypt open until 16:30',
+        location: "De Beauvoir Town, N1 — fair inside St Peter's Crypt, trail around the surrounding streets",
+        description:
+            'A neighbourhood fair and street trail: stalls outside houses along Northchurch Road, Ufton Road, De Beauvoir Road and the streets around them, with the Christmas fair and Santa’s grotto inside St Peter’s Crypt. The East London Singers lead a sing-along at 12pm in De Beauvoir Square and at 2pm at 56 Ufton Road, and Hackney New Primary School performs at 11am and 1pm at 29 Northchurch Terrace. The trail is out on the pavements, so it makes an easy on-lead wander with a dog. We could not find a dog policy for the crypt itself, so plan to take turns going in. Printed maps are available on the day.',
+        schema: {
+            start: '2026-11-28T11:00:00+00:00',
+            end: '2026-11-28T16:30:00+00:00',
+            venue: "St Peter's Crypt and De Beauvoir Square",
+            address: 'De Beauvoir Town, London N1',
+        },
+    },
+    {
         name: 'Carols at the Barn',
         date: 'Saturday 28 November 2026',
         time: '16:30',
