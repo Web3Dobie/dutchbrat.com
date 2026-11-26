@@ -6,7 +6,7 @@ import { sendBookingEmail } from "@/lib/emailService";
 import { getServiceDisplayName } from "@/lib/serviceTypes";
 import { getPool } from '@/lib/database';
 import { getCalendar, getCalendarId } from '@/lib/googleCalendar';
-import { resolveActor } from '@/lib/bookingActor';
+import { resolveSeriesActor } from '@/lib/bookingActor';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Cancelled any series by id with no ownership check.
     // Now serves both callers: the admin cancelling a whole series from the
     // admin UI, and a client cancelling their own from the dashboard.
-    const actor = resolveActor(request);
+    const actor = resolveSeriesActor(request);
     if ('response' in actor) return actor.response;
 
     const { seriesId } = await params;

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
 import { TZDate } from "@date-fns/tz";
 import { getPool } from '@/lib/database';
-import { resolveActor } from '@/lib/bookingActor';
+import { resolveSeriesActor } from '@/lib/bookingActor';
 
 // --- Database Connection ---
 const pool = getPool();
@@ -16,7 +16,7 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
     // Was unauthenticated. Series ids are sequential, so this returned any
     // client's name, email and phone to anyone who counted upwards.
-    const actor = resolveActor(request);
+    const actor = resolveSeriesActor(request);
     if ('response' in actor) return actor.response;
 
     const { seriesId } = await params;

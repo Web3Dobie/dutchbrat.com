@@ -52,6 +52,28 @@ export function resolveActor(
     return { kind: 'owner', ownerId: sessionOwnerId };
 }
 
+/**
+ * Who is acting on an EXISTING series, looked up by its id.
+ *
+ * Unlike resolveActor, an admin does not have to name an owner: the series
+ * already says whose it is. (resolveActor refused every admin call that came
+ * without an owner_id, so the admin could neither view nor cancel a series.)
+ * A client is still limited to their own: callers must filter on ownerId
+ * whenever kind is 'owner'.
+ */
+export type SeriesActor = { kind: 'admin' } | { kind: 'owner'; ownerId: number };
+
+export function resolveSeriesActor(
+    request: NextRequest
+): SeriesActor | { response: NextResponse } {
+    if (isAuthenticated(request)) return { kind: 'admin' };
+    const sessionOwnerId = getOwnerIdFromSession(request);
+    if (sessionOwnerId === null) {
+        return { response: notAuthenticatedResponse() };
+    }
+    return { kind: 'owner', ownerId: sessionOwnerId };
+}
+
 /** True when this actor may ignore the client-facing booking horizon. */
 export function mayExceedBookingHorizon(actor: Actor): boolean {
     return actor.kind === 'admin';
